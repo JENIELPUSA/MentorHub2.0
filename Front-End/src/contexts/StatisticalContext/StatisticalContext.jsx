@@ -7,6 +7,7 @@ export const StatisticalContext = createContext();
 export const StatisticalProvider = ({ children }) => {
     const [dashboardData, setDashboardData] = useState(null);
     const [Adviserdata, setAdviserdata] = useState()
+    const [Admindata, setAdmindata] = useState()
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
     const { authToken } = useContext(AuthContext);
@@ -79,6 +80,37 @@ export const StatisticalProvider = ({ children }) => {
         }
     }, [BASE_URL, authToken]);
 
+
+ const fetchAdminStatistical = useCallback(async () => {
+    try {
+        setIsLoading(true);
+        setError(null);
+
+        const res = await axios.get(`${BASE_URL}/api/v1/statistical/Admin_Statistical`, {
+            headers: {
+                Authorization: `Bearer ${authToken}`
+            }
+        });
+
+        if (res.data?.success === true) {
+            setAdmindata(res.data.data);
+            return { success: true, data: res.data.data };
+        }
+
+        return { success: false };
+    } catch (error) {
+        const errorMessage = error.response?.data?.message || "Error fetching dashboard statistics";
+        setError(errorMessage);
+        console.error("Fetch Dashboard Statistics Error:", error);
+        return {
+            success: false,
+            error: errorMessage,
+        };
+    } finally {
+        setIsLoading(false);
+    }
+}, [BASE_URL, authToken]);
+
     // ==========================================
     // REFRESH DASHBOARD DATA
     // ==========================================
@@ -101,8 +133,9 @@ export const StatisticalProvider = ({ children }) => {
         if (authToken) {
             fetchDashboardStatistics();
             fetchAdviserStatistics();
+            fetchAdminStatistical();
         }
-    }, [fetchDashboardStatistics, authToken]);
+    }, [fetchDashboardStatistics,fetchAdminStatistical, authToken]);
 
     // ==========================================
     // CONTEXT PROVIDER
@@ -113,6 +146,7 @@ export const StatisticalProvider = ({ children }) => {
                 dashboardData,
                 isLoading,
                 Adviserdata,
+                Admindata,
                 error,
                 fetchDashboardStatistics,
                 refreshDashboard,

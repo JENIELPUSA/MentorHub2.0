@@ -1,20 +1,22 @@
-import { forwardRef } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { forwardRef, useMemo } from "react";
+import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import { LogOut } from "lucide-react";
 
 import { navbarLinks } from "@/constants";
 
 import logoLight from "@/assets/logo-light.svg";
-import logoDark from "@/assets/logo-dark.svg";
+import logoDark from "../assets/bipsulogo.png";
 
 import { cn } from "@/utils/cn";
 import { useAuth } from "../contexts/AuthContext";
 
 import PropTypes from "prop-types";
 
+
 export const Sidebar = forwardRef(({ collapsed, onLogout }, ref) => {
-    const { logout } = useAuth();
+    const { logout, role } = useAuth();
     const navigate = useNavigate();
+    const location = useLocation();
 
     const handleLogout = async () => {
         if (onLogout) {
@@ -22,6 +24,59 @@ export const Sidebar = forwardRef(({ collapsed, onLogout }, ref) => {
         }
         logout();
         navigate("/login");
+    };
+
+    // Dapat tugma ang paths dito sa navbarLinks at sa App.jsx routes
+    const rolePermissions = {
+        admin: [
+            "/dashboard",
+            "/dashboard/Add-User",
+            "/dashboard/Add-Subject",
+            "/dashboard/propose-title",
+            "/dashboard/archived",
+            "/dashboard/logs-audit"
+        ],
+        panelist: [
+            "/dashboard",
+            "/dashboard/propose-title",
+            "/dashboard/archived"
+        ],
+        subject_instructor: [
+            "/dashboard",
+            "/dashboard/Add-User",
+            "/dashboard/Add-Subject",
+            "/dashboard/propose-title",
+            "/dashboard/defense_schedule",
+            "/dashboard/archived"
+        ],
+        student: [
+            "/dashboard",
+            "/dashboard/propose-title",
+        ],
+        adviser: [
+            "/dashboard",
+            "/dashboard/propose-title",
+            "/dashboard/defense_schedule",
+            "/dashboard/archived"
+        ],
+    };
+
+    // Get allowed paths for current role (fallback to empty array)
+    const allowedPaths = rolePermissions[role] ?? [];
+
+    // Helper to check if a link path is allowed
+    const isAllowed = (path) => allowedPaths.includes(path);
+
+    // - "/dashboard" → exact match lang (para hindi mag-active sa ibang routes)
+    // - ibang paths → exact match o prefix match (para active pa rin sa sub-routes)
+    const isLinkActive = (path) => {
+        if (path === "/dashboard") {
+            return location.pathname === "/dashboard";
+        }
+        return (
+            location.pathname === path ||
+            location.pathname.startsWith(path + "/")
+        );
     };
 
     return (
@@ -49,43 +104,57 @@ export const Sidebar = forwardRef(({ collapsed, onLogout }, ref) => {
 
             {/* Navigation Links */}
             <div className="flex flex-1 w-full flex-col gap-y-4 overflow-y-auto overflow-x-hidden p-3 [scrollbar-width:_thin] scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
-                {navbarLinks.map((navbarLink) => (
-                    <nav
-                        key={navbarLink.title}
-                        className={cn("sidebar-group", collapsed && "md:items-center")}
-                    >
-                        <p
-                            className={cn(
-                                "text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2 px-1",
-                                collapsed && "md:w-[45px] md:text-center md:text-[8px]"
-                            )}
+                {navbarLinks.map((navbarLink) => {
+                    // Filter links based on role permission
+                    const visibleLinks = navbarLink.links.filter((link) =>
+                        isAllowed(link.path)
+                    );
+
+                    // Skip rendering the group if no links are visible
+                    if (visibleLinks.length === 0) return null;
+
+                    return (
+                        <nav
+                            key={navbarLink.title}
+                            className={cn("sidebar-group", collapsed && "md:items-center")}
                         >
-                            {navbarLink.title}
-                        </p>
-                        {navbarLink.links.map((link) => (
-                            <NavLink
-                                key={link.label}
-                                to={link.path}
-                                className={({ isActive }) =>
-                                    cn(
-                                        // Default text and hover state (Blue text with Yellow/Amber accent background on hover)
-                                        "flex items-center gap-x-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition-all duration-200 hover:bg-amber-50 hover:text-amber-600",
-                                        // Active state (BiPSU Blue background with bright yellow text & custom soft shadow)
-                                        isActive &&
-                                            "bg-blue-700 text-yellow-300 shadow-[0_4px_12px_rgba(29,78,216,0.25)] hover:bg-blue-800 hover:text-yellow-300",
-                                        collapsed && "md:w-[45px] md:justify-center md:px-0"
-                                    )
-                                }
+                            <p
+                                className={cn(
+                                    "text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2 px-1",
+                                    collapsed && "md:w-[45px] md:text-center md:text-[8px]"
+                                )}
                             >
-                                <link.icon
-                                    size={22}
-                                    className="flex-shrink-0"
-                                />
-                                {!collapsed && <p className="whitespace-nowrap">{link.label}</p>}
-                            </NavLink>
-                        ))}
-                    </nav>
-                ))}
+                                {navbarLink.title}
+                            </p>
+                            {visibleLinks.map((link) => {
+                                const active = isLinkActive(link.path);
+
+                                return (
+                                    <NavLink
+                                        key={link.label}
+                                        to={link.path}
+                                        className={cn(
+                                            // Default text and hover state
+                                            "flex items-center gap-x-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition-all duration-200 hover:bg-amber-50 hover:text-amber-600",
+                                            // Active state (BiPSU Blue background with bright yellow text)
+                                            active &&
+                                            "bg-blue-700 text-yellow-300 shadow-[0_4px_12px_rgba(29,78,216,0.25)] hover:bg-blue-800 hover:text-yellow-300",
+                                            collapsed && "md:w-[45px] md:justify-center md:px-0"
+                                        )}
+                                    >
+                                        <link.icon
+                                            size={22}
+                                            className="flex-shrink-0"
+                                        />
+                                        {!collapsed && (
+                                            <p className="whitespace-nowrap">{link.label}</p>
+                                        )}
+                                    </NavLink>
+                                );
+                            })}
+                        </nav>
+                    );
+                })}
             </div>
 
             {/* Logout Section */}
@@ -98,7 +167,9 @@ export const Sidebar = forwardRef(({ collapsed, onLogout }, ref) => {
                     )}
                 >
                     <LogOut size={22} className="flex-shrink-0" />
-                    {!collapsed && <p className="whitespace-nowrap font-medium">Logout</p>}
+                    {!collapsed && (
+                        <p className="whitespace-nowrap font-medium">Logout</p>
+                    )}
                 </button>
             </div>
         </aside>

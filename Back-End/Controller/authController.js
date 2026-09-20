@@ -39,18 +39,10 @@ exports.signup = async (req, res) => {
             referralCode, // Optional: kung may nag-refer
         } = req.body;
 
-        console.log("Trigger", req.body);
-
-        // =========================================================
-        // 1. DETERMINE ROLES
-        // =========================================================
         const userRoles = Array.isArray(selectedrole) && selectedrole.length > 0 
             ? selectedrole 
             : [role || "student"];
 
-        // =========================================================
-        // 2. CREATE USER LOGIN - LAHAT NG DATA DITO NA
-        // =========================================================
         const newUser = new UserLogin({
             avatar: {
                 url: "",
@@ -87,7 +79,6 @@ exports.signup = async (req, res) => {
         });
 
         await newUser.save();
-        console.log("✅ UserLogin created successfully:", newUser._id);
 
         // =========================================================
         // 3. REMOVE SENSITIVE DATA BAGO MAG-RESPOND

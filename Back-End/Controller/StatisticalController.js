@@ -470,3 +470,136 @@ exports.getDashboardStatistics = AsyncErrorHandler(async (req, res) => {
         }
     });
 });
+
+
+
+exports.getAdminStatistics = AsyncErrorHandler(async (req, res) => {
+  const [
+    totalUsers,
+    totalGroups,
+    totalProposals,
+    totalSubjects,
+    totalSections,
+    pendingProposals,
+    approvedProposals,
+    rejectedProposals,
+    revisionProposals,
+    readyForDefenseProposals,
+    selectedProposals,
+  ] = await Promise.all([
+    UserLoginSchema.countDocuments(),
+    Groups.countDocuments(),
+    ProposeTitle.countDocuments(),
+    Subject.countDocuments(),
+    Section.countDocuments(),
+    ProposeTitle.countDocuments({ status: 'Pending' }),
+    ProposeTitle.countDocuments({ status: 'Approved' }),
+    ProposeTitle.countDocuments({ status: 'Rejected' }),
+    ProposeTitle.countDocuments({ status: 'Revision' }),
+    ProposeTitle.countDocuments({ status: 'Ready for Defense' }),
+    ProposeTitle.countDocuments({ isSelected: true }),
+  ]);
+
+  const statisticalCards = {
+    totalUsers,
+    totalGroups,
+    totalProposals,
+    totalSubjects,
+    totalSections,
+    pendingProposals,
+    approvedProposals,
+    rejectedProposals,
+    revisionProposals,
+    readyForDefenseProposals,
+    selectedProposals,
+  };
+
+  const pieGraph = {
+    labels: ['Pending', 'Approved', 'Revision', 'Ready for Defense', 'Rejected'],
+    data: [
+      pendingProposals,
+      approvedProposals,
+      revisionProposals,
+      readyForDefenseProposals,
+      rejectedProposals,
+    ],
+  };
+
+  const now = new Date();
+  const startDate = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+
+  const monthlyProposals = await ProposeTitle.aggregate([
+    { $match: { createdAt: { $gte: startDate } } },
+    {
+      $group: {
+        _id: {
+          year: { $year: '$createdAt' },
+          month: { $month: '$createdAt' },
+        },
+        count: { $sum: 1 },
+      },
+    },
+    { $sort: { '_id.year': 1, '_id.month': 1 } },
+  ]);
+
+  const monthNames = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+
+  const lineGraphLabels = [];
+  const lineGraphData = [];
+
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const year = d.getFullYear();
+    const month = d.getMonth() + 1;
+    lineGraphLabels.push(`${monthNames[month - 1]} ${year}`);
+
+    const found = monthlyProposals.find(
+      (m) => m._id.year === year && m._id.month === month
+    );
+    lineGraphData.push(found ? found.count : 0);
+  }
+
+  const lineGraph = {
+    labels: lineGraphLabels,
+    data: lineGraphData,
+    label: 'Proposals Submitted',
+  };
+
+  const groupsPerSection = await Groups.aggregate([
+    { $group: { _id: '$section', count: { $sum: 1 } } },
+    {
+      $lookup: {
+        from: 'sections',
+        localField: '_id',
+        foreignField: '_id',
+        as: 'sectionInfo',
+      },
+    },
+    { $unwind: { path: '$sectionInfo', preserveNullAndEmptyArrays: true } },
+    {
+      $project: {
+        _id: 0,
+        section: { $ifNull: ['$sectionInfo.name', 'Unassigned'] },
+        count: 1,
+      },
+    },
+  ]);
+
+  const pieGraphGroups = {
+    labels: groupsPerSection.map((g) => g.section),
+    data: groupsPerSection.map((g) => g.count),
+  };
+
+  res.status(200).json({
+    success: true,
+    data: {
+      statisticalCards,
+      pieGraph,
+      lineGraph,
+      pieGraphGroups,
+    },
+  });
+});

@@ -15,5 +15,10 @@ router.route("/subject_instructor")
     .get(authController.protect, statisticalController.getAdviserStatistics)
 
 
+// GET all subjects (with pagination + search) & CREATE subject
+router.route("/Admin_Statistical")
+    .get(authController.protect, statisticalController.getAdminStatistics)
+
+
 
 module.exports = router;

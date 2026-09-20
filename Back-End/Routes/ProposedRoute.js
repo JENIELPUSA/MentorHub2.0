@@ -8,8 +8,15 @@ router.route('/')
     .post(authController.protect, upload.single("file"), Proposal.createProposedTitle)
     .get(authController.protect, Proposal.DisplayProposedTitles)
 
+
+router.route('/forreadystatus')
+    .get(authController.protect, Proposal.DisplayReadytitle)
+
+router.route('/Archived')
+    .get(authController.protect, Proposal.DisplayArcivedtitle)
+
 router.route('/:id')
-    .patch(authController.protect,Proposal.UpdateProposedTitle)
+    .patch(authController.protect, Proposal.UpdateProposedTitle)
     .delete(authController.protect, Proposal.deleteProposedTitle)
 
 module.exports = router;

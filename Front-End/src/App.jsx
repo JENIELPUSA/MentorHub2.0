@@ -11,6 +11,9 @@ import UserManagement from "./components/UserManagement/usermanagement";
 import SubjectManagement from "./components/SubjectManagement/subjectManagement";
 import GroupDashboard from "./components/SubjectManagement/GroupComponents";
 import ProposedTitle from "./components/ProposedTitle/ProposedTitle";
+import DefenseSchedule from "./components/DefenseSchedule/DefenseSchedule";
+import Archivecomponents from "./components/ArchiveComponents/Archivecomponents";
+import AuditLogs from "./components/AuditLogs/AuditLogs";
 
 function App() {
     const router = createBrowserRouter([
@@ -32,7 +35,7 @@ function App() {
             ],
         },
         {
-            path: "/dashboard",
+            path: "dashboard",
             element: <PrivateRoute />,
             children: [
                 {
@@ -40,26 +43,31 @@ function App() {
                     element: <Layout />,
                     children: [
                         { index: true, element: <DashboardPage /> },
-                        {
-                            path: "reports",
-                            element: <h1 className="title">Reports</h1>,
-                        },
-                        {
-                            path: "customers",
-                            element: <h1 className="title">Customers</h1>,
-                        },
+
                         {
                             path: "/dashboard/Add-User",
                             element: <UserManagement />,
                         },
                         {
-                            path: "/dashboard/Add-subject",
+                            path: "/dashboard/Add-Subject",
                             element: <SubjectManagement />,
                         },
                         {
                             path: "/dashboard/propose-title",
                             element: <ProposedTitle />,
                         },
+                        {
+                            path: "/dashboard/defense_schedule",
+                            element: <DefenseSchedule />,
+                        },
+                        {
+                            path: "/dashboard/archived",
+                            element: <Archivecomponents />,
+                        },
+                        {
+                            path: "/dashboard/logs-audit",
+                            element: <AuditLogs />,
+                        }
                     ],
                 },
             ],

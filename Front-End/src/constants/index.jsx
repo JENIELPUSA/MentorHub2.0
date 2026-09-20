@@ -1,4 +1,21 @@
-import { ChartColumn, Home, NotepadText, Package, PackagePlus, Settings, ShoppingBag, UserCheck, UserPlus, Users } from "lucide-react";
+import { 
+  ChartColumn, 
+  Home, 
+  NotepadText, 
+  Package, 
+  PackagePlus, 
+  Settings, 
+  ShoppingBag, 
+  UserCheck, 
+  UserPlus, 
+  Users,
+  UserCog,
+  BookOpen,
+  FileText,
+  CalendarDays,
+  Archive,
+  ScrollText
+} from "lucide-react";
 
 import ProfileImage from "@/assets/profile-image.jpg";
 import ProductImage from "@/assets/product-image.jpg";
@@ -10,7 +27,7 @@ export const navbarLinks = [
             {
                 label: "Dashboard",
                 icon: Home,
-                path: "/",
+                path: "/dashboard",
             },
         ],
     },
@@ -19,18 +36,33 @@ export const navbarLinks = [
         links: [
             {
                 label: "Manage User",
-                icon: UserCheck,
+                icon: UserCog,
                 path: "/dashboard/Add-User",
             },
             {
                 label: "Manage Subject",
-                icon: UserCheck,
+                icon: BookOpen,
                 path: "/dashboard/Add-Subject",
             },
             {
-                label: "Proposed Title",
-                icon: UserCheck,
+                label: "Title Management",
+                icon: FileText,
                 path: "/dashboard/propose-title",
+            },
+            {
+                label: "Defense Schedule",
+                icon: CalendarDays,
+                path: "/dashboard/defense_schedule",
+            },
+            {
+                label: "Archived",
+                icon: Archive,
+                path: "/dashboard/archived",
+            },
+            {
+                label: "Audit Trail",
+                icon: ScrollText,
+                path: "/dashboard/logs-audit",
             },
         ],
     },
@@ -47,54 +79,18 @@ export const navbarLinks = [
 ];
 
 export const overviewData = [
-    {
-        name: "Jan",
-        total: 1500,
-    },
-    {
-        name: "Feb",
-        total: 2000,
-    },
-    {
-        name: "Mar",
-        total: 1000,
-    },
-    {
-        name: "Apr",
-        total: 5000,
-    },
-    {
-        name: "May",
-        total: 2000,
-    },
-    {
-        name: "Jun",
-        total: 5900,
-    },
-    {
-        name: "Jul",
-        total: 2000,
-    },
-    {
-        name: "Aug",
-        total: 5500,
-    },
-    {
-        name: "Sep",
-        total: 2000,
-    },
-    {
-        name: "Oct",
-        total: 4000,
-    },
-    {
-        name: "Nov",
-        total: 1500,
-    },
-    {
-        name: "Dec",
-        total: 2500,
-    },
+    { name: "Jan", total: 1500 },
+    { name: "Feb", total: 2000 },
+    { name: "Mar", total: 1000 },
+    { name: "Apr", total: 5000 },
+    { name: "May", total: 2000 },
+    { name: "Jun", total: 5900 },
+    { name: "Jul", total: 2000 },
+    { name: "Aug", total: 5500 },
+    { name: "Sep", total: 2000 },
+    { name: "Oct", total: 4000 },
+    { name: "Nov", total: 1500 },
+    { name: "Dec", total: 2500 },
 ];
 
 export const recentSalesData = [
@@ -159,6 +155,7 @@ export const topProducts = [
         status: "In Stock",
         rating: 4.5,
     },
+    
     {
         number: 2,
         name: "Smartphone",

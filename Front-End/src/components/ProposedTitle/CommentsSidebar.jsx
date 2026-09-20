@@ -1,7 +1,9 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useContext, useEffect, useRef, useMemo } from 'react';
 import {
-    MessageSquare, XCircle, Send, Loader2, Trash2
+    MessageSquare, XCircle, Send, Loader2, Trash2, Eye
 } from 'lucide-react';
+
+import { AuthContext } from '../../contexts/AuthContext';
 
 export default function CommentsSidebar({
     isOpen,
@@ -19,15 +21,31 @@ export default function CommentsSidebar({
 }) {
     const commentsEndRef = useRef(null);
 
+    const { role } = useContext(AuthContext);
+
+    // ⭐ Read-only kapag student
+    const isReadOnly = role === 'student';
+
+    // ⭐ Filter out invalid/empty comments
+    const validComments = useMemo(() => {
+        return (comments || []).filter((c) => {
+            if (!c) return false;
+            if (!c._id) return false;                       // walang ID
+            if (!c.text || !String(c.text).trim()) return false; // walang laman
+            return true;
+        });
+    }, [comments]);
+
     useEffect(() => {
-        if (isOpen && comments.length > 0) {
+        if (isOpen && validComments.length > 0) {
             commentsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
         }
-    }, [comments, isOpen]);
+    }, [validComments, isOpen]);
 
     if (!isOpen) return null;
 
     const handleKeyDown = (e) => {
+        if (isReadOnly) return;
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             onSubmit();
@@ -41,9 +59,9 @@ export default function CommentsSidebar({
                     <h3 className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
                         <MessageSquare className="w-5 h-5" />
                         Comments
-                        {comments.length > 0 && (
+                        {validComments.length > 0 && (
                             <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-xs rounded-full">
-                                {comments.length}
+                                {validComments.length}
                             </span>
                         )}
                     </h3>
@@ -59,18 +77,26 @@ export default function CommentsSidebar({
                         Tracking ID: <span className="font-mono">{activeTrackingId}</span>
                     </p>
                 )}
+                {isReadOnly && (
+                    <div className="mt-2 flex items-center gap-1.5 px-2 py-1 bg-slate-100 dark:bg-gray-700 rounded-lg text-[10px] text-slate-500 dark:text-slate-400">
+                        <Eye className="w-3 h-3" />
+                        <span>View-only mode</span>
+                    </div>
+                )}
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                {comments.length === 0 ? (
+                {validComments.length === 0 ? (
                     <div className="text-center py-8">
                         <MessageSquare className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
                         <p className="text-sm text-slate-500 dark:text-slate-400">No comments yet</p>
-                        <p className="text-xs text-slate-400 dark:text-slate-500">Be the first to leave a comment</p>
+                        <p className="text-xs text-slate-400 dark:text-slate-500">
+                            {isReadOnly ? 'Comments will appear here' : 'Be the first to leave a comment'}
+                        </p>
                     </div>
                 ) : (
                     <>
-                        {comments.map((comment) => {
+                        {validComments.map((comment) => {
                             const author = comment.author || comment.userId || {};
                             const authorName = author.first_name && author.last_name
                                 ? `${author.first_name} ${author.last_name}`
@@ -79,6 +105,8 @@ export default function CommentsSidebar({
                             const isOwner = isCommentOwner(comment);
                             const userRole = author.role || comment.userRole || '';
                             const shouldShowBadge = userRole && userRole.toLowerCase() !== 'student';
+
+                            const canDelete = isOwner && !isReadOnly;
 
                             return (
                                 <div
@@ -118,7 +146,7 @@ export default function CommentsSidebar({
                                             </p>
 
                                             <div className="flex items-center gap-3 mt-1.5 pl-8">
-                                                {isOwner && (
+                                                {canDelete && (
                                                     <button
                                                         onClick={() => onDeleteComment(comment._id)}
                                                         className="text-red-400 hover:text-red-600 dark:text-red-500 dark:hover:text-red-400 transition flex items-center gap-1 text-[10px]"
@@ -143,33 +171,42 @@ export default function CommentsSidebar({
                 )}
             </div>
 
-            <div className="p-4 border-t border-slate-200 dark:border-gray-700 flex-shrink-0">
-                <div className="flex gap-2">
-                    <textarea
-                        value={commentText}
-                        onChange={(e) => setCommentText(e.target.value)}
-                        placeholder="Write a comment..."
-                        className="flex-1 resize-none px-3 py-2 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-600 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 transition min-h-[60px] max-h-[120px]"
-                        rows="2"
-                        onKeyDown={handleKeyDown}
-                    />
-                    <button
-                        onClick={onSubmit}
-                        disabled={isSubmitting || !commentText.trim()}
-                        className="self-end px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition flex items-center gap-1"
-                    >
-                        {isSubmitting ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                            <Send className="w-4 h-4" />
-                        )}
-                        <span className="hidden sm:inline text-sm">Send</span>
-                    </button>
+            {!isReadOnly ? (
+                <div className="p-4 border-t border-slate-200 dark:border-gray-700 flex-shrink-0">
+                    <div className="flex gap-2">
+                        <textarea
+                            value={commentText}
+                            onChange={(e) => setCommentText(e.target.value)}
+                            placeholder="Write a comment..."
+                            className="flex-1 resize-none px-3 py-2 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-600 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500 transition min-h-[60px] max-h-[120px]"
+                            rows="2"
+                            onKeyDown={handleKeyDown}
+                        />
+                        <button
+                            onClick={onSubmit}
+                            disabled={isSubmitting || !commentText.trim()}
+                            className="self-end px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition flex items-center gap-1"
+                        >
+                            {isSubmitting ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                                <Send className="w-4 h-4" />
+                            )}
+                            <span className="hidden sm:inline text-sm">Send</span>
+                        </button>
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-1">
+                        Press Enter to send, Shift+Enter for new line
+                    </p>
                 </div>
-                <p className="text-[10px] text-slate-400 mt-1">
-                    Press Enter to send, Shift+Enter for new line
-                </p>
-            </div>
+            ) : (
+                <div className="p-4 border-t border-slate-200 dark:border-gray-700 flex-shrink-0">
+                    <div className="flex items-center justify-center gap-2 px-3 py-2 bg-slate-50 dark:bg-gray-700 border border-slate-200 dark:border-gray-600 rounded-lg text-xs text-slate-500 dark:text-slate-400">
+                        <Eye className="w-4 h-4" />
+                        <span>You have view-only access to comments</span>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

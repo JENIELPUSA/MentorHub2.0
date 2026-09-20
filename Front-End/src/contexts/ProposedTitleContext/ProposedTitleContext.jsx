@@ -21,6 +21,30 @@ export const ProposedTitleProvider = ({ children }) => {
     const [groupIdFilter, setGroupIdFilter] = useState("");
     const [statusCounts, setStatusCounts] = useState([]);
 
+    // ============================
+    // ✅ READY TITLES STATE
+    // ============================
+    const [readyTitles, setReadyTitles] = useState([]);
+    const [totalReadyTitles, setTotalReadyTitles] = useState(0);
+    const [readyTotalPages, setReadyTotalPages] = useState(1);
+    const [readyCurrentPage, setReadyCurrentPage] = useState(1);
+    const [readySearch, setReadySearch] = useState("");
+    const [readyDateFrom, setReadyDateFrom] = useState("");
+    const [readyDateTo, setReadyDateTo] = useState("");
+    const [readyGroupIdFilter, setReadyGroupIdFilter] = useState("");
+
+    // ============================
+    // ✅ ARCHIVED TITLES STATE  (NEW)
+    // ============================
+    const [archivedTitles, setArchivedTitles] = useState([]);
+    const [totalArchivedTitles, setTotalArchivedTitles] = useState(0);
+    const [archivedTotalPages, setArchivedTotalPages] = useState(1);
+    const [archivedCurrentPage, setArchivedCurrentPage] = useState(1);
+    const [archivedSearch, setArchivedSearch] = useState("");
+    const [archivedDateFrom, setArchivedDateFrom] = useState("");
+    const [archivedDateTo, setArchivedDateTo] = useState("");
+    const [archivedGroupIdFilter, setArchivedGroupIdFilter] = useState("");
+
     const limit = 5;
 
     // ============================
@@ -77,7 +101,7 @@ export const ProposedTitleProvider = ({ children }) => {
                 }
             );
 
-            const { data, totalPages, totalCount, currentPage, results } = res.data;
+            const { data, totalPages, totalCount, currentPage } = res.data;
 
             setProposedTitles(data || []);
             setTotalProposedTitles(totalCount || 0);
@@ -87,6 +111,134 @@ export const ProposedTitleProvider = ({ children }) => {
         } catch (error) {
             console.error("Error fetching proposed titles:", error);
             setCustomError(error.response?.data?.message || "Failed to fetch proposed titles");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    // ============================
+    // ✅ FETCH READY TITLES (FIXED)
+    // ============================
+    const FetchReadyTitle = async (
+        page = 1,
+        limit = 5,
+        searchTerm = "",
+        fromDate = "",
+        toDate = "",
+        groupId = ""
+    ) => {
+        if (!authToken) return;
+
+        try {
+            setIsLoading(true);
+
+            const params = {
+                page,
+                limit,
+            };
+
+            if (searchTerm && searchTerm.trim() !== "") {
+                params.search = searchTerm.trim();
+            }
+
+            if (fromDate && fromDate.trim() !== "") {
+                params.dateFrom = fromDate.trim();
+            }
+
+            if (toDate && toDate.trim() !== "") {
+                params.dateTo = toDate.trim();
+            }
+
+            if (groupId && groupId.trim() !== "") {
+                params.groupId = groupId.trim();
+            }
+
+            const res = await axios.get(
+                `${import.meta.env.VITE_REACT_APP_BACKEND_BASEURL}/api/v1/proposed-titles/forreadystatus`,
+                {
+                    params,
+                    withCredentials: true,
+                    headers: {
+                        Authorization: `Bearer ${authToken}`,
+                        "Cache-Control": "no-cache",
+                    },
+                }
+            );
+
+            const { data, totalPages, totalCount, currentPage } = res.data;
+
+            setReadyTitles(data || []);
+            setTotalReadyTitles(totalCount || 0);
+            setReadyTotalPages(totalPages || 1);
+            setReadyCurrentPage(currentPage || page);
+
+        } catch (error) {
+            console.error("Error fetching ready titles:", error);
+            setCustomError(error.response?.data?.message || "Failed to fetch ready titles");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    // ============================
+    // ✅ FETCH ARCHIVED TITLES  (NEW)
+    // ============================
+    const FetchArchivedTitle = async (
+        page = 1,
+        limit = 5,
+        searchTerm = "",
+        fromDate = "",
+        toDate = "",
+        groupId = ""
+    ) => {
+        if (!authToken) return;
+
+        try {
+            setIsLoading(true);
+
+            const params = {
+                page,
+                limit,
+            };
+
+            if (searchTerm && searchTerm.trim() !== "") {
+                params.search = searchTerm.trim();
+            }
+
+            if (fromDate && fromDate.trim() !== "") {
+                params.dateFrom = fromDate.trim();
+            }
+
+            if (toDate && toDate.trim() !== "") {
+                params.dateTo = toDate.trim();
+            }
+
+            if (groupId && groupId.trim() !== "") {
+                params.groupId = groupId.trim();
+            }
+
+            const res = await axios.get(
+                `${import.meta.env.VITE_REACT_APP_BACKEND_BASEURL}/api/v1/proposed-titles/archived`,
+                {
+                    params,
+                    withCredentials: true,
+                    headers: {
+                        Authorization: `Bearer ${authToken}`,
+                        "Cache-Control": "no-cache",
+                    },
+                }
+            );
+
+            const { data, totalPages, totalCount, currentPage } = res.data;
+
+            setArchivedTitles(data || []);
+            setTotalArchivedTitles(totalCount || 0);
+            setArchivedTotalPages(totalPages || 1);
+            setArchivedCurrentPage(currentPage || page);
+
+        } catch (error) {
+            console.error("Error fetching archived titles:", error);
+            setCustomError(error.response?.data?.message || "Failed to fetch archived titles");
         } finally {
             setIsLoading(false);
         }
@@ -142,8 +294,15 @@ export const ProposedTitleProvider = ({ children }) => {
             const status = res.data?.status;
 
             if (status === true || status === "success") {
-                // Refresh the list after successful creation
-                await FetchProposedTitles(currentPage, limit, search, dateFrom, dateTo, statusFilter, groupIdFilter);
+                await FetchProposedTitles(
+                    currentPage,
+                    limit,
+                    search,
+                    dateFrom,
+                    dateTo,
+                    statusFilter,
+                    groupIdFilter
+                );
 
                 return { success: true, data: res.data.data };
             }
@@ -191,8 +350,15 @@ export const ProposedTitleProvider = ({ children }) => {
             );
 
             if (res.data.status === "success") {
-                // Refresh the list
-                await FetchProposedTitles(currentPage, limit, search, dateFrom, dateTo, statusFilter, groupIdFilter);
+                await FetchProposedTitles(
+                    currentPage,
+                    limit,
+                    search,
+                    dateFrom,
+                    dateTo,
+                    statusFilter,
+                    groupIdFilter
+                );
 
                 return { success: true, data: res.data.data };
             }
@@ -227,8 +393,15 @@ export const ProposedTitleProvider = ({ children }) => {
             );
 
             if (res.data.status === "success") {
-                // Refresh the list
-                await FetchProposedTitles(currentPage, limit, search, dateFrom, dateTo, statusFilter, groupIdFilter);
+                await FetchProposedTitles(
+                    currentPage,
+                    limit,
+                    search,
+                    dateFrom,
+                    dateTo,
+                    statusFilter,
+                    groupIdFilter
+                );
 
                 return { success: true };
             }
@@ -265,8 +438,15 @@ export const ProposedTitleProvider = ({ children }) => {
             );
 
             if (res.data.status === "success") {
-                // Refresh the list
-                await FetchProposedTitles(currentPage, limit, search, dateFrom, dateTo, statusFilter, groupIdFilter);
+                await FetchProposedTitles(
+                    currentPage,
+                    limit,
+                    search,
+                    dateFrom,
+                    dateTo,
+                    statusFilter,
+                    groupIdFilter
+                );
 
                 return { success: true, data: res.data.data };
             }
@@ -356,14 +536,12 @@ export const ProposedTitleProvider = ({ children }) => {
                 }
             );
 
-            // Create a URL for the blob
             const fileURL = window.URL.createObjectURL(new Blob([res.data]));
-            const link = document.createElement('a');
+            const link = document.createElement("a");
             link.href = fileURL;
 
-            // Try to get filename from Content-Disposition header
-            const contentDisposition = res.headers['content-disposition'];
-            let filename = 'document.pdf';
+            const contentDisposition = res.headers["content-disposition"];
+            let filename = "document.pdf";
             if (contentDisposition) {
                 const filenameMatch = contentDisposition.match(/filename="(.+)"/);
                 if (filenameMatch) {
@@ -371,7 +549,7 @@ export const ProposedTitleProvider = ({ children }) => {
                 }
             }
 
-            link.setAttribute('download', filename);
+            link.setAttribute("download", filename);
             document.body.appendChild(link);
             link.click();
             link.remove();
@@ -403,7 +581,7 @@ export const ProposedTitleProvider = ({ children }) => {
             );
 
             const fileURL = window.URL.createObjectURL(new Blob([res.data]));
-            window.open(fileURL, '_blank');
+            window.open(fileURL, "_blank");
 
             return { success: true };
         } catch (error) {
@@ -426,12 +604,86 @@ export const ProposedTitleProvider = ({ children }) => {
     };
 
     // ============================
+    // ✅ RESET READY FILTERS
+    // ============================
+    const ResetReadyFilters = () => {
+        setReadySearch("");
+        setReadyDateFrom("");
+        setReadyDateTo("");
+        setReadyGroupIdFilter("");
+        setReadyCurrentPage(1);
+    };
+
+    // ============================
+    // ✅ RESET ARCHIVED FILTERS  (NEW)
+    // ============================
+    const ResetArchivedFilters = () => {
+        setArchivedSearch("");
+        setArchivedDateFrom("");
+        setArchivedDateTo("");
+        setArchivedGroupIdFilter("");
+        setArchivedCurrentPage(1);
+    };
+
+    // ============================
     // AUTO-FETCH ON FILTER CHANGE
     // ============================
     useEffect(() => {
         if (!authToken) return;
-        FetchProposedTitles(currentPage, limit, search, dateFrom, dateTo, statusFilter, groupIdFilter);
+        FetchProposedTitles(
+            currentPage,
+            limit,
+            search,
+            dateFrom,
+            dateTo,
+            statusFilter,
+            groupIdFilter
+        );
     }, [authToken, search, dateFrom, dateTo, statusFilter, groupIdFilter]);
+
+    // ============================
+    // ✅ AUTO-FETCH READY TITLES
+    // ============================
+    useEffect(() => {
+        if (!authToken) return;
+        FetchReadyTitle(
+            readyCurrentPage,
+            limit,
+            readySearch,
+            readyDateFrom,
+            readyDateTo,
+            readyGroupIdFilter
+        );
+    }, [
+        authToken,
+        readyCurrentPage,
+        readySearch,
+        readyDateFrom,
+        readyDateTo,
+        readyGroupIdFilter,
+    ]);
+
+    // ============================
+    // ✅ AUTO-FETCH ARCHIVED TITLES  (NEW)
+    // ============================
+    useEffect(() => {
+        if (!authToken) return;
+        FetchArchivedTitle(
+            archivedCurrentPage,
+            limit,
+            archivedSearch,
+            archivedDateFrom,
+            archivedDateTo,
+            archivedGroupIdFilter
+        );
+    }, [
+        authToken,
+        archivedCurrentPage,
+        archivedSearch,
+        archivedDateFrom,
+        archivedDateTo,
+        archivedGroupIdFilter,
+    ]);
 
     // ============================
     // CONTEXT PROVIDER
@@ -462,8 +714,40 @@ export const ProposedTitleProvider = ({ children }) => {
                 customError,
                 statusCounts,
 
+                // ✅ Ready Titles State
+                readyTitles,
+                totalReadyTitles,
+                readyTotalPages,
+                readyCurrentPage,
+                setReadyCurrentPage,
+                readySearch,
+                setReadySearch,
+                readyDateFrom,
+                setReadyDateFrom,
+                readyDateTo,
+                setReadyDateTo,
+                readyGroupIdFilter,
+                setReadyGroupIdFilter,
+
+                // ✅ Archived Titles State  (NEW)
+                archivedTitles,
+                totalArchivedTitles,
+                archivedTotalPages,
+                archivedCurrentPage,
+                setArchivedCurrentPage,
+                archivedSearch,
+                setArchivedSearch,
+                archivedDateFrom,
+                setArchivedDateFrom,
+                archivedDateTo,
+                setArchivedDateTo,
+                archivedGroupIdFilter,
+                setArchivedGroupIdFilter,
+
                 // Functions
                 FetchProposedTitles,
+                FetchReadyTitle,
+                FetchArchivedTitle,          // NEW
                 FetchProposedTitleById,
                 CreateProposedTitle,
                 UpdateProposedTitle,
@@ -474,6 +758,8 @@ export const ProposedTitleProvider = ({ children }) => {
                 GetFileFromCloudinary,
                 ViewFileInNewTab,
                 ResetFilters,
+                ResetReadyFilters,
+                ResetArchivedFilters,        // NEW
             }}
         >
             {children}

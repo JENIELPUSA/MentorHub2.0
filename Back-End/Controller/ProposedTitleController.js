@@ -175,11 +175,6 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res, next) => {
             // ✅ I-set pabalik sa Pending (naghihintay ng review)
             existing.status = "Pending";
 
-            // ✅ I-reset ang adviser/coAdviser approvals
-            // (depende sa business logic mo — i-uncomment kung kailangan)
-            // existing.adviser = false;
-            // existing.coAdviser = false;
-
             await existing.save();
 
             console.log("✅ Revision saved:", existing._id);
@@ -291,6 +286,39 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res, next) => {
             });
         }
 
+        // ============================================
+        // ⭐ BAGO: I-DELETE ANG LAHAT NG LUMANG TITLES SA PAREHONG GROUP
+        // ============================================
+        console.log("🗑️ Checking for existing titles in group:", groupId);
+
+        const existingTitles = await ProposedTitleModel.find({ groupId });
+
+        if (existingTitles.length > 0) {
+            console.log(`🗑️ Found ${existingTitles.length} existing title(s) in group ${groupId}. Deleting...`);
+
+            // ✅ I-delete lahat ng lumang titles sa parehong groupId
+            const deleteResult = await ProposedTitleModel.deleteMany({ groupId });
+
+            console.log(`✅ Deleted ${deleteResult.deletedCount} old title(s) from group ${groupId}`);
+
+            // ✅ (Optional) I-delete din ang mga notification na related sa lumang titles
+            try {
+                const oldTitleIds = existingTitles.map(t => t._id);
+                const notifDeleteResult = await NotificationSchema.deleteMany({
+                    referenceId: { $in: oldTitleIds },
+                    referenceModel: "ProposedTitle"
+                });
+                console.log(`🔔 Deleted ${notifDeleteResult.deletedCount} old notification(s) related to deleted titles`);
+            } catch (notifDeleteErr) {
+                console.error("⚠️ Failed to delete old notifications:", notifDeleteErr.message);
+            }
+        } else {
+            console.log("ℹ️ No existing titles found in group. Proceeding with create.");
+        }
+
+        // ============================================
+        // ✅ CREATE NEW TITLE
+        // ============================================
         const proposedTitle = await ProposedTitleModel.create({
             title: cleanTitle,
             description,
@@ -674,15 +702,6 @@ exports.UpdateProposedTitle = AsyncErrorHandler(async (req, res) => {
             message: "Group not found",
         });
     }
-
-    console.log("==========================================");
-    console.log("PROPOSED TITLE:", proposedTitle._id);
-    console.log("GROUP:", group._id);
-    console.log("CURRENT USER:", userId);
-    console.log("GROUP ADVISER:", group.adviserId);
-    console.log("GROUP CO-ADVISER:", group.coadviserId);
-    console.log("==========================================");
-
     // ==========================================
     // 3. DETERMINE KUNG ADVISER O CO-ADVISER
     // ==========================================
@@ -696,23 +715,19 @@ exports.UpdateProposedTitle = AsyncErrorHandler(async (req, res) => {
         group.coadviserId &&
         group.coadviserId.toString() === userId.toString();
 
+    const isSubject_instructor =
+        group.coadviserId &&
+        group.coadviserId.toString() === userId.toString();
+
     if (isAdviser) {
         userRole = "adviser";
         console.log(`User ${userId} is the ADVISER of group ${group._id}`);
     } else if (isCoAdviser) {
         userRole = "co-adviser";
         console.log(`User ${userId} is the CO-ADVISER of group ${group._id}`);
-    }
-
-    // ==========================================
-    // 4. SAFETY CHECK
-    // ==========================================
-    if (!userRole) {
-        return res.status(403).json({
-            status: "fail",
-            message:
-                "You are not authorized. Only the adviser or co-adviser can update this proposed title.",
-        });
+    } else if (isSubject_instructor) {
+        userRole = "subject_instrutor";
+        console.log(`User ${userId} is the CO-ADVISER of group ${group._id}`);
     }
 
     // ==========================================
@@ -955,5 +970,978 @@ exports.bulkUpdateStatus = AsyncErrorHandler(async (req, res) => {
         status: "success",
         message: `${result.modifiedCount} proposed titles updated successfully`,
         data: result,
+    });
+});
+
+
+exports.DisplayReadytitle = AsyncErrorHandler(async (req, res) => {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 5;
+    const skip = (page - 1) * limit;
+
+    const {
+        search,
+        dateFrom,
+        dateTo,
+        groupId
+    } = req.query;
+
+    const role = req.user.role;
+    const userId = req.user._id;
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+
+    // =========================================================
+    // FIXED STATUS
+    // Display ONLY "Ready for Defense"
+    // =========================================================
+    const matchStage = {
+        status: "Ready for Defense"
+    };
+
+    // =========================================================
+    // ROLE FILTER
+    // =========================================================
+    if (role === "student") {
+        matchStage.uploadedBy = userObjectId;
+    }
+
+    // =========================================================
+    // GROUP FILTER
+    // =========================================================
+    if (groupId) {
+        matchStage.groupId = new mongoose.Types.ObjectId(groupId);
+    }
+
+    // =========================================================
+    // SEARCH FILTER - TITLE
+    // =========================================================
+    if (search) {
+        matchStage.title = {
+            $regex: search.trim(),
+            $options: "i"
+        };
+    }
+
+    // =========================================================
+    // DATE FILTER
+    // =========================================================
+    if (dateFrom || dateTo) {
+        matchStage.createdAt = {};
+
+        if (dateFrom) {
+            matchStage.createdAt.$gte = new Date(dateFrom);
+        }
+
+        if (dateTo) {
+            const endOfDay = new Date(dateTo);
+
+            endOfDay.setHours(
+                23,
+                59,
+                59,
+                999
+            );
+
+            matchStage.createdAt.$lte = endOfDay;
+        }
+    }
+
+    // =========================================================
+    // ROLE-BASED MATCH
+    // =========================================================
+    let roleMatchStage = null;
+
+    if (
+        role === "adviser" ||
+        role === "coadviser"
+    ) {
+        roleMatchStage = {
+            $or: [
+                {
+                    "groupInfo.adviserId":
+                        userObjectId
+                },
+                {
+                    "groupInfo.coadviserId":
+                        userObjectId
+                }
+            ]
+        };
+    }
+
+    else if (role === "panelist") {
+        roleMatchStage = {
+            "groupInfo.panelistIds":
+                userObjectId
+        };
+    }
+
+    else if (
+        role === "organizer" ||
+        role === "admin"
+    ) {
+        roleMatchStage = null;
+    }
+
+    // =========================================================
+    // AGGREGATION
+    // =========================================================
+    const result =
+        await ProposedTitleModel.aggregate([
+
+            // =================================================
+            // STAGE 1
+            // Fixed status + filters
+            // =================================================
+            {
+                $match: matchStage
+            },
+
+            // =================================================
+            // STAGE 2
+            // LOOKUP GROUP
+            // =================================================
+            {
+                $lookup: {
+                    from: "groups",
+                    localField: "groupId",
+                    foreignField: "_id",
+                    as: "groupInfo"
+                }
+            },
+
+            // =================================================
+            // STAGE 3
+            // UNWIND GROUP
+            // =================================================
+            {
+                $unwind: {
+                    path: "$groupInfo",
+                    preserveNullAndEmptyArrays: true
+                }
+            },
+
+            // =================================================
+            // STAGE 4
+            // ROLE-BASED FILTER
+            // =================================================
+            ...(roleMatchStage
+                ? [
+                    {
+                        $match: roleMatchStage
+                    }
+                ]
+                : []),
+
+            // =================================================
+            // STAGE 5
+            // LOOKUP UPLOADER
+            // =================================================
+            {
+                $lookup: {
+                    from: "userloginschemas",
+                    localField: "uploadedBy",
+                    foreignField: "_id",
+                    as: "uploaderInfo"
+                }
+            },
+
+            // =================================================
+            // STAGE 6
+            // UNWIND UPLOADER
+            // =================================================
+            {
+                $unwind: {
+                    path: "$uploaderInfo",
+                    preserveNullAndEmptyArrays: true
+                }
+            },
+
+            // =================================================
+            // STAGE 7
+            // LOOKUP COMMENTS
+            // =================================================
+            {
+                $lookup: {
+                    from: "comments",
+                    localField: "_id",
+                    foreignField: "proposedTitleId",
+                    as: "comments"
+                }
+            },
+
+            // =================================================
+            // STAGE 8
+            // UNWIND COMMENTS
+            // =================================================
+            {
+                $unwind: {
+                    path: "$comments",
+                    preserveNullAndEmptyArrays: true
+                }
+            },
+
+            // =================================================
+            // STAGE 9
+            // LOOKUP COMMENT AUTHOR
+            // =================================================
+            {
+                $lookup: {
+                    from: "userloginschemas",
+                    localField: "comments.userId",
+                    foreignField: "_id",
+                    as: "comments.authorInfo"
+                }
+            },
+
+            // =================================================
+            // STAGE 10
+            // UNWIND AUTHOR INFO
+            // =================================================
+            {
+                $unwind: {
+                    path: "$comments.authorInfo",
+                    preserveNullAndEmptyArrays: true
+                }
+            },
+
+            // =================================================
+            // STAGE 11
+            // GROUP BACK COMMENTS
+            // =================================================
+            {
+                $group: {
+                    _id: "$_id",
+
+                    title: {
+                        $first: "$title"
+                    },
+
+                    description: {
+                        $first: "$description"
+                    },
+
+                    status: {
+                        $first: "$status"
+                    },
+
+                    remarks: {
+                        $first: "$remarks"
+                    },
+
+                    createdAt: {
+                        $first: "$createdAt"
+                    },
+
+                    updatedAt: {
+                        $first: "$updatedAt"
+                    },
+
+                    fileName: {
+                        $first: "$fileName"
+                    },
+
+                    fileUrl: {
+                        $first: "$fileUrl"
+                    },
+
+                    fileType: {
+                        $first: "$fileType"
+                    },
+
+                    isPdf: {
+                        $first: "$isPdf"
+                    },
+
+                    adviser: {
+                        $first: "$adviser"
+                    },
+
+                    coAdviser: {
+                        $first: "$coAdviser"
+                    },
+
+                    // =========================================
+                    // TITLE URL TRACKING
+                    // =========================================
+                    titleUrlTracking: {
+                        $first: "$titleUrlTracking"
+                    },
+
+                    groupInfo: {
+                        $first: "$groupInfo"
+                    },
+
+                    uploaderInfo: {
+                        $first: "$uploaderInfo"
+                    },
+
+                    comments: {
+                        $push: {
+                            _id: "$comments._id",
+
+                            text: "$comments.text",
+
+                            userId: "$comments.userId",
+
+                            createdAt:
+                                "$comments.createdAt",
+
+                            updatedAt:
+                                "$comments.updatedAt",
+
+                            author: {
+                                _id:
+                                    "$comments.authorInfo._id",
+
+                                first_name:
+                                    "$comments.authorInfo.first_name",
+
+                                last_name:
+                                    "$comments.authorInfo.last_name",
+
+                                id_number:
+                                    "$comments.authorInfo.id_number",
+
+                                email:
+                                    "$comments.authorInfo.email",
+
+                                role:
+                                    "$comments.authorInfo.role"
+                            }
+                        }
+                    }
+                }
+            },
+
+            // =================================================
+            // STAGE 12
+            // SORT COMMENTS
+            // =================================================
+            {
+                $addFields: {
+                    comments: {
+                        $sortArray: {
+                            input: "$comments",
+                            sortBy: {
+                                createdAt: 1
+                            }
+                        }
+                    }
+                }
+            },
+
+            // =================================================
+            // STAGE 13
+            // SORT TITLE
+            // =================================================
+            {
+                $sort: {
+                    createdAt: -1
+                }
+            },
+
+            // =================================================
+            // STAGE 14
+            // PAGINATION
+            // =================================================
+            {
+                $facet: {
+
+                    // =========================================
+                    // DATA
+                    // =========================================
+                    data: [
+
+                        {
+                            $skip: skip
+                        },
+
+                        {
+                            $limit: limit
+                        },
+
+                        // =====================================
+                        // PROJECT
+                        // =====================================
+                        {
+                            $project: {
+
+                                _id: 1,
+
+                                title: 1,
+
+                                description: 1,
+
+                                // Fixed status will still be returned
+                                status: 1,
+
+                                remarks: 1,
+
+                                createdAt: 1,
+
+                                updatedAt: 1,
+
+                                fileName: 1,
+
+                                fileUrl: 1,
+
+                                fileType: 1,
+
+                                isPdf: 1,
+
+                                adviser: 1,
+
+                                coAdviser: 1,
+
+                                // =================================
+                                // TITLE URL TRACKING
+                                // =================================
+                                titleUrlTracking: 1,
+
+                                // =================================
+                                // GROUP NAME
+                                // =================================
+                                groupName: {
+                                    $ifNull: [
+                                        "$groupInfo.groupName",
+                                        "N/A"
+                                    ]
+                                },
+
+                                // =================================
+                                // UPLOADER NAME
+                                // =================================
+                                uploaderName: {
+                                    $ifNull: [
+                                        {
+                                            $concat: [
+                                                "$uploaderInfo.first_name",
+                                                " ",
+                                                "$uploaderInfo.last_name"
+                                            ]
+                                        },
+                                        "N/A"
+                                    ]
+                                },
+
+                                // =================================
+                                // UPLOADER ID
+                                // =================================
+                                uploaderIdNumber: {
+                                    $ifNull: [
+                                        "$uploaderInfo.id_number",
+                                        "N/A"
+                                    ]
+                                },
+
+                                // =================================
+                                // COMMENTS
+                                // =================================
+                                comments: 1,
+
+                                commentCount: {
+                                    $size: "$comments"
+                                },
+
+                                // =================================
+                                // FULL GROUP INFO
+                                // =================================
+                                groupInfo: 1,
+
+                                // =================================
+                                // FULL UPLOADER INFO
+                                // =================================
+                                uploaderInfo: 1
+                            }
+                        }
+                    ],
+
+                    // =========================================
+                    // TOTAL COUNT
+                    // =========================================
+                    totalCount: [
+                        {
+                            $count: "count"
+                        }
+                    ]
+                }
+            }
+        ]);
+
+    // =========================================================
+    // RESULT DATA
+    // =========================================================
+    const proposedTitles =
+        result[0]?.data || [];
+
+    const totalCount =
+        result[0]?.totalCount?.[0]?.count || 0;
+
+    const totalPages =
+        Math.ceil(totalCount / limit);
+
+    // =========================================================
+    // RESPONSE
+    // =========================================================
+    res.status(200).json({
+        status: "success",
+
+        currentPage: page,
+
+        totalPages,
+
+        totalCount,
+
+        results:
+            proposedTitles.length,
+
+        data:
+            proposedTitles
+    });
+});
+
+
+exports.DisplayArcivedtitle = AsyncErrorHandler(async (req, res) => {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 5;
+    const skip = (page - 1) * limit;
+
+    const { search, dateFrom, dateTo, groupId } = req.query;
+
+    const role = req.user.role;
+    const userId = req.user._id;
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+
+    // =========================================================
+    // FIXED FILTER — archived only
+    // =========================================================
+    const matchStage = { isArchived: true };
+
+    // ROLE FILTER
+    if (role === "student") {
+        matchStage.uploadedBy = userObjectId;
+    }
+
+    // GROUP FILTER
+    if (groupId) {
+        matchStage.groupId = new mongoose.Types.ObjectId(groupId);
+    }
+
+    // SEARCH FILTER
+    if (search) {
+        matchStage.title = {
+            $regex: search.trim(),
+            $options: "i"
+        };
+    }
+
+    // DATE FILTER
+    if (dateFrom || dateTo) {
+        matchStage.createdAt = {};
+        if (dateFrom) matchStage.createdAt.$gte = new Date(dateFrom);
+        if (dateTo) {
+            const endOfDay = new Date(dateTo);
+            endOfDay.setHours(23, 59, 59, 999);
+            matchStage.createdAt.$lte = endOfDay;
+        }
+    }
+
+    // ROLE-BASED MATCH
+    let roleMatchStage = null;
+
+    if (role === "adviser" || role === "coadviser") {
+        roleMatchStage = {
+            $or: [
+                { "groupInfo.adviserId": userObjectId },
+                { "groupInfo.coadviserId": userObjectId }
+            ]
+        };
+    } else if (role === "panelist") {
+        roleMatchStage = { "groupInfo.panelistIds": userObjectId };
+    } else if (role === "organizer" || role === "admin") {
+        roleMatchStage = null;
+    }
+
+    // =========================================================
+    // AGGREGATION
+    // =========================================================
+    const result = await ProposedTitleModel.aggregate([
+
+        // STAGE 1 — Match
+        { $match: matchStage },
+
+        // STAGE 2 — Lookup Group
+        {
+            $lookup: {
+                from: "groups",
+                localField: "groupId",
+                foreignField: "_id",
+                as: "groupInfo"
+            }
+        },
+
+        // STAGE 3 — Unwind Group
+        {
+            $unwind: {
+                path: "$groupInfo",
+                preserveNullAndEmptyArrays: true
+            }
+        },
+
+        // STAGE 4 — Role-based filter
+        ...(roleMatchStage ? [{ $match: roleMatchStage }] : []),
+
+        // =========================================================
+        // STAGE 5 — LOOKUP MEMBERS (from groupInfo.members)
+        // =========================================================
+        {
+            $lookup: {
+                from: "userloginschemas",
+                localField: "groupInfo.members",
+                foreignField: "_id",
+                as: "membersInfo"
+            }
+        },
+
+        // =========================================================
+        // STAGE 6 — LOOKUP ADVISER (from groupInfo.adviserId)
+        // =========================================================
+        {
+            $lookup: {
+                from: "userloginschemas",
+                localField: "groupInfo.adviserId",
+                foreignField: "_id",
+                as: "adviserInfo"
+            }
+        },
+
+        // =========================================================
+        // STAGE 7 — LOOKUP CO-ADVISER (from groupInfo.coadviserId)
+        // =========================================================
+        {
+            $lookup: {
+                from: "userloginschemas",
+                localField: "groupInfo.coadviserId",
+                foreignField: "_id",
+                as: "coadviserInfo"
+            }
+        },
+
+        // =========================================================
+        // STAGE 8 — LOOKUP PANELISTS (from groupInfo.panelistIds)
+        // =========================================================
+        {
+            $lookup: {
+                from: "userloginschemas",
+                localField: "groupInfo.panelistIds",
+                foreignField: "_id",
+                as: "panelistsInfo"
+            }
+        },
+
+        // =========================================================
+        // ✅ STAGE 9 — LOOKUP USERS WHO USED THIS GROUP'S
+        //             referralCode AS THEIR referredBy
+        // =========================================================
+        {
+            $lookup: {
+                from: "userloginschemas",
+                localField: "groupInfo.referralCode",
+                foreignField: "referredBy",
+                as: "referredUsersInfo"
+            }
+        },
+
+        // STAGE 10 — Lookup Uploader
+        {
+            $lookup: {
+                from: "userloginschemas",
+                localField: "uploadedBy",
+                foreignField: "_id",
+                as: "uploaderInfo"
+            }
+        },
+
+        // STAGE 11 — Unwind Uploader
+        {
+            $unwind: {
+                path: "$uploaderInfo",
+                preserveNullAndEmptyArrays: true
+            }
+        },
+
+        // STAGE 12 — Lookup Comments
+        {
+            $lookup: {
+                from: "comments",
+                localField: "_id",
+                foreignField: "proposedTitleId",
+                as: "comments"
+            }
+        },
+
+        // STAGE 13 — Unwind Comments
+        {
+            $unwind: {
+                path: "$comments",
+                preserveNullAndEmptyArrays: true
+            }
+        },
+
+        // STAGE 14 — Lookup Comment Author
+        {
+            $lookup: {
+                from: "userloginschemas",
+                localField: "comments.userId",
+                foreignField: "_id",
+                as: "comments.authorInfo"
+            }
+        },
+
+        // STAGE 15 — Unwind Author Info
+        {
+            $unwind: {
+                path: "$comments.authorInfo",
+                preserveNullAndEmptyArrays: true
+            }
+        },
+
+        // =========================================================
+        // STAGE 16 — GROUP BACK (preserve new lookups)
+        // =========================================================
+        {
+            $group: {
+                _id: "$_id",
+
+                title: { $first: "$title" },
+                description: { $first: "$description" },
+                status: { $first: "$status" },
+                isArchived: { $first: "$isArchived" },
+                remarks: { $first: "$remarks" },
+                createdAt: { $first: "$createdAt" },
+                updatedAt: { $first: "$updatedAt" },
+                fileName: { $first: "$fileName" },
+                fileUrl: { $first: "$fileUrl" },
+                fileType: { $first: "$fileType" },
+                isPdf: { $first: "$isPdf" },
+                adviser: { $first: "$adviser" },
+                coAdviser: { $first: "$coAdviser" },
+                titleUrlTracking: { $first: "$titleUrlTracking" },
+
+                groupInfo: { $first: "$groupInfo" },
+                uploaderInfo: { $first: "$uploaderInfo" },
+
+                // ✅ Preserve looked-up users
+                membersInfo: { $first: "$membersInfo" },
+                adviserInfo: { $first: "$adviserInfo" },
+                coadviserInfo: { $first: "$coadviserInfo" },
+                panelistsInfo: { $first: "$panelistsInfo" },
+
+                // ✅ NEW — referred users via group referralCode
+                referredUsersInfo: { $first: "$referredUsersInfo" },
+
+                comments: {
+                    $push: {
+                        _id: "$comments._id",
+                        text: "$comments.text",
+                        userId: "$comments.userId",
+                        createdAt: "$comments.createdAt",
+                        updatedAt: "$comments.updatedAt",
+                        author: {
+                            _id: "$comments.authorInfo._id",
+                            first_name: "$comments.authorInfo.first_name",
+                            last_name: "$comments.authorInfo.last_name",
+                            id_number: "$comments.authorInfo.id_number",
+                            email: "$comments.authorInfo.email",
+                            role: "$comments.authorInfo.role"
+                        }
+                    }
+                }
+            }
+        },
+
+        // STAGE 17 — Sort comments
+        {
+            $addFields: {
+                comments: {
+                    $sortArray: {
+                        input: "$comments",
+                        sortBy: { createdAt: 1 }
+                    }
+                }
+            }
+        },
+
+        // STAGE 18 — Sort titles
+        { $sort: { createdAt: -1 } },
+
+        // STAGE 19 — Pagination
+        {
+            $facet: {
+                data: [
+                    { $skip: skip },
+                    { $limit: limit },
+                    {
+                        $project: {
+                            _id: 1,
+                            title: 1,
+                            description: 1,
+                            status: 1,
+                            isArchived: 1,
+                            remarks: 1,
+                            createdAt: 1,
+                            updatedAt: 1,
+                            fileName: 1,
+                            fileUrl: 1,
+                            fileType: 1,
+                            isPdf: 1,
+                            adviser: 1,
+                            coAdviser: 1,
+                            titleUrlTracking: 1,
+
+                            // GROUP NAME
+                            groupName: {
+                                $ifNull: ["$groupInfo.name", "N/A"]
+                            },
+
+                            // GROUP REFERRAL CODE
+                            referralCode: {
+                                $ifNull: ["$groupInfo.referralCode", "N/A"]
+                            },
+
+                            // UPLOADER
+                            uploaderName: {
+                                $ifNull: [
+                                    {
+                                        $concat: [
+                                            "$uploaderInfo.first_name",
+                                            " ",
+                                            "$uploaderInfo.last_name"
+                                        ]
+                                    },
+                                    "N/A"
+                                ]
+                            },
+                            uploaderIdNumber: {
+                                $ifNull: ["$uploaderInfo.id_number", "N/A"]
+                            },
+
+                            // COMMENTS
+                            comments: 1,
+                            commentCount: { $size: "$comments" },
+
+                            // ✅ POPULATED MEMBERS (lean projection)
+                            members: {
+                                $map: {
+                                    input: "$membersInfo",
+                                    as: "m",
+                                    in: {
+                                        _id: "$$m._id",
+                                        first_name: "$$m.first_name",
+                                        last_name: "$$m.last_name",
+                                        full_name: {
+                                            $concat: [
+                                                { $ifNull: ["$$m.first_name", ""] },
+                                                " ",
+                                                { $ifNull: ["$$m.last_name", ""] }
+                                            ]
+                                        },
+                                        id_number: "$$m.id_number",
+                                        email: "$$m.email",
+                                        role: "$$m.role"
+                                    }
+                                }
+                            },
+
+                            // ✅ POPULATED ADVISER
+                            adviserInfo: {
+                                $arrayElemAt: ["$adviserInfo", 0]
+                            },
+
+                            // ✅ POPULATED CO-ADVISER
+                            coadviserInfo: {
+                                $arrayElemAt: ["$coadviserInfo", 0]
+                            },
+
+                            // ✅ POPULATED PANELISTS
+                            panelists: {
+                                $map: {
+                                    input: "$panelistsInfo",
+                                    as: "p",
+                                    in: {
+                                        _id: "$$p._id",
+                                        first_name: "$$p.first_name",
+                                        last_name: "$$p.last_name",
+                                        full_name: {
+                                            $concat: [
+                                                { $ifNull: ["$$p.first_name", ""] },
+                                                " ",
+                                                { $ifNull: ["$$p.last_name", ""] }
+                                            ]
+                                        },
+                                        id_number: "$$p.id_number",
+                                        email: "$$p.email",
+                                        role: "$$p.role"
+                                    }
+                                }
+                            },
+
+                            // =================================================
+                            // ✅ NEW — USERS WHO USED THIS GROUP'S referralCode
+                            //          (matched via referredBy)
+                            // =================================================
+                            referredUsers: {
+                                $map: {
+                                    input: "$referredUsersInfo",
+                                    as: "r",
+                                    in: {
+                                        _id: "$$r._id",
+                                        first_name: "$$r.first_name",
+                                        last_name: "$$r.last_name",
+                                        full_name: {
+                                            $concat: [
+                                                { $ifNull: ["$$r.first_name", ""] },
+                                                " ",
+                                                { $ifNull: ["$$r.last_name", ""] }
+                                            ]
+                                        },
+                                        username: "$$r.username",
+                                        id_number: "$$r.id_number",
+                                        email: "$$r.email",
+                                        role: "$$r.role",
+                                        referredBy: "$$r.referredBy",
+                                        status: "$$r.status"
+                                    }
+                                }
+                            },
+                            referredCount: { $size: "$referredUsersInfo" },
+
+                            // FULL REFERENCES (optional — comment out if not needed)
+                            groupInfo: 1,
+                            uploaderInfo: 1
+                        }
+                    }
+                ],
+
+                totalCount: [{ $count: "count" }]
+            }
+        }
+    ]);
+
+    // =========================================================
+    // RESULT
+    // =========================================================
+    const proposedTitles = result[0]?.data || [];
+    const totalCount = result[0]?.totalCount?.[0]?.count || 0;
+    const totalPages = Math.ceil(totalCount / limit);
+
+    res.status(200).json({
+        status: "success",
+        currentPage: page,
+        totalPages,
+        totalCount,
+        results: proposedTitles.length,
+        data: proposedTitles
     });
 });

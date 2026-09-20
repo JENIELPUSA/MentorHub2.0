@@ -38,12 +38,12 @@ const GroupSchema = new Schema(
     },
     adviserStatus: {
       type: String,
-      enum: ['pending', 'approved', 'rejected', 'removed'],
+      enum: ['pending', 'confirm', 'rejected', 'removed'],
       default: 'pending'
     },
     coadviserStatus: {
       type: String,
-      enum: ['pending', 'approved', 'rejected', 'removed'],
+      enum: ['pending', 'confirm', 'rejected', 'removed'],
       default: 'pending'
     },
     approvedTitleId: {

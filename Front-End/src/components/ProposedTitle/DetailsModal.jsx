@@ -155,24 +155,6 @@ export default function DetailsModal({
                     >
                         Close
                     </button>
-                    {item.fileUrl && (
-                        <a
-                            href={item.fileUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition flex items-center gap-1.5"
-                        >
-                            <ExternalLink className="w-4 h-4" />
-                            Open Current File
-                        </a>
-                    )}
-                    <button
-                        onClick={() => onOpenPdfViewer(item)}
-                        className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition flex items-center gap-1.5"
-                    >
-                        <Eye className="w-4 h-4" />
-                        Open PDF Viewer
-                    </button>
                 </div>
             </div>
         </div>

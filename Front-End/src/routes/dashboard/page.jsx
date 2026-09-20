@@ -7,6 +7,7 @@ import { AuthContext } from "../../contexts/AuthContext";
 import UserDashboard from "../../components/UserDashboard/UserDashboard";
 import AdCoAdviserDashboard from "../../components/ad_co_AdviserDashboard/AdCoAdviserDashboard";
 import Instructor_Dashboard from "../../components/Subject_InstructorDashboard/Instructor_Dashboard";
+import AdminDashboard from "../../components/AdminDashboard/AdminDashboard"
 import { useContext } from "react";
 
 const DashboardPage = () => {
@@ -17,6 +18,10 @@ const DashboardPage = () => {
     if (role === 'student') {
         return <UserDashboard />;
     }
+    // If role is student, render UserDashboard
+    if (role === 'admin') {
+        return <AdminDashboard />;
+    }
 
     // If role is adviser, panelist, or co-adviser, render AdCoAdviserDashboard
     if (role === 'panelist' || role === 'adviser' || role === 'co-adviser') {
@@ -25,7 +30,7 @@ const DashboardPage = () => {
 
     // If role is student, render UserDashboard
     if (role === 'subject_instructor') {
-        return <Instructor_Dashboard/>;
+        return <Instructor_Dashboard />;
     }
 
     // Otherwise, render the admin dashboard

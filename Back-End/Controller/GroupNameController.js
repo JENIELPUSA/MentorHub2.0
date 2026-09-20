@@ -1625,7 +1625,7 @@ exports.getGroupForDefense = AsyncErrorHandler(async (req, res) => {
     // Step 7: Find ProposedTitles with status === 'ready'
     const readyTitles = await ProposedTitle.find({
         groupId: { $in: groupIds },
-        status: "ready",
+        status: "Ready for Defense",
     }).select("groupId");
 
     // Step 8: Build a Set of groupIds na may ready title

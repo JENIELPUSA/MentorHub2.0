@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useContext, useState } from 'react';
 import {
     Lightbulb,
     CheckCircle2,
@@ -22,6 +22,7 @@ import {
     FileText,
     GitBranch
 } from 'lucide-react';
+import { AuthContext } from '../../../contexts/AuthContext';
 
 const ProposedTitleSection = ({
     handleRevisionSubmit,
@@ -42,6 +43,8 @@ const ProposedTitleSection = ({
     formatDate
 }) => {
 
+    console.log("proposedTitles", proposedTitles)
+
     // ============================================================
     // STATE para sa Revision Upload Modal
     // ============================================================
@@ -52,6 +55,11 @@ const ProposedTitleSection = ({
         file: null,
         remarks: ''
     });
+
+    const { role } = useContext(AuthContext)
+
+    // ✅ Case-insensitive student check
+    const isStudent = role?.toLowerCase() === 'student';
 
     // ============================================================
     // STATE para sa collapsed tracking cards
@@ -124,27 +132,6 @@ const ProposedTitleSection = ({
         if (result?.success !== false) {
             handleCloseRevisionModal();
         }
-    };
-
-    // ============================================================
-    // ✨ VIEW URL — GAMIT ANG PARENT handleViewFile
-    // ============================================================
-    const handleViewUrl = (url, fileName, action, titleName) => {
-        if (!url) {
-            console.warn("⚠️ No URL to view");
-            return;
-        }
-
-        console.log("👁️ Viewing file:", {
-            url,
-            fileName,
-            action,
-            titleName
-        });
-
-        // ✅ I-delegate sa parent handler para consistent ang behavior
-        // Parent handleViewFile ay tumatanggap ng URL o ID
-        handleViewFile(url);
     };
 
     // ============================================================
@@ -272,7 +259,7 @@ const ProposedTitleSection = ({
                             <Lightbulb className="w-6 h-6" />
                         </div>
                         <div>
-                            <h3 className="font-bold text-lg text-slate-900 dark:text-white">Project & Research Title Proposals</h3>
+                            <h3 className="font-bold text-lg text-slate-900 dark:text-white">Upload Title</h3>
                             <p className="text-xs text-slate-500 dark:text-slate-400">
                                 Submit and manage proposed titles ({totalProposedTitles || proposedTitles.length} total)
                             </p>
@@ -346,19 +333,6 @@ const ProposedTitleSection = ({
                                     />
                                 </div>
 
-                                <div>
-                                    <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                        Initial Remarks
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={formState.remarks}
-                                        onChange={(e) => setFormState({ ...formState, remarks: e.target.value })}
-                                        placeholder="Optional notes for reviewers..."
-                                        className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 dark:text-white shadow-sm"
-                                    />
-                                </div>
-
                                 <div className="pt-1 flex items-center justify-end gap-2">
                                     <button
                                         type="button"
@@ -379,7 +353,7 @@ const ProposedTitleSection = ({
                                             </>
                                         ) : (
                                             <>
-                                                <Paperclip className="w-4 h-4" /> Submit Proposal
+                                                <Paperclip className="w-4 h-4" /> Upload Title
                                             </>
                                         )}
                                     </button>
@@ -400,7 +374,7 @@ const ProposedTitleSection = ({
                                     Title Submission Closed
                                 </p>
                                 <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-0.5">
-                                    May fully approved title na (Adviser ✓ & Co-Adviser ✓). Hindi na pwedeng mag-submit ng panibagong title — mag-upload na lang ng <strong>Revision Capstone</strong> sa baba.
+                                    A fully approved title is already available (Adviser ✓ & Co-Adviser ✓). You can no longer submit a new title. Instead, please upload your **Revision Capstone** below.
                                 </p>
                             </div>
                         </div>
@@ -413,7 +387,9 @@ const ProposedTitleSection = ({
                                 <ListCheck className="w-4 h-4 text-blue-500" />
                                 Submitted Titles ({totalProposedTitles || proposedTitles.length})
                             </h4>
-                            <span className="text-xs text-slate-400">Click 'Approve' to set final title</span>
+                            {!isStudent && (
+                                <span className="text-xs text-slate-400">Click 'Approve' to set final title</span>
+                            )}
                         </div>
 
                         <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
@@ -440,7 +416,7 @@ const ProposedTitleSection = ({
                                         ? [...t.titleUrlTracking].sort((a, b) => new Date(b.date) - new Date(a.date))
                                         : [];
 
-                                    // ✅ LATEST URL — para sa main View/Download button
+                                    // ✅ LATEST URL — para sa main Download button
                                     const latestUrl = getLatestUrl(t);
 
                                     const revisionCount = hasTracking
@@ -491,40 +467,26 @@ const ProposedTitleSection = ({
                                                             Co-Adviser {t.coAdviser ? '✓' : '—'}
                                                         </span>
 
-                                                        {/* ✅ MAIN VIEW/DOWNLOAD — GAMIT ANG LATEST URL */}
+                                                        {/* ✅ MAIN DOWNLOAD ONLY — View button removed */}
                                                         {latestUrl && (
-                                                            <>
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => handleViewUrl(
-                                                                        latestUrl,
-                                                                        t.fileName || getFileNameFromUrl(latestUrl),
-                                                                        'latest',
-                                                                        t.title
-                                                                    )}
-                                                                    className="px-2.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 hover:bg-blue-100 transition flex items-center gap-1.5"
-                                                                    title="View latest file"
-                                                                >
-                                                                    <Eye className="w-3 h-3" /> View
-                                                                </button>
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => handleDownloadUrl(
-                                                                        latestUrl,
-                                                                        t.fileName || getFileNameFromUrl(latestUrl)
-                                                                    )}
-                                                                    className="px-2.5 py-0.5 rounded text-[10px] font-medium bg-green-50 dark:bg-green-900/40 text-green-600 dark:text-green-300 hover:bg-green-100 transition flex items-center gap-1.5"
-                                                                    title="Download latest file"
-                                                                >
-                                                                    <Download className="w-3 h-3" /> Download
-                                                                </button>
-                                                            </>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleDownloadUrl(
+                                                                    latestUrl,
+                                                                    t.fileName || getFileNameFromUrl(latestUrl)
+                                                                )}
+                                                                className="px-2.5 py-0.5 rounded text-[10px] font-medium bg-green-50 dark:bg-green-900/40 text-green-600 dark:text-green-300 hover:bg-green-100 transition flex items-center gap-1.5"
+                                                                title="Download latest file"
+                                                            >
+                                                                <Download className="w-3 h-3" /> Download
+                                                            </button>
                                                         )}
                                                     </div>
                                                 </div>
 
                                                 <div className="shrink-0 flex items-center gap-1 flex-wrap">
-                                                    {!isApproved && (
+                                                    {/* ✅ Approve — HIDDEN sa student */}
+                                                    {!isStudent && !isApproved && (
                                                         <button
                                                             onClick={() => updateTitleStatus(t._id, 'Approved')}
                                                             className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg text-[11px] transition shadow-sm flex items-center gap-1"
@@ -534,7 +496,8 @@ const ProposedTitleSection = ({
                                                         </button>
                                                     )}
 
-                                                    {!isApproved && (
+                                                    {/* ✅ Revise — HIDDEN sa student */}
+                                                    {!isStudent && !isApproved && (
                                                         <button
                                                             onClick={() => updateTitleStatus(t._id, 'Revision')}
                                                             className="px-2 py-1 bg-purple-100 hover:bg-purple-200 text-purple-700 dark:bg-purple-900/40 dark:hover:bg-purple-800/60 dark:text-purple-300 font-semibold rounded-lg text-[11px] transition flex items-center gap-1"
@@ -544,7 +507,8 @@ const ProposedTitleSection = ({
                                                         </button>
                                                     )}
 
-                                                    {!isApproved && !isRejected && (
+                                                    {/* ✅ Reject — HIDDEN sa student */}
+                                                    {!isStudent && !isApproved && !isRejected && (
                                                         <button
                                                             onClick={() => updateTitleStatus(t._id, 'Rejected')}
                                                             className="px-2 py-1 bg-slate-200 dark:bg-slate-700 hover:bg-rose-100 hover:text-rose-600 text-slate-600 dark:text-slate-300 font-medium rounded-lg text-[11px] transition"
@@ -554,7 +518,8 @@ const ProposedTitleSection = ({
                                                         </button>
                                                     )}
 
-                                                    {!isApproved && (
+                                                    {/* ✅ Delete — HIDDEN sa student */}
+                                                    {!isStudent && !isApproved && (
                                                         <button
                                                             onClick={() => handleDelete(t._id)}
                                                             className="px-2 py-1 bg-slate-100 dark:bg-slate-700 hover:bg-rose-100 hover:text-rose-600 text-slate-500 dark:text-slate-400 font-medium rounded-lg text-[11px] transition"
@@ -657,7 +622,7 @@ const ProposedTitleSection = ({
                                                                                         </p>
                                                                                     )}
 
-                                                                                    {/* FILE + ACTIONS — ✅ GAMIT ANG track.url */}
+                                                                                    {/* FILE + ACTIONS — ✅ DOWNLOAD ONLY (View removed) */}
                                                                                     {track.url && (
                                                                                         <div className="flex items-center gap-2 pt-1.5 border-t border-slate-200/60 dark:border-slate-700/50">
                                                                                             <FileText className={`w-3.5 h-3.5 shrink-0 ${config.iconColor}`} />
@@ -665,19 +630,6 @@ const ProposedTitleSection = ({
                                                                                                 {track.fileName || getFileNameFromUrl(track.url)}
                                                                                             </span>
                                                                                             <div className="flex items-center gap-1 shrink-0">
-                                                                                                <button
-                                                                                                    type="button"
-                                                                                                    onClick={() => handleViewUrl(
-                                                                                                        track.url,
-                                                                                                        track.fileName,
-                                                                                                        track.action,
-                                                                                                        t.title
-                                                                                                    )}
-                                                                                                    className="p-1 text-blue-500 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded transition"
-                                                                                                    title="View this version"
-                                                                                                >
-                                                                                                    <Eye className="w-3 h-3" />
-                                                                                                </button>
                                                                                                 <button
                                                                                                     type="button"
                                                                                                     onClick={() => handleDownloadUrl(

@@ -1,4 +1,4 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
 import {
     Users,
     FileText,
@@ -27,6 +27,148 @@ import {
 import { AuthContext } from '../../contexts/AuthContext';
 import { StatisticalContext } from '../../contexts/StatisticalContext/StatisticalContext';
 
+/* ============================
+   SKELETON LOADING COMPONENTS
+   ============================ */
+
+const SkeletonPulse = ({ className = '' }) => (
+    <div className={`animate-pulse bg-slate-200 rounded ${className}`} />
+);
+
+const StatCardSkeleton = () => (
+    <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
+        <div className="flex items-center justify-between mb-2">
+            <SkeletonPulse className="h-3 w-16" />
+            <SkeletonPulse className="h-5 w-5 rounded-md" />
+        </div>
+        <div>
+            <SkeletonPulse className="h-7 w-12 mb-2" />
+            <SkeletonPulse className="h-3 w-20" />
+        </div>
+    </div>
+);
+
+const StatusBreakdownSkeleton = () => (
+    <div className="bg-white p-6 rounded-2xl shadow-sm border border-blue-50 flex flex-col justify-between">
+        <div>
+            <div className="flex items-center gap-2 mb-4">
+                <SkeletonPulse className="h-5 w-5 rounded-md" />
+                <SkeletonPulse className="h-5 w-36" />
+            </div>
+            <div className="space-y-4 my-2">
+                {[...Array(4)].map((_, i) => (
+                    <div key={i} className="space-y-2">
+                        <div className="flex justify-between">
+                            <SkeletonPulse className="h-3 w-20" />
+                            <SkeletonPulse className="h-3 w-16" />
+                        </div>
+                        <SkeletonPulse className="h-3 w-full rounded-full" />
+                    </div>
+                ))}
+            </div>
+        </div>
+        <div className="mt-6 pt-4 border-t border-slate-100 flex justify-between">
+            <SkeletonPulse className="h-3 w-28" />
+            <SkeletonPulse className="h-3 w-16" />
+        </div>
+    </div>
+);
+
+const MonthlyTrendCardSkeleton = () => (
+    <div className="w-72 p-4 rounded-2xl bg-white border border-blue-100/80 flex items-center gap-4 shadow-sm flex-shrink-0">
+        <div className="relative flex-shrink-0 flex items-center justify-center">
+            <div className="w-28 h-28 rounded-full border-[10px] border-slate-200 animate-pulse" />
+        </div>
+        <div className="space-y-2 flex-grow">
+            <SkeletonPulse className="h-4 w-16" />
+            {[...Array(3)].map((_, i) => (
+                <div key={i} className="flex justify-between items-center">
+                    <SkeletonPulse className="h-3 w-12" />
+                    <SkeletonPulse className="h-3 w-4" />
+                </div>
+            ))}
+        </div>
+    </div>
+);
+
+const MonthlyTrendsSkeleton = () => (
+    <div className="bg-white p-6 rounded-2xl shadow-sm border border-blue-50 lg:col-span-2 flex flex-col justify-between">
+        <div>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-6">
+                <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                        <SkeletonPulse className="h-5 w-5 rounded-md" />
+                        <SkeletonPulse className="h-5 w-36" />
+                    </div>
+                    <SkeletonPulse className="h-3 w-56" />
+                </div>
+                <SkeletonPulse className="h-9 w-64 rounded-xl" />
+            </div>
+            <div className="overflow-x-auto pb-3 pt-1">
+                <div className="flex gap-4 min-w-max">
+                    {[...Array(3)].map((_, i) => (
+                        <MonthlyTrendCardSkeleton key={i} />
+                    ))}
+                </div>
+            </div>
+        </div>
+        <div className="mt-4 pt-4 border-t border-slate-100 flex justify-between">
+            <SkeletonPulse className="h-3 w-40" />
+            <SkeletonPulse className="h-3 w-32" />
+        </div>
+    </div>
+);
+
+const TableRowSkeleton = () => (
+    <tr className="animate-pulse">
+        <td className="py-4 px-6">
+            <div className="flex items-center gap-2">
+                <SkeletonPulse className="h-8 w-8 rounded-lg" />
+                <SkeletonPulse className="h-4 w-28" />
+            </div>
+        </td>
+        <td className="py-4 px-6">
+            <SkeletonPulse className="h-6 w-20 rounded-lg" />
+        </td>
+        <td className="py-4 px-6">
+            <SkeletonPulse className="h-4 w-20" />
+        </td>
+        <td className="py-4 px-6">
+            <SkeletonPulse className="h-6 w-16 rounded-md" />
+        </td>
+        <td className="py-4 px-6">
+            <div className="flex gap-2">
+                <SkeletonPulse className="h-6 w-24 rounded-lg" />
+                <SkeletonPulse className="h-6 w-20 rounded-lg" />
+            </div>
+        </td>
+        <td className="py-4 px-6 text-right">
+            <SkeletonPulse className="h-7 w-16 rounded-xl ml-auto" />
+        </td>
+    </tr>
+);
+
+const HeaderSkeleton = () => (
+    <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-blue-100">
+        <div className="space-y-3 w-full">
+            <div className="flex items-center gap-2">
+                <SkeletonPulse className="h-6 w-24 rounded-full" />
+                <SkeletonPulse className="h-4 w-40" />
+            </div>
+            <SkeletonPulse className="h-8 w-72" />
+            <SkeletonPulse className="h-4 w-64" />
+        </div>
+        <div className="flex items-center gap-2">
+            <SkeletonPulse className="h-9 w-28 rounded-xl" />
+            <SkeletonPulse className="h-9 w-28 rounded-xl" />
+        </div>
+    </header>
+);
+
+/* ============================
+   MAIN DASHBOARD COMPONENT
+   ============================ */
+
 export default function AdCoAdviserDashboard() {
     const [searchTerm, setSearchTerm] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
@@ -34,9 +176,18 @@ export default function AdCoAdviserDashboard() {
     const [selectedGroup, setSelectedGroup] = useState(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
-    
+
+    // Skeleton loading state (simulated)
+    const [isPageLoading, setIsPageLoading] = useState(true);
+
     const { role } = useContext(AuthContext);
     const { dashboardData, isLoading } = useContext(StatisticalContext);
+
+    // Simulated skeleton loading - 1.5s
+    useEffect(() => {
+        const timer = setTimeout(() => setIsPageLoading(false), 1500);
+        return () => clearTimeout(timer);
+    }, []);
 
     // Helper function para i-format ang role
     const formatRole = (role) => {
@@ -65,14 +216,8 @@ export default function AdCoAdviserDashboard() {
     const handleApprove = async (groupId) => {
         setIsProcessing(true);
         try {
-            // Simulate API call
             await new Promise(resolve => setTimeout(resolve, 1500));
-            
-            // Update the group status in the local data
-            // In real implementation, this will be an API call
             alert(`✅ Group ${selectedGroup?.groupName} has been approved!`);
-            
-            // Close modal after successful approval
             closeModal();
         } catch (error) {
             console.error('Error approving group:', error);
@@ -86,14 +231,8 @@ export default function AdCoAdviserDashboard() {
     const handleReject = async (groupId) => {
         setIsProcessing(true);
         try {
-            // Simulate API call
             await new Promise(resolve => setTimeout(resolve, 1500));
-            
-            // Update the group status in the local data
-            // In real implementation, this will be an API call
             alert(`❌ Group ${selectedGroup?.groupName} has been rejected.`);
-            
-            // Close modal after successful rejection
             closeModal();
         } catch (error) {
             console.error('Error rejecting group:', error);
@@ -103,13 +242,60 @@ export default function AdCoAdviserDashboard() {
         }
     };
 
-    // Loading state
-    if (isLoading) {
+    // Loading state (from context) OR skeleton loading
+    if (isLoading || isPageLoading) {
         return (
-            <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-                <div className="text-center">
-                    <Loader2 className="w-12 h-12 text-blue-900 animate-spin mx-auto mb-4" />
-                    <p className="text-slate-600 font-medium">Loading dashboard...</p>
+            <div className="min-h-screen bg-slate-50 text-slate-800 font-sans p-4 md:p-8">
+                <div className="max-w-7xl mx-auto space-y-8">
+                    {/* Header Skeleton */}
+                    <HeaderSkeleton />
+
+                    {/* Stat Cards Skeleton */}
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                        {[...Array(6)].map((_, i) => (
+                            <StatCardSkeleton key={i} />
+                        ))}
+                    </div>
+
+                    {/* Analytics Skeleton */}
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <StatusBreakdownSkeleton />
+                        <MonthlyTrendsSkeleton />
+                    </div>
+
+                    {/* Table Skeleton */}
+                    <div className="bg-white rounded-2xl shadow-sm border border-blue-50 overflow-hidden">
+                        <div className="p-6 border-b border-blue-50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                            <div className="space-y-2">
+                                <SkeletonPulse className="h-6 w-40" />
+                                <SkeletonPulse className="h-4 w-72 max-w-full" />
+                            </div>
+                            <SkeletonPulse className="h-10 w-full sm:w-64 rounded-xl" />
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr className="bg-blue-900/5 border-b border-blue-100 text-xs uppercase tracking-wider text-blue-950 font-bold">
+                                        <th className="py-4 px-6">Group Name</th>
+                                        <th className="py-4 px-6">Referral Code</th>
+                                        <th className="py-4 px-6">Students</th>
+                                        <th className="py-4 px-6">Role Assignment</th>
+                                        <th className="py-4 px-6">Statuses</th>
+                                        <th className="py-4 px-6 text-right">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 text-sm">
+                                    {[...Array(5)].map((_, i) => (
+                                        <TableRowSkeleton key={i} />
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div className="px-6 py-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-slate-50/50">
+                            <SkeletonPulse className="h-5 w-64" />
+                            <SkeletonPulse className="h-9 w-48 rounded-lg" />
+                        </div>
+                    </div>
                 </div>
             </div>
         );
@@ -146,24 +332,18 @@ export default function AdCoAdviserDashboard() {
     // PAGINATION LOGIC - Front-end only
     const totalItems = filteredGroups.length;
     const totalPages = Math.ceil(totalItems / itemsPerPage);
-    
-    // Ensure current page is valid
     const validCurrentPage = Math.min(Math.max(1, currentPage), totalPages || 1);
-    
-    // Get current items for display
     const indexOfLastItem = validCurrentPage * itemsPerPage;
     const indexOfFirstItem = indexOfLastItem - itemsPerPage;
     const currentGroups = filteredGroups.slice(indexOfFirstItem, indexOfLastItem);
 
-    // Change page
     const goToPage = (pageNumber) => {
         setCurrentPage(Math.min(Math.max(1, pageNumber), totalPages || 1));
     };
 
-    // Handle items per page change
     const handleItemsPerPageChange = (e) => {
         setItemsPerPage(Number(e.target.value));
-        setCurrentPage(1); // Reset to first page
+        setCurrentPage(1);
     };
 
     const renderPieSlices = (trend) => {
@@ -215,11 +395,10 @@ export default function AdCoAdviserDashboard() {
         );
     };
 
-    // Group Details Modal Component - Simplified Version
+    // Group Details Modal Component
     const GroupDetailsModal = ({ group, onClose }) => {
         if (!group) return null;
 
-        // Mock data for members and subject instructor
         const members = [
             { id: 1, name: 'Juan Dela Cruz', email: 'juan.delacruz@bipsu.edu.ph', role: 'Student' },
             { id: 2, name: 'Maria Santos', email: 'maria.santos@bipsu.edu.ph', role: 'Student' },
@@ -240,7 +419,6 @@ export default function AdCoAdviserDashboard() {
         return (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
                 <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full max-h-[90vh] overflow-hidden">
-                    {/* Header */}
                     <div className="flex items-center justify-between p-4 border-b border-gray-200">
                         <div>
                             <h2 className="text-lg font-semibold text-gray-800">{group.groupName}</h2>
@@ -257,9 +435,7 @@ export default function AdCoAdviserDashboard() {
                         </button>
                     </div>
 
-                    {/* Body */}
                     <div className="p-4 overflow-y-auto max-h-[calc(90vh-180px)]">
-                        {/* Members List */}
                         <div className="mb-4">
                             <h3 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
                                 <UserCheck className="w-4 h-4" />
@@ -285,7 +461,6 @@ export default function AdCoAdviserDashboard() {
                             </div>
                         </div>
 
-                        {/* Subject Instructor */}
                         <div className="mb-4">
                             <h3 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
                                 <UserCog className="w-4 h-4" />
@@ -305,7 +480,6 @@ export default function AdCoAdviserDashboard() {
                             </div>
                         </div>
 
-                        {/* Status */}
                         <div className="flex items-center justify-between p-3 bg-gray-50 rounded border border-gray-100">
                             <div>
                                 <span className="text-sm text-gray-600">Status</span>
@@ -332,7 +506,6 @@ export default function AdCoAdviserDashboard() {
                         </div>
                     </div>
 
-                    {/* Footer - Action Buttons */}
                     <div className="flex items-center justify-end gap-2 p-4 border-t border-gray-200 bg-gray-50">
                         <button
                             onClick={onClose}
@@ -476,7 +649,7 @@ export default function AdCoAdviserDashboard() {
                 {/* Analytics & Graphs Section */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-                    {/* Status Breakdown with BiPSU Theme Colors */}
+                    {/* Status Breakdown */}
                     <div className="bg-white p-6 rounded-2xl shadow-sm border border-blue-50 flex flex-col justify-between">
                         <div>
                             <h3 className="text-lg font-bold text-blue-950 flex items-center gap-2 mb-4">
@@ -485,7 +658,6 @@ export default function AdCoAdviserDashboard() {
 
                             <div className="space-y-4 my-2">
                                 {graphs?.statusBreakdown?.map((item, idx) => {
-                                    // Map status to BiPSU theme colors
                                     const statusColors = {
                                         'Approved': { bar: '#1E3A8A', text: 'text-blue-900', bg: 'bg-blue-50' },
                                         'approved': { bar: '#1E3A8A', text: 'text-blue-900', bg: 'bg-blue-50' },
@@ -596,7 +768,7 @@ export default function AdCoAdviserDashboard() {
 
                 </div>
 
-                {/* Groups Management Section with Front-end Pagination */}
+                {/* Groups Management Section */}
                 <div className="bg-white rounded-2xl shadow-sm border border-blue-50 overflow-hidden">
                     <div className="p-6 border-b border-blue-50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                         <div>
