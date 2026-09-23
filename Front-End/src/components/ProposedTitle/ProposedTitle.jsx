@@ -5,7 +5,7 @@ import {
     Search, Eye, CheckCircle2, XCircle, Clock,
     ChevronLeft, ChevronRight, FileText, Download,
     RefreshCw, UserCheck, User, Loader2, ArrowLeft,
-    MessageSquare, History, Users, Shield
+    MessageSquare, History, Users, Shield, CalendarDays
 } from 'lucide-react';
 
 import { AuthContext } from '../../contexts/AuthContext';
@@ -20,48 +20,44 @@ pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/$
 // HELPERS
 // ============================================================
 const getActualDisplayStatus = (item) => {
-    if (item.status === 'Ready for Defense') {
-        return 'Ready for Defense';
-    }
+    if (item.status === 'Ready for Defense') return 'Ready for Defense';
+    if (item.status === 'for_schedule') return 'For Schedule';
 
     if (item.status === 'Approved') {
-        if (item.adviser === true && item.coAdviser === true) {
-            return 'Approved';
-        } else if (item.adviser === true && item.coAdviser === false) {
-            return 'Waiting for Co-Adviser Approval';
-        } else if (item.adviser === false && item.coAdviser === true) {
-            return 'Waiting for Adviser Approval';
-        } else {
-            return 'Pending Review';
-        }
+        if (item.adviser === true && item.coAdviser === true) return 'Confirmed';
+        if (item.adviser === true && item.coAdviser === false) return 'Waiting for Co-Adviser Confirmation';
+        if (item.adviser === false && item.coAdviser === true) return 'Waiting for Adviser Confirmation';
+        return 'Pending Review';
     }
     return item.status || 'Pending';
 };
 
 const getStatusBadgeClass = (displayStatus) => {
     const badges = {
-        'Approved': 'bg-emerald-100 text-emerald-800 border-emerald-200',
+        'Confirmed': 'bg-emerald-100 text-emerald-800 border-emerald-200',
         'Pending': 'bg-amber-100 text-amber-800 border-amber-200',
         'Rejected': 'bg-rose-100 text-rose-800 border-rose-200',
         'Revision': 'bg-purple-100 text-purple-800 border-purple-200',
-        'Waiting for Adviser Approval': 'bg-blue-100 text-blue-800 border-blue-200',
-        'Waiting for Co-Adviser Approval': 'bg-indigo-100 text-indigo-800 border-indigo-200',
+        'Waiting for Adviser Confirmation': 'bg-blue-100 text-blue-800 border-blue-200',
+        'Waiting for Co-Adviser Confirmation': 'bg-indigo-100 text-indigo-800 border-indigo-200',
         'Pending Review': 'bg-slate-100 text-slate-800 border-slate-200',
-        'Ready for Defense': 'bg-teal-100 text-teal-800 border-teal-200'
+        'Ready for Defense': 'bg-teal-100 text-teal-800 border-teal-200',
+        'For Schedule': 'bg-cyan-100 text-cyan-800 border-cyan-200'
     };
     return badges[displayStatus] || 'bg-slate-100 text-slate-800 border-slate-200';
 };
 
 const getStatusIconComponent = (displayStatus) => {
     switch (displayStatus) {
-        case 'Approved': return <CheckCircle2 className="w-3.5 h-3.5" />;
+        case 'Confirmed': return <CheckCircle2 className="w-3.5 h-3.5" />;
         case 'Pending': return <Clock className="w-3.5 h-3.5" />;
         case 'Rejected': return <XCircle className="w-3.5 h-3.5" />;
         case 'Revision': return <RefreshCw className="w-3.5 h-3.5" />;
-        case 'Waiting for Adviser Approval': return <User className="w-3.5 h-3.5" />;
-        case 'Waiting for Co-Adviser Approval': return <UserCheck className="w-3.5 h-3.5" />;
+        case 'Waiting for Adviser Confirmation': return <User className="w-3.5 h-3.5" />;
+        case 'Waiting for Co-Adviser Confirmation': return <UserCheck className="w-3.5 h-3.5" />;
         case 'Pending Review': return <Users className="w-3.5 h-3.5" />;
         case 'Ready for Defense': return <Shield className="w-3.5 h-3.5" />;
+        case 'For Schedule': return <CalendarDays className="w-3.5 h-3.5" />;
         default: return <Clock className="w-3.5 h-3.5" />;
     }
 };
@@ -92,8 +88,10 @@ const getActionBadgeClass = (action) => {
         case 'create': return 'bg-blue-100 text-blue-700 border-blue-200';
         case 'revision': return 'bg-purple-100 text-purple-700 border-purple-200';
         case 'approved': return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+        case 'confirmed': return 'bg-emerald-100 text-emerald-700 border-emerald-200';
         case 'rejected': return 'bg-rose-100 text-rose-700 border-rose-200';
         case 'ready for defense': return 'bg-teal-100 text-teal-700 border-teal-200';
+        case 'for schedule': return 'bg-cyan-100 text-cyan-700 border-cyan-200';
         default: return 'bg-slate-100 text-slate-700 border-slate-200';
     }
 };
@@ -119,12 +117,14 @@ const formatCommentDate = (dateString) => {
 // ============================================================
 const STATUS_STEPS = [
     { key: 'Pending', label: 'Pending', icon: Clock },
-    { key: 'Approved', label: 'Approved', icon: CheckCircle2 },
+    { key: 'Confirmed', label: 'Confirmed', icon: CheckCircle2 },
+    { key: 'For Schedule', label: 'For Schedule', icon: CalendarDays },
     { key: 'Ready for Defense', label: 'Ready for Defense', icon: Shield },
 ];
 
 const getStepIndexFromStatus = (status) => {
-    if (status === 'Ready for Defense') return 2;
+    if (status === 'Ready for Defense') return 3;
+    if (status === 'for_schedule') return 2;
     if (status === 'Approved') return 1;
     return 0;
 };
@@ -163,19 +163,13 @@ const StatusStepper = ({ status, compact = false }) => {
                                 )}
                             </div>
                             {!compact && (
-                                <span
-                                    className={`mt-1 text-[10px] font-medium whitespace-nowrap ${
-                                        isCompleted || isActive ? 'text-slate-900' : 'text-slate-400'
-                                    }`}
-                                >
+                                <span className={`mt-1 text-[10px] font-medium whitespace-nowrap ${isCompleted || isActive ? 'text-slate-900' : 'text-slate-400'}`}>
                                     {step.label}
                                 </span>
                             )}
                         </div>
                         {index < STATUS_STEPS.length - 1 && (
-                            <div
-                                className={`h-0.5 ${compact ? 'w-4' : 'w-8 md:w-12'} ${lineClass} rounded-full transition-all`}
-                            />
+                            <div className={`h-0.5 ${compact ? 'w-4' : 'w-6 md:w-8'} ${lineClass} rounded-full transition-all`} />
                         )}
                     </React.Fragment>
                 );
@@ -185,39 +179,86 @@ const StatusStepper = ({ status, compact = false }) => {
 };
 
 // ============================================================
+// CONFIRMATION MODAL COMPONENT
+// ============================================================
+const ConfirmModal = ({ isOpen, config, onConfirm, onCancel, isLoading }) => {
+    if (!isOpen || !config) return null;
+
+    const colorClasses = {
+        emerald: { bg: 'bg-emerald-50', icon: 'text-emerald-600', button: 'bg-emerald-600 hover:bg-emerald-700 focus:ring-emerald-500', border: 'border-emerald-200' },
+        purple: { bg: 'bg-purple-50', icon: 'text-purple-600', button: 'bg-purple-600 hover:bg-purple-700 focus:ring-purple-500', border: 'border-purple-200' },
+        rose: { bg: 'bg-rose-50', icon: 'text-rose-600', button: 'bg-rose-600 hover:bg-rose-700 focus:ring-rose-500', border: 'border-rose-200' },
+        teal: { bg: 'bg-teal-50', icon: 'text-teal-600', button: 'bg-teal-600 hover:bg-teal-700 focus:ring-teal-500', border: 'border-teal-200' },
+        cyan: { bg: 'bg-cyan-50', icon: 'text-cyan-600', button: 'bg-cyan-600 hover:bg-cyan-700 focus:ring-cyan-500', border: 'border-cyan-200' }
+    };
+
+    const c = colorClasses[config.color] || colorClasses.emerald;
+    const IconComponent = config.icon || CheckCircle2;
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={isLoading ? undefined : onCancel} />
+            <div className="relative bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200">
+                <div className={`${c.bg} px-6 py-5 border-b ${c.border}`}>
+                    <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-full bg-white flex items-center justify-center ${c.icon}`}>
+                            <IconComponent className="w-5 h-5" />
+                        </div>
+                        <h3 className="text-lg font-bold text-slate-900">{config.title}</h3>
+                    </div>
+                </div>
+
+                <div className="p-6 space-y-3">
+                    <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">{config.message}</p>
+                    {config.itemTitle && (
+                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                            <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Submission Title</p>
+                            <p className="text-sm font-medium text-slate-800 line-clamp-2">{config.itemTitle}</p>
+                        </div>
+                    )}
+                    {config.warning && (
+                        <div className={`text-xs px-3 py-2 rounded-lg ${c.bg} ${c.icon} border ${c.border} font-medium`}>
+                            {config.warning}
+                        </div>
+                    )}
+                </div>
+
+                <div className="flex items-center justify-end gap-2 px-6 py-4 bg-slate-50 border-t border-slate-200">
+                    <button onClick={onCancel} disabled={isLoading} className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition">
+                        Cancel
+                    </button>
+                    <button onClick={onConfirm} disabled={isLoading} className={`px-4 py-2 text-sm font-medium text-white rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition inline-flex items-center gap-2 ${c.button}`}>
+                        {isLoading ? (<><Loader2 className="w-4 h-4 animate-spin" /> Processing...</>) : (config.confirmLabel || 'Confirm')}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ============================================================
 // MAIN COMPONENT
 // ============================================================
 export default function ProposedTitle() {
     const {
-        proposedTitles,
-        isLoading: contextLoading,
-        totalPages,
-        currentPage: contextCurrentPage,
-        setCurrentPage: setContextCurrentPage,
-        limit,
-        search,
-        setSearch,
-        statusFilter,
-        setStatusFilter,
-        dateFrom,
-        dateTo,
-        groupIdFilter,
-        totalProposedTitles,
-        FetchProposedTitles,
-        UpdateProposedTitle,
-        customError
+        proposedTitles, isLoading: contextLoading, totalPages,
+        currentPage: contextCurrentPage, setCurrentPage: setContextCurrentPage,
+        limit, search, setSearch, statusFilter, setStatusFilter,
+        dateFrom, dateTo, groupIdFilter, totalProposedTitles,
+        FetchProposedTitles, UpdateProposedTitle, customError
     } = useContext(ProposedTitleContext);
 
     const { userId, role } = useContext(AuthContext);
     const { CreateComment } = useContext(CommentContext);
 
-    console.log("role", role);
+    console.log("🔑 AUTH DEBUG → role:", role, "| userId:", userId);
+
+    const normalizedRole = (role || '').toLowerCase().trim();
 
     const [localSearchTerm, setLocalSearchTerm] = useState(search || '');
     const [localStatusFilter, setLocalStatusFilter] = useState(statusFilter || 'All');
     const [rowsPerPage, setRowsPerPage] = useState(limit || 5);
 
-    // === MODAL / VIEWER STATE ===
     const [modalItem, setModalItem] = useState(null);
     const [viewSubmission, setViewSubmission] = useState(null);
     const [toastMessage, setToastMessage] = useState(null);
@@ -230,14 +271,17 @@ export default function ProposedTitle() {
     const [useIframe, setUseIframe] = useState(false);
     const [isViewMode, setIsViewMode] = useState(false);
 
-    // Comment states
+    const [confirmModal, setConfirmModal] = useState({
+        isOpen: false, config: null, onConfirm: null, itemId: null, newStatus: null
+    });
+    const [isProcessing, setIsProcessing] = useState(false);
+
     const [commentText, setCommentText] = useState('');
     const [isSubmittingComment, setIsSubmittingComment] = useState(false);
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [localComments, setLocalComments] = useState([]);
     const [activeTrackingId, setActiveTrackingId] = useState(null);
 
-    // Debounce search input
     useEffect(() => {
         const timer = setTimeout(() => {
             if (localSearchTerm !== search) {
@@ -256,12 +300,9 @@ export default function ProposedTitle() {
         }
     }, [localStatusFilter, statusFilter, setStatusFilter, setContextCurrentPage]);
 
-    // Sort comments ascending kapag may bagong viewSubmission
     useEffect(() => {
         if (viewSubmission && viewSubmission.comments) {
-            const sorted = [...viewSubmission.comments].sort(
-                (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
-            );
+            const sorted = [...viewSubmission.comments].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
             setLocalComments(sorted);
         } else {
             setLocalComments([]);
@@ -286,31 +327,103 @@ export default function ProposedTitle() {
     // IDENTITY HELPERS
     // ============================================================
     const isUserAdviser = useCallback((item) => {
-        if (!item) return false;
+        if (!item || !userId) return false;
         const groupInfo = item.groupInfo || {};
-        const adviserId =
-            groupInfo.adviserId ||
-            groupInfo.adviser?._id ||
-            groupInfo.assignedMentor?.[0]?._id;
-        return !!(userId && adviserId && String(userId) === String(adviserId));
+
+        const candidates = [
+            groupInfo.adviserId,
+            groupInfo.adviser?._id,
+            groupInfo.adviser,
+            groupInfo.assignedMentor?.[0]?._id,
+            groupInfo.assignedMentor?.[0],
+            groupInfo.mentorId,
+            groupInfo.mentor?._id,
+            groupInfo.mentor,
+            item.adviserId,
+            item.adviser?._id
+        ]
+            .filter(Boolean)
+            .map(id => (typeof id === 'object' ? id._id : id))
+            .filter(Boolean)
+            .map(id => String(id));
+
+        return candidates.includes(String(userId));
     }, [userId]);
 
     const isUserCoAdviser = useCallback((item) => {
-        if (!item) return false;
+        if (!item || !userId) return false;
         const groupInfo = item.groupInfo || {};
-        const coAdviserId =
-            groupInfo.coAdviserId ||
-            groupInfo.coadviserId ||
-            groupInfo.coAdviser?._id ||
-            groupInfo.coadviser?._id ||
-            groupInfo.assignedMentor?.[1]?._id;
-        return !!(userId && coAdviserId && String(userId) === String(coAdviserId));
+
+        const candidates = [
+            groupInfo.coAdviserId,
+            groupInfo.coadviserId,
+            groupInfo.coAdviser?._id,
+            groupInfo.coAdviser,
+            groupInfo.coadviser?._id,
+            groupInfo.coadviser,
+            groupInfo.assignedMentor?.[1]?._id,
+            groupInfo.assignedMentor?.[1],
+            item.coAdviserId,
+            item.coAdviser?._id
+        ]
+            .filter(Boolean)
+            .map(id => (typeof id === 'object' ? id._id : id))
+            .filter(Boolean)
+            .map(id => String(id));
+
+        return candidates.includes(String(userId));
     }, [userId]);
 
-    // ============================================================
-    // UPDATE STATUS
-    // ============================================================
-    const handleStatusChange = async (id, newStatus) => {
+    const buildConfirmConfig = (newStatus, item) => {
+        switch (newStatus) {
+            case 'Approved':
+                return {
+                    title: 'Confirm Submission',
+                    message: 'Are you sure you want to CONFIRM this submission?',
+                    itemTitle: item?.title,
+                    warning: 'Once confirmed, this will be counted as your approval.',
+                    confirmLabel: 'Yes, Confirm',
+                    color: 'emerald', icon: CheckCircle2
+                };
+            case 'Revision':
+                return {
+                    title: 'Request Revision',
+                    message: 'Are you sure you want to request a REVISION for this submission?',
+                    itemTitle: item?.title,
+                    warning: 'The student will be notified to revise their submission.',
+                    confirmLabel: 'Yes, Request Revision',
+                    color: 'purple', icon: RefreshCw
+                };
+            case 'Rejected':
+                return {
+                    title: 'Reject Submission',
+                    message: 'Are you sure you want to REJECT this submission?',
+                    itemTitle: item?.title,
+                    warning: '⚠️ This action cannot be undone.',
+                    confirmLabel: 'Yes, Reject',
+                    color: 'rose', icon: XCircle
+                };
+            case 'for_schedule':
+                return {
+                    title: 'Set For Schedule',
+                    message: 'Are you sure you want to mark this submission as FOR SCHEDULE?',
+                    itemTitle: item?.title,
+                    warning: 'This will move the submission to the scheduling stage.',
+                    confirmLabel: 'Yes, Set For Schedule',
+                    color: 'cyan', icon: CalendarDays
+                };
+            default:
+                return {
+                    title: 'Confirm Action',
+                    message: `Are you sure you want to set this submission to "${newStatus}"?`,
+                    itemTitle: item?.title,
+                    confirmLabel: 'Confirm',
+                    color: 'emerald', icon: CheckCircle2
+                };
+        }
+    };
+
+    const handleStatusChange = (id, newStatus) => {
         try {
             const item = currentRows.find(r => String(r._id) === String(id));
             if (!item) {
@@ -320,41 +433,79 @@ export default function ProposedTitle() {
 
             const userIsAdviser = isUserAdviser(item);
             const userIsCoAdviser = isUserCoAdviser(item);
+            const isPrivileged = ['admin', 'organizer'].includes(normalizedRole);
 
-            const isPrivileged = ['admin', 'organizer'].includes(role);
-            if (!userIsAdviser && !userIsCoAdviser && !isPrivileged) {
-                showNotification('❌ You are not allowed to act on this submission', true);
-                return;
+            if (newStatus === 'for_schedule') {
+                // ⭐ Simple: adviser role lang + status Approved
+                if (normalizedRole !== 'adviser') {
+                    showNotification('❌ Only the Adviser can set this to For Schedule', true);
+                    return;
+                }
+                if (item.status !== 'Approved') {
+                    showNotification('⚠️ Submission must be in Approved status first', true);
+                    return;
+                }
+            } else {
+                if (!userIsAdviser && !userIsCoAdviser && !isPrivileged) {
+                    showNotification('❌ You are not allowed to act on this submission', true);
+                    return;
+                }
+
+                if (userIsAdviser && item.adviser === true) {
+                    showNotification('⚠️ You have already confirmed this submission', true);
+                    return;
+                }
+                if (userIsCoAdviser && item.coAdviser === true) {
+                    showNotification('⚠️ You have already confirmed this submission', true);
+                    return;
+                }
             }
 
-            if (userIsAdviser && item.adviser === true) {
-                showNotification('⚠️ You have already approved this submission', true);
-                return;
-            }
-            if (userIsCoAdviser && item.coAdviser === true) {
-                showNotification('⚠️ You have already approved this submission', true);
-                return;
-            }
+            setConfirmModal({
+                isOpen: true,
+                config: buildConfirmConfig(newStatus, item),
+                onConfirm: () => executeStatusChange(id, newStatus),
+                itemId: id, newStatus
+            });
+        } catch (error) {
+            showNotification(`❌ Failed: ${error.message}`, true);
+        }
+    };
 
+    const executeStatusChange = async (id, newStatus) => {
+        setIsProcessing(true);
+        try {
             const result = await UpdateProposedTitle(id, { status: newStatus });
             if (result.success) {
-                showNotification(`✅ Submission ${newStatus} successfully!`);
+                const displayLabel =
+                    newStatus === 'Approved' ? 'Confirmed' :
+                    newStatus === 'for_schedule' ? 'For Schedule' :
+                    newStatus;
+                showNotification(`✅ Submission ${displayLabel} successfully!`);
                 FetchProposedTitles(contextCurrentPage, rowsPerPage, search, dateFrom, dateTo, statusFilter, groupIdFilter);
             } else {
                 showNotification(`❌ Failed to update status: ${result.error || 'Unknown error'}`, true);
             }
         } catch (error) {
             showNotification(`❌ Failed to update status: ${error.message}`, true);
+        } finally {
+            setIsProcessing(false);
+            setConfirmModal({ isOpen: false, config: null, onConfirm: null, itemId: null, newStatus: null });
         }
     };
 
-    // ============================================================
-    // ⭐ READY FOR DEFENSE HANDLER — subject_instructor / admin / organizer ONLY
-    // ============================================================
+    const handleCancelConfirm = () => {
+        if (isProcessing) return;
+        setConfirmModal({ isOpen: false, config: null, onConfirm: null, itemId: null, newStatus: null });
+    };
+
+    const handleConfirmModal = () => {
+        if (confirmModal.onConfirm) confirmModal.onConfirm();
+    };
+
     const handleReadyForDefense = async (id) => {
-        // ⭐ Adviser, Co-Adviser, Student: bawal
         const allowedRoles = ['subject_instructor', 'admin', 'organizer'];
-        if (!allowedRoles.includes(role)) {
+        if (!allowedRoles.includes(normalizedRole)) {
             showNotification('❌ You are not allowed to mark this as Ready for Defense', true);
             return;
         }
@@ -369,7 +520,7 @@ export default function ProposedTitle() {
             }
 
             if (!(item.adviser === true && item.coAdviser === true)) {
-                showNotification('⚠️ Both Adviser and Co-Adviser must approve first', true);
+                showNotification('⚠️ Both Adviser and Co-Adviser must confirm first', true);
                 return;
             }
 
@@ -390,9 +541,6 @@ export default function ProposedTitle() {
         setTimeout(() => setToastMessage(null), 3000);
     };
 
-    // ============================
-    // POPUP MODAL HANDLERS
-    // ============================
     const handleOpenModal = (item) => setModalItem(item);
     const handleCloseModal = () => setModalItem(null);
 
@@ -410,23 +558,11 @@ export default function ProposedTitle() {
         setActiveTrackingId(trackingId);
 
         if (trackingId) {
-            const trackingComments =
-                (item.commentsByTracking && item.commentsByTracking[trackingId]) ||
-                (Array.isArray(item.titleUrlTracking)
-                    ? item.titleUrlTracking.find(t => t._id === trackingId)?.comments
-                    : null) ||
-                [];
-            setLocalComments(
-                [...trackingComments].sort(
-                    (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
-                )
-            );
+            const trackingComments = (item.commentsByTracking && item.commentsByTracking[trackingId]) ||
+                (Array.isArray(item.titleUrlTracking) ? item.titleUrlTracking.find(t => t._id === trackingId)?.comments : null) || [];
+            setLocalComments([...trackingComments].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)));
         } else if (item.comments) {
-            setLocalComments(
-                [...item.comments].sort(
-                    (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
-                )
-            );
+            setLocalComments([...item.comments].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)));
         } else {
             setLocalComments([]);
         }
@@ -483,9 +619,6 @@ export default function ProposedTitle() {
         }
     };
 
-    // ============================
-    // COMMENT FUNCTIONS
-    // ============================
     const handleAddComment = async () => {
         if (!commentText.trim()) {
             showNotification('Please enter a comment', true);
@@ -505,20 +638,14 @@ export default function ProposedTitle() {
         setIsSubmittingComment(true);
         try {
             const result = await CreateComment(targetId, commentText);
-
             if (result?.success === true) {
                 setCommentText('');
                 const newComment = result.data || result.comment;
-                if (newComment) {
-                    setLocalComments(prev => [...prev, newComment]);
-                }
+                if (newComment) setLocalComments(prev => [...prev, newComment]);
                 showNotification('Comment added successfully!');
                 FetchProposedTitles();
             } else {
-                showNotification(
-                    `Failed to add comment: ${result?.error || 'Unknown error'}`,
-                    true
-                );
+                showNotification(`Failed to add comment: ${result?.error || 'Unknown error'}`, true);
             }
         } catch (error) {
             console.error('Error adding comment:', error);
@@ -532,10 +659,7 @@ export default function ProposedTitle() {
         if (!window.confirm('Are you sure you want to delete this comment?')) return;
 
         try {
-            const response = await fetch(`/api/comments/${commentId}`, {
-                method: 'DELETE',
-            });
-
+            const response = await fetch(`/api/comments/${commentId}`, { method: 'DELETE' });
             if (response.ok) {
                 setLocalComments(prev => prev.filter(c => c._id !== commentId));
                 setViewSubmission(prev => ({
@@ -580,7 +704,7 @@ export default function ProposedTitle() {
     const endItem = Math.min(contextCurrentPage * rowsPerPage, totalCount);
 
     // ============================================================
-    // ⭐ GET AVAILABLE ACTIONS
+    // GET AVAILABLE ACTIONS
     // ============================================================
     const getAvailableActions = (item) => {
         const { status, adviser, coAdviser } = item;
@@ -590,118 +714,129 @@ export default function ProposedTitle() {
 
         const bothApproved = adviser === true && coAdviser === true;
         const isReady = status === 'Ready for Defense';
-        const fullyApproved = status === 'Approved' && bothApproved;
+        const isForSchedule = status === 'for_schedule';
+        const isApprovedStatus = status === 'Approved';
+        const fullyApproved = isApprovedStatus && bothApproved;
+        const isRejected = status === 'Rejected';
 
-        // ⭐ Sino ang pwedeng mag-mark ng Ready for Defense?
-        // subject_instructor, admin, organizer — HINDI adviser/coadviser
         const canMarkReadyForDefense =
-            ['subject_instructor', 'admin', 'organizer'].includes(role);
+            ['subject_instructor', 'admin', 'organizer'].includes(normalizedRole);
 
-        // ─── STUDENT: read-only lahat ───
-        if (role === 'student') {
+        if (normalizedRole === 'student') {
             return {
-                showApprove: false,
-                showReject: false,
-                showRevision: false,
-                showReadyForDefense: false,
-                isFullyApproved: fullyApproved,
-                isReadyForDefense: isReady,
-                canAct: false,
+                showApprove: false, showReject: false, showRevision: false,
+                showReadyForDefense: false, showForSchedule: false,
+                isFullyApproved: fullyApproved, isReadyForDefense: isReady,
+                isForSchedule, canAct: false, alreadyApproved: false
+            };
+        }
+
+        if (normalizedRole === 'subject_instructor') {
+            return {
+                showApprove: false, showReject: false, showRevision: false,
+                showReadyForDefense: canMarkReadyForDefense && (fullyApproved || isForSchedule) && !isReady,
+                showForSchedule: false,
+                isFullyApproved: fullyApproved, isReadyForDefense: isReady,
+                isForSchedule,
+                canAct: canMarkReadyForDefense && (fullyApproved || isForSchedule) && !isReady,
                 alreadyApproved: false
             };
         }
 
-        // ─── SUBJECT INSTRUCTOR: Ready for Defense lang ───
-        if (role === 'subject_instructor') {
-            return {
-                showApprove: false,
-                showReject: false,
-                showRevision: false,
-                showReadyForDefense: canMarkReadyForDefense && fullyApproved && !isReady,
-                isFullyApproved: fullyApproved,
-                isReadyForDefense: isReady,
-                canAct: canMarkReadyForDefense && fullyApproved,
-                alreadyApproved: false
-            };
-        }
-
-        // ─── Ready for Defense na ───
         if (isReady) {
             return {
                 showApprove: false, showReject: false, showRevision: false,
-                showReadyForDefense: false,
-                isFullyApproved: true,
-                isReadyForDefense: true,
-                canAct: false, alreadyApproved: false
+                showReadyForDefense: false, showForSchedule: false,
+                isFullyApproved: true, isReadyForDefense: true,
+                isForSchedule: false, canAct: false, alreadyApproved: false
             };
         }
 
-        // ─── Fully approved both → Ready for Defense (subject_instructor/admin/organizer lang) ───
+        if (isForSchedule) {
+            return {
+                showApprove: false, showReject: false, showRevision: false,
+                showReadyForDefense: canMarkReadyForDefense,
+                showForSchedule: false,
+                isFullyApproved: true, isReadyForDefense: false,
+                isForSchedule: true,
+                canAct: canMarkReadyForDefense, alreadyApproved: false
+            };
+        }
+
+        if (isRejected) {
+            return {
+                showApprove: false, showReject: false, showRevision: false,
+                showReadyForDefense: false, showForSchedule: false,
+                isFullyApproved: false, isReadyForDefense: false,
+                isForSchedule: false, canAct: false, alreadyApproved: false
+            };
+        }
+
+        // ⭐ FULLY APPROVED
         if (fullyApproved) {
             return {
                 showApprove: false, showReject: false, showRevision: false,
-                showReadyForDefense: canMarkReadyForDefense, // adviser/coadviser = false ✅
-                isFullyApproved: true,
-                isReadyForDefense: false,
-                canAct: canMarkReadyForDefense,
+                showReadyForDefense: canMarkReadyForDefense && !userIsAdviser,
+                showForSchedule: normalizedRole === 'adviser', // ⭐ SIMPLE: role lang
+                isFullyApproved: true, isReadyForDefense: false,
+                isForSchedule: false,
+                canAct: canMarkReadyForDefense || normalizedRole === 'adviser',
                 alreadyApproved: false
             };
         }
 
-        // ─── ADVISER ───
         if (userIsAdviser) {
             if (adviser === true) {
                 return {
                     showApprove: false, showReject: false, showRevision: false,
-                    showReadyForDefense: false,
+                    showReadyForDefense: false, showForSchedule: false,
                     isFullyApproved: false, isReadyForDefense: false,
-                    canAct: false, alreadyApproved: true
+                    isForSchedule: false, canAct: false, alreadyApproved: true
                 };
             }
             return {
                 showApprove: true, showReject: true, showRevision: true,
-                showReadyForDefense: false,
+                showReadyForDefense: false, showForSchedule: false,
                 isFullyApproved: false, isReadyForDefense: false,
-                canAct: true, alreadyApproved: false
+                isForSchedule: false, canAct: true, alreadyApproved: false
             };
         }
 
-        // ─── CO-ADVISER ───
         if (userIsCoAdviser) {
             if (coAdviser === true) {
                 return {
                     showApprove: false, showReject: false, showRevision: false,
-                    showReadyForDefense: false,
+                    showReadyForDefense: false, showForSchedule: false,
                     isFullyApproved: false, isReadyForDefense: false,
-                    canAct: false, alreadyApproved: true
+                    isForSchedule: false, canAct: false, alreadyApproved: true
                 };
             }
             return {
                 showApprove: true, showReject: true, showRevision: true,
-                showReadyForDefense: false,
+                showReadyForDefense: false, showForSchedule: false,
                 isFullyApproved: false, isReadyForDefense: false,
-                canAct: true, alreadyApproved: false
+                isForSchedule: false, canAct: true, alreadyApproved: false
             };
         }
 
-        // ─── Iba (admin, organizer) ───
-        if (status === 'Approved' && !bothApproved) {
+        if (isApprovedStatus && !bothApproved) {
             return {
                 showApprove: false, showReject: true, showRevision: true,
-                showReadyForDefense: false,
+                showReadyForDefense: false, showForSchedule: false,
                 isFullyApproved: false, isReadyForDefense: false,
-                canAct: true, alreadyApproved: false
+                isForSchedule: false, canAct: true, alreadyApproved: false
             };
         }
 
         return {
-            showApprove: status !== 'Approved' && status !== 'Rejected' && status !== 'Revision' && status !== 'Ready for Defense',
-            showReject: status !== 'Rejected' && status !== 'Approved' && status !== 'Ready for Defense',
-            showRevision: status !== 'Revision' && status !== 'Approved' && status !== 'Ready for Defense',
-            showReadyForDefense: canMarkReadyForDefense,
-            isFullyApproved: false,
-            isReadyForDefense: false,
-            canAct: true,
+            showApprove: status !== 'Approved' && status !== 'Rejected' && status !== 'Revision' && status !== 'Ready for Defense' && status !== 'for_schedule',
+            showReject: status !== 'Rejected' && status !== 'Approved' && status !== 'Ready for Defense' && status !== 'for_schedule',
+            showRevision: status !== 'Revision' && status !== 'Approved' && status !== 'Ready for Defense' && status !== 'for_schedule',
+            showReadyForDefense: canMarkReadyForDefense && status !== 'Ready for Defense' && status !== 'Rejected' && status !== 'Revision' && status !== 'for_schedule',
+            showForSchedule: false,
+            isFullyApproved: false, isReadyForDefense: false,
+            isForSchedule: false,
+            canAct: status !== 'Ready for Defense' && status !== 'Rejected' && status !== 'for_schedule',
             alreadyApproved: false
         };
     };
@@ -723,13 +858,18 @@ export default function ProposedTitle() {
                         </div>
                     )}
 
+                    <ConfirmModal
+                        isOpen={confirmModal.isOpen}
+                        config={confirmModal.config}
+                        onConfirm={handleConfirmModal}
+                        onCancel={handleCancelConfirm}
+                        isLoading={isProcessing}
+                    />
+
                     <div className="bg-white dark:bg-gray-800 border-b border-slate-200 dark:border-gray-700 shadow-sm p-4 flex-shrink-0">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
-                                <button
-                                    onClick={handleBackToList}
-                                    className="flex items-center gap-2 px-3 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700 rounded-lg transition"
-                                >
+                                <button onClick={handleBackToList} className="flex items-center gap-2 px-3 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700 rounded-lg transition">
                                     <ArrowLeft className="w-5 h-5" />
                                     <span className="text-sm font-medium hidden sm:inline">Back to List</span>
                                 </button>
@@ -742,17 +882,10 @@ export default function ProposedTitle() {
                                 </div>
                             </div>
                             <div className="flex items-center gap-2 flex-wrap">
-                                <button
-                                    onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                                    className="px-3 py-1.5 text-sm bg-slate-100 dark:bg-gray-700 hover:bg-slate-200 dark:hover:bg-gray-600 rounded-lg transition flex items-center gap-1"
-                                >
+                                <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="px-3 py-1.5 text-sm bg-slate-100 dark:bg-gray-700 hover:bg-slate-200 dark:hover:bg-gray-600 rounded-lg transition flex items-center gap-1">
                                     <MessageSquare className="w-4 h-4" />
                                     <span className="hidden sm:inline">{isSidebarOpen ? 'Hide' : 'Show'} Comments</span>
-                                    {commentCount > 0 && (
-                                        <span className="ml-1 px-1.5 py-0.5 bg-blue-500 text-white text-[10px] rounded-full">
-                                            {commentCount}
-                                        </span>
-                                    )}
+                                    {commentCount > 0 && (<span className="ml-1 px-1.5 py-0.5 bg-blue-500 text-white text-[10px] rounded-full">{commentCount}</span>)}
                                 </button>
                                 <span className={`px-3 py-1.5 rounded-full text-xs font-semibold ${getStatusBadgeClass(getActualDisplayStatus(viewSubmission))}`}>
                                     {getStatusIconComponent(getActualDisplayStatus(viewSubmission))}
@@ -763,19 +896,10 @@ export default function ProposedTitle() {
                                 </div>
                                 {viewSubmission.fileUrl && (
                                     <>
-                                        <a
-                                            href={viewSubmission.fileUrl}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg transition flex items-center gap-1"
-                                        >
+                                        <a href={viewSubmission.fileUrl} target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg transition flex items-center gap-1">
                                             <Download className="w-4 h-4" /> Open
                                         </a>
-                                        <a
-                                            href={viewSubmission.fileUrl}
-                                            download
-                                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition flex items-center gap-1"
-                                        >
+                                        <a href={viewSubmission.fileUrl} download className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition flex items-center gap-1">
                                             <Download className="w-4 h-4" /> Download
                                         </a>
                                     </>
@@ -791,30 +915,15 @@ export default function ProposedTitle() {
                                     <div className="flex flex-col items-center justify-center h-[600px]">
                                         <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
                                         <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">Loading PDF...</p>
-                                        <button
-                                            onClick={() => {
-                                                if (viewSubmission?.fileUrl) {
-                                                    window.open(viewSubmission.fileUrl, '_blank');
-                                                }
-                                            }}
-                                            className="mt-4 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm flex items-center gap-2"
-                                        >
-                                            <Download className="w-4 h-4" />
-                                            Open in New Tab
+                                        <button onClick={() => { if (viewSubmission?.fileUrl) window.open(viewSubmission.fileUrl, '_blank'); }} className="mt-4 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm flex items-center gap-2">
+                                            <Download className="w-4 h-4" /> Open in New Tab
                                         </button>
                                     </div>
                                 ) : pdfError && useIframe ? (
                                     <div className="flex flex-col h-full">
-                                        <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-2 rounded-lg mb-4 text-sm">
-                                            <strong>Note:</strong> Using alternative viewer. {pdfError}
-                                        </div>
+                                        <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-2 rounded-lg mb-4 text-sm"><strong>Note:</strong> Using alternative viewer. {pdfError}</div>
                                         <div className="flex-1 bg-white rounded-lg shadow-lg overflow-hidden" style={{ minHeight: '600px' }}>
-                                            <iframe
-                                                src={viewSubmission.fileUrl}
-                                                className="w-full h-full"
-                                                title="PDF Viewer Fallback"
-                                                style={{ border: 'none', minHeight: '600px' }}
-                                            />
+                                            <iframe src={viewSubmission.fileUrl} className="w-full h-full" title="PDF Viewer Fallback" style={{ border: 'none', minHeight: '600px' }} />
                                         </div>
                                     </div>
                                 ) : pdfError ? (
@@ -822,90 +931,36 @@ export default function ProposedTitle() {
                                         <XCircle className="w-12 h-12 text-red-500" />
                                         <p className="mt-4 text-sm text-red-500">{pdfError}</p>
                                         <div className="flex gap-3 mt-4">
-                                            <button onClick={() => handleOpenPdfViewer(viewSubmission)} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm">
-                                                Retry
-                                            </button>
-                                            <a
-                                                href={viewSubmission.fileUrl}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm flex items-center gap-2"
-                                            >
-                                                <Download className="w-4 h-4" />
-                                                Open Directly
+                                            <button onClick={() => handleOpenPdfViewer(viewSubmission)} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm">Retry</button>
+                                            <a href={viewSubmission.fileUrl} target="_blank" rel="noopener noreferrer" className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm flex items-center gap-2">
+                                                <Download className="w-4 h-4" /> Open Directly
                                             </a>
                                         </div>
                                     </div>
                                 ) : pdfBlobUrl ? (
                                     <div className="flex flex-col items-center">
-                                        <Document
-                                            file={pdfBlobUrl}
-                                            onLoadSuccess={onDocumentLoadSuccess}
-                                            onLoadError={onDocumentLoadError}
-                                            loading={
-                                                <div className="flex items-center justify-center h-[600px]">
-                                                    <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
-                                                    <p className="mt-4 text-sm text-slate-500">Rendering PDF...</p>
-                                                </div>
-                                            }
+                                        <Document file={pdfBlobUrl} onLoadSuccess={onDocumentLoadSuccess} onLoadError={onDocumentLoadError}
+                                            loading={<div className="flex items-center justify-center h-[600px]"><Loader2 className="w-12 h-12 text-blue-500 animate-spin" /><p className="mt-4 text-sm text-slate-500">Rendering PDF...</p></div>}
                                             error={
                                                 <div className="flex flex-col items-center justify-center h-[600px]">
                                                     <XCircle className="w-12 h-12 text-red-500" />
                                                     <p className="mt-4 text-sm text-red-500">Failed to render PDF</p>
-                                                    <button
-                                                        onClick={() => {
-                                                            setUseIframe(true);
-                                                            setPdfError('Switching to alternative viewer...');
-                                                        }}
-                                                        className="mt-3 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm"
-                                                    >
-                                                        Try Alternative Viewer
-                                                    </button>
+                                                    <button onClick={() => { setUseIframe(true); setPdfError('Switching to alternative viewer...'); }} className="mt-3 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm">Try Alternative Viewer</button>
                                                 </div>
                                             }
                                         >
-                                            <Page
-                                                pageNumber={pageNumber}
-                                                scale={scale}
-                                                renderTextLayer={false}
-                                                renderAnnotationLayer={false}
-                                                className="shadow-lg rounded-lg"
-                                            />
+                                            <Page pageNumber={pageNumber} scale={scale} renderTextLayer={false} renderAnnotationLayer={false} className="shadow-lg rounded-lg" />
                                         </Document>
 
                                         {numPages > 1 && (
                                             <div className="flex items-center gap-4 mt-4 p-2 bg-white dark:bg-gray-900 rounded-lg shadow">
-                                                <button
-                                                    onClick={() => setPageNumber(prev => Math.max(prev - 1, 1))}
-                                                    disabled={pageNumber <= 1}
-                                                    className="px-3 py-1 text-sm bg-slate-100 dark:bg-gray-700 rounded hover:bg-slate-200 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                >
-                                                    Previous
-                                                </button>
-                                                <span className="text-sm">
-                                                    Page {pageNumber} of {numPages}
-                                                </span>
-                                                <button
-                                                    onClick={() => setPageNumber(prev => Math.min(prev + 1, numPages))}
-                                                    disabled={pageNumber >= numPages}
-                                                    className="px-3 py-1 text-sm bg-slate-100 dark:bg-gray-700 rounded hover:bg-slate-200 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                >
-                                                    Next
-                                                </button>
+                                                <button onClick={() => setPageNumber(prev => Math.max(prev - 1, 1))} disabled={pageNumber <= 1} className="px-3 py-1 text-sm bg-slate-100 dark:bg-gray-700 rounded hover:bg-slate-200 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed">Previous</button>
+                                                <span className="text-sm">Page {pageNumber} of {numPages}</span>
+                                                <button onClick={() => setPageNumber(prev => Math.min(prev + 1, numPages))} disabled={pageNumber >= numPages} className="px-3 py-1 text-sm bg-slate-100 dark:bg-gray-700 rounded hover:bg-slate-200 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed">Next</button>
                                                 <div className="flex items-center gap-2 ml-4">
-                                                    <button
-                                                        onClick={() => setScale(prev => Math.max(prev - 0.1, 0.5))}
-                                                        className="px-2 py-1 text-sm bg-slate-100 dark:bg-gray-700 rounded hover:bg-slate-200 dark:hover:bg-gray-600"
-                                                    >
-                                                        -
-                                                    </button>
+                                                    <button onClick={() => setScale(prev => Math.max(prev - 0.1, 0.5))} className="px-2 py-1 text-sm bg-slate-100 dark:bg-gray-700 rounded hover:bg-slate-200 dark:hover:bg-gray-600">-</button>
                                                     <span className="text-sm">{Math.round(scale * 100)}%</span>
-                                                    <button
-                                                        onClick={() => setScale(prev => Math.min(prev + 0.1, 2))}
-                                                        className="px-2 py-1 text-sm bg-slate-100 dark:bg-gray-700 rounded hover:bg-slate-200 dark:hover:bg-gray-600"
-                                                    >
-                                                        +
-                                                    </button>
+                                                    <button onClick={() => setScale(prev => Math.min(prev + 0.1, 2))} className="px-2 py-1 text-sm bg-slate-100 dark:bg-gray-700 rounded hover:bg-slate-200 dark:hover:bg-gray-600">+</button>
                                                 </div>
                                             </div>
                                         )}
@@ -914,16 +969,7 @@ export default function ProposedTitle() {
                                     <div className="flex flex-col items-center justify-center h-[600px]">
                                         <FileText className="w-16 h-16 text-slate-300 dark:text-slate-600" />
                                         <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">No document loaded</p>
-                                        <button
-                                            onClick={() => {
-                                                if (viewSubmission?.fileUrl) {
-                                                    window.open(viewSubmission.fileUrl, '_blank');
-                                                }
-                                            }}
-                                            className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm"
-                                        >
-                                            Open Document
-                                        </button>
+                                        <button onClick={() => { if (viewSubmission?.fileUrl) window.open(viewSubmission.fileUrl, '_blank'); }} className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm">Open Document</button>
                                     </div>
                                 )}
                             </div>
@@ -962,6 +1008,14 @@ export default function ProposedTitle() {
                     </div>
                 )}
 
+                <ConfirmModal
+                    isOpen={confirmModal.isOpen}
+                    config={confirmModal.config}
+                    onConfirm={handleConfirmModal}
+                    onCancel={handleCancelConfirm}
+                    isLoading={isProcessing}
+                />
+
                 <DetailsModal
                     item={modalItem}
                     onClose={handleCloseModal}
@@ -975,25 +1029,21 @@ export default function ProposedTitle() {
                 />
 
                 {customError && (
-                    <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">
-                        {customError}
-                    </div>
+                    <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">{customError}</div>
                 )}
 
                 <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm">
                     <div className="flex items-center gap-3">
-                        <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl">
-                            <FileText className="w-6 h-6" />
-                        </div>
+                        <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl"><FileText className="w-6 h-6" /></div>
                         <div>
                             <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Submissions Management</h1>
                             <p className="text-xs text-slate-500 mt-0.5">
                                 View and manage student title applications and documents
                                 {totalCount > 0 && <span className="ml-2 text-blue-600 font-medium">({totalCount} total submissions)</span>}
-                                {role === 'adviser' && <span className="ml-2 text-emerald-600 font-medium">● Adviser View</span>}
-                                {role === 'coadviser' && <span className="ml-2 text-indigo-600 font-medium">● Co-Adviser View</span>}
-                                {role === 'subject_instructor' && <span className="ml-2 text-slate-600 font-medium">● Subject Instructor View</span>}
-                                {role === 'student' && <span className="ml-2 text-slate-600 font-medium">● Student View (Read-only)</span>}
+                                {normalizedRole === 'adviser' && <span className="ml-2 text-emerald-600 font-medium">● Adviser View</span>}
+                                {normalizedRole === 'coadviser' && <span className="ml-2 text-indigo-600 font-medium">● Co-Adviser View</span>}
+                                {normalizedRole === 'subject_instructor' && <span className="ml-2 text-slate-600 font-medium">● Subject Instructor View</span>}
+                                {normalizedRole === 'student' && <span className="ml-2 text-slate-600 font-medium">● Student View (Read-only)</span>}
                             </p>
                         </div>
                     </div>
@@ -1006,23 +1056,14 @@ export default function ProposedTitle() {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                         <div className="relative md:col-span-1">
                             <Search className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
-                            <input
-                                type="text"
-                                placeholder="Search title, uploader, group..."
-                                value={localSearchTerm}
-                                onChange={(e) => setLocalSearchTerm(e.target.value)}
-                                className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition"
-                            />
+                            <input type="text" placeholder="Search title, uploader, group..." value={localSearchTerm} onChange={(e) => setLocalSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition" />
                         </div>
                         <div>
-                            <select
-                                value={localStatusFilter}
-                                onChange={(e) => setLocalStatusFilter(e.target.value)}
-                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 outline-none focus:ring-2 focus:ring-blue-500"
-                            >
+                            <select value={localStatusFilter} onChange={(e) => setLocalStatusFilter(e.target.value)} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 outline-none focus:ring-2 focus:ring-blue-500">
                                 <option value="All">All Status</option>
                                 <option value="Pending">Pending</option>
-                                <option value="Approved">Approved</option>
+                                <option value="Approved">Confirmed</option>
+                                <option value="for_schedule">For Schedule</option>
                                 <option value="Rejected">Rejected</option>
                                 <option value="Revision">Revision</option>
                                 <option value="Ready for Defense">Ready for Defense</option>
@@ -1030,24 +1071,13 @@ export default function ProposedTitle() {
                         </div>
                         <div className="flex items-center gap-3 justify-end">
                             <div className="flex items-center gap-2 text-xs flex-wrap">
-                                <span className="flex items-center gap-1 px-2 py-1 bg-amber-50 text-amber-700 rounded-lg">
-                                    <Clock className="w-3 h-3" /> {currentRows.filter(s => s.status === 'Pending').length} Pending
-                                </span>
-                                <span className="flex items-center gap-1 px-2 py-1 bg-emerald-50 text-emerald-700 rounded-lg">
-                                    <CheckCircle2 className="w-3 h-3" /> {currentRows.filter(s => s.status === 'Approved' && s.adviser === true && s.coAdviser === true).length} Approved
-                                </span>
-                                <span className="flex items-center gap-1 px-2 py-1 bg-teal-50 text-teal-700 rounded-lg">
-                                    <Shield className="w-3 h-3" /> {currentRows.filter(s => s.status === 'Ready for Defense').length} Ready
-                                </span>
-                                <span className="flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 rounded-lg">
-                                    <User className="w-3 h-3" /> {currentRows.filter(s => s.status === 'Approved' && !(s.adviser === true && s.coAdviser === true)).length} Waiting
-                                </span>
-                                <span className="flex items-center gap-1 px-2 py-1 bg-rose-50 text-rose-700 rounded-lg">
-                                    <XCircle className="w-3 h-3" /> {currentRows.filter(s => s.status === 'Rejected').length} Rejected
-                                </span>
-                                <span className="flex items-center gap-1 px-2 py-1 bg-purple-50 text-purple-700 rounded-lg">
-                                    <RefreshCw className="w-3 h-3" /> {currentRows.filter(s => s.status === 'Revision').length} Revision
-                                </span>
+                                <span className="flex items-center gap-1 px-2 py-1 bg-amber-50 text-amber-700 rounded-lg"><Clock className="w-3 h-3" /> {currentRows.filter(s => s.status === 'Pending').length} Pending</span>
+                                <span className="flex items-center gap-1 px-2 py-1 bg-emerald-50 text-emerald-700 rounded-lg"><CheckCircle2 className="w-3 h-3" /> {currentRows.filter(s => s.status === 'Approved' && s.adviser === true && s.coAdviser === true).length} Confirmed</span>
+                                <span className="flex items-center gap-1 px-2 py-1 bg-cyan-50 text-cyan-700 rounded-lg"><CalendarDays className="w-3 h-3" /> {currentRows.filter(s => s.status === 'for_schedule').length} For Schedule</span>
+                                <span className="flex items-center gap-1 px-2 py-1 bg-teal-50 text-teal-700 rounded-lg"><Shield className="w-3 h-3" /> {currentRows.filter(s => s.status === 'Ready for Defense').length} Ready</span>
+                                <span className="flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 rounded-lg"><User className="w-3 h-3" /> {currentRows.filter(s => s.status === 'Approved' && !(s.adviser === true && s.coAdviser === true)).length} Waiting</span>
+                                <span className="flex items-center gap-1 px-2 py-1 bg-rose-50 text-rose-700 rounded-lg"><XCircle className="w-3 h-3" /> {currentRows.filter(s => s.status === 'Rejected').length} Rejected</span>
+                                <span className="flex items-center gap-1 px-2 py-1 bg-purple-50 text-purple-700 rounded-lg"><RefreshCw className="w-3 h-3" /> {currentRows.filter(s => s.status === 'Revision').length} Revision</span>
                             </div>
                         </div>
                     </div>
@@ -1083,13 +1113,10 @@ export default function ProposedTitle() {
                                                 const StatusIcon = getStatusIconComponent(displayStatus);
 
                                                 const {
-                                                    showApprove,
-                                                    showReject,
-                                                    showRevision,
+                                                    showApprove, showReject, showRevision,
                                                     showReadyForDefense,
-                                                    canAct,
-                                                    alreadyApproved,
-                                                    isReadyForDefense
+                                                    canAct, alreadyApproved,
+                                                    isReadyForDefense, isForSchedule
                                                 } = getAvailableActions(item);
 
                                                 const isFullyApprovedStatus =
@@ -1097,8 +1124,22 @@ export default function ProposedTitle() {
                                                     item.adviser === true &&
                                                     item.coAdviser === true;
 
+                                                const isRejectedStatus = item.status === 'Rejected';
+
+                                                const isDone =
+                                                    isReadyForDefense ||
+                                                    isForSchedule ||
+                                                    isRejectedStatus;
+
+                                                const canView = isFullyApprovedStatus || isReadyForDefense || isForSchedule;
+
                                                 const userIsAdviser = isUserAdviser(item);
                                                 const userIsCoAdviser = isUserCoAdviser(item);
+
+                                                // ⭐ SIMPLE: adviser + Approved status lang
+                                                const showForScheduleButton =
+                                                    normalizedRole === 'adviser' &&
+                                                    item.status === 'Approved';
 
                                                 return (
                                                     <tr key={item._id} className="hover:bg-slate-50/60 transition">
@@ -1145,10 +1186,10 @@ export default function ProposedTitle() {
                                                         <td className="py-3.5 px-4">
                                                             <div className="space-y-1">
                                                                 <div className={`flex items-center gap-1.5 text-xs font-medium ${item.adviser ? 'text-emerald-600' : 'text-amber-600'}`}>
-                                                                    <User className="w-3.5 h-3.5" /> Adviser: {item.adviser ? '✅ Approved' : '⏳ Pending'}
+                                                                    <User className="w-3.5 h-3.5" /> Adviser: {item.adviser ? '✅ Confirmed' : '⏳ Pending'}
                                                                 </div>
                                                                 <div className={`flex items-center gap-1.5 text-xs font-medium ${item.coAdviser ? 'text-emerald-600' : 'text-amber-600'}`}>
-                                                                    <UserCheck className="w-3.5 h-3.5" /> Co-Adviser: {item.coAdviser ? '✅ Approved' : '⏳ Pending'}
+                                                                    <UserCheck className="w-3.5 h-3.5" /> Co-Adviser: {item.coAdviser ? '✅ Confirmed' : '⏳ Pending'}
                                                                 </div>
                                                                 {userIsAdviser && <div className="text-[9px] text-emerald-600 font-medium">● You are the assigned Adviser</div>}
                                                                 {userIsCoAdviser && <div className="text-[9px] text-indigo-600 font-medium">● You are the assigned Co-Adviser</div>}
@@ -1165,23 +1206,30 @@ export default function ProposedTitle() {
                                                         <td className="py-3.5 px-4">
                                                             <div className="flex items-center justify-center gap-1.5 flex-wrap">
                                                                 <button
-                                                                    onClick={() => handleOpenModal(item)}
-                                                                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 rounded-lg transition"
+                                                                    onClick={() => canView && handleOpenModal(item)}
+                                                                    disabled={!canView}
+                                                                    title={canView ? 'View details' : 'Available only when Confirmed, For Schedule, or Ready for Defense'}
+                                                                    className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg transition ${
+                                                                        canView
+                                                                            ? 'text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 cursor-pointer'
+                                                                            : 'text-slate-400 bg-slate-100 cursor-not-allowed opacity-60'
+                                                                    }`}
                                                                 >
                                                                     <Eye className="w-3.5 h-3.5" /> View
                                                                 </button>
+
                                                                 {item.fileUrl && (
                                                                     <a href={item.fileUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-slate-600 hover:text-slate-800 bg-slate-50 hover:bg-slate-100 rounded-lg transition">
                                                                         <Download className="w-3.5 h-3.5" /> File
                                                                     </a>
                                                                 )}
 
-                                                                {/* ⭐ Approve / Reject / Revision — HINDI para sa subject_instructor at student */}
-                                                                {role !== 'subject_instructor' && role !== 'student' && (
+                                                                {/* Confirm / Reject / Revision */}
+                                                                {!isDone && !isFullyApprovedStatus && normalizedRole !== 'subject_instructor' && normalizedRole !== 'student' && (
                                                                     <>
                                                                         {showApprove && canAct && (
                                                                             <button onClick={() => handleStatusChange(item._id, 'Approved')} className="px-2.5 py-1 text-xs font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm transition">
-                                                                                <CheckCircle2 className="w-3.5 h-3.5 inline mr-1" /> Approve
+                                                                                <CheckCircle2 className="w-3.5 h-3.5 inline mr-1" /> Confirm
                                                                             </button>
                                                                         )}
                                                                         {showReject && canAct && (
@@ -1197,9 +1245,18 @@ export default function ProposedTitle() {
                                                                     </>
                                                                 )}
 
-                                                                {/* ⭐ Ready for Defense button — lalabas lang para sa subject_instructor, admin, organizer
-                                                                    (HINDI para sa adviser, coadviser, student) */}
-                                                                {showReadyForDefense && (
+                                                                {/* ⭐ FOR SCHEDULE — SIMPLE: role adviser + status Approved */}
+                                                                {showForScheduleButton && (
+                                                                    <button
+                                                                        onClick={() => handleStatusChange(item._id, 'for_schedule')}
+                                                                        className="px-2.5 py-1 text-xs font-medium text-white bg-cyan-600 hover:bg-cyan-700 rounded-lg shadow-sm transition inline-flex items-center gap-1"
+                                                                    >
+                                                                        <CalendarDays className="w-3.5 h-3.5" /> For Schedule
+                                                                    </button>
+                                                                )}
+
+                                                                {/* READY FOR DEFENSE */}
+                                                                {(isFullyApprovedStatus || isForSchedule) && showReadyForDefense && canAct && !userIsAdviser && (
                                                                     <button
                                                                         onClick={() => handleReadyForDefense(item._id)}
                                                                         className="px-2.5 py-1 text-xs font-medium text-white bg-teal-600 hover:bg-teal-700 rounded-lg shadow-sm transition inline-flex items-center gap-1"
@@ -1208,21 +1265,33 @@ export default function ProposedTitle() {
                                                                     </button>
                                                                 )}
 
+                                                                {isForSchedule && (
+                                                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-cyan-700 bg-cyan-50 rounded-lg">
+                                                                        <CalendarDays className="w-3.5 h-3.5" /> For Schedule
+                                                                    </span>
+                                                                )}
+
                                                                 {isReadyForDefense && (
                                                                     <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-teal-700 bg-teal-50 rounded-lg">
                                                                         <Shield className="w-3.5 h-3.5" /> Ready for Defense
                                                                     </span>
                                                                 )}
 
-                                                                {isFullyApprovedStatus && !isReadyForDefense && (
+                                                                {isFullyApprovedStatus && !isReadyForDefense && !isForSchedule && (
                                                                     <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-emerald-700 bg-emerald-50 rounded-lg">
-                                                                        <CheckCircle2 className="w-3.5 h-3.5" /> Completed
+                                                                        <CheckCircle2 className="w-3.5 h-3.5" /> Confirmed
                                                                     </span>
                                                                 )}
 
-                                                                {alreadyApproved && (
+                                                                {isRejectedStatus && (
+                                                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-rose-700 bg-rose-50 rounded-lg">
+                                                                        <XCircle className="w-3.5 h-3.5" /> Rejected
+                                                                    </span>
+                                                                )}
+
+                                                                {alreadyApproved && !isDone && !isFullyApprovedStatus && (
                                                                     <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-green-700 bg-green-50 rounded-lg">
-                                                                        <CheckCircle2 className="w-3.5 h-3.5" /> You Approved
+                                                                        <CheckCircle2 className="w-3.5 h-3.5" /> You Confirmed
                                                                     </span>
                                                                 )}
                                                             </div>

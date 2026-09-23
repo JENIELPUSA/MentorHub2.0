@@ -679,6 +679,9 @@ exports.UpdateProposedTitle = AsyncErrorHandler(async (req, res) => {
     const { status } = req.body;
     const userId = req.user._id;
 
+
+    console.log("status",status)
+
     // ==========================================
     // 1. HANAPIN ANG PROPOSED TITLE
     // ==========================================

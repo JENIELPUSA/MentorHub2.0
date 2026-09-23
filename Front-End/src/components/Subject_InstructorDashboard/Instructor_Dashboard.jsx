@@ -4,16 +4,17 @@ import {
   PieChart as PieChartIcon, Layers, UserCheck, Search, ExternalLink,
   Loader2, ChevronLeft, ChevronRight, X, BookMarked, UserCog,
   Check, XCircle, AlertCircle,
+  Eye, EyeOff,
 } from 'lucide-react';
 
 import { AuthContext } from '../../contexts/AuthContext';
 import { StatisticalContext } from '../../contexts/StatisticalContext/StatisticalContext';
 import Calendar from './calendar';
+import UploadDocuments from '../AdminDashboard/UploadDocuments';
 
 // ============================================================
 // CONSTANTS
 // ============================================================
-// ✅ Blue & Yellow only — alternating shades para sa group distribution
 const CHART_COLORS = [
   '#1E3A8A', // Blue 900 (dark)
   '#FBBF24', // Yellow 400
@@ -45,7 +46,7 @@ const getInitials = (name) =>
   name?.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) || 'NA';
 
 // ============================================================
-// ✅ DONUT CHART COMPONENT (pure SVG — walang external library)
+// DONUT CHART COMPONENT
 // ============================================================
 const DonutChart = ({ data = [], size = 180, innerRadius = 48 }) => {
   const total = data.reduce((sum, d) => sum + (d.value || 0), 0);
@@ -53,7 +54,7 @@ const DonutChart = ({ data = [], size = 180, innerRadius = 48 }) => {
 
   const radius = size / 2;
   const center = radius;
-  let cumulativeAngle = -Math.PI / 2; // start at 12 o'clock
+  let cumulativeAngle = -Math.PI / 2;
 
   const slices = data.map((d) => {
     const angle = (d.value / total) * Math.PI * 2;
@@ -107,7 +108,6 @@ const DonutChart = ({ data = [], size = 180, innerRadius = 48 }) => {
         ))}
       </svg>
 
-      {/* Center label */}
       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
         <span className="text-2xl font-extrabold text-blue-950">{total}</span>
         <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">
@@ -305,6 +305,7 @@ export default function Instructor_Dashboard() {
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [showUpload, setShowUpload] = useState(false);
 
   // ----- Derived data -----
   const adviserCards = Adviserdata?.cards || {};
@@ -496,15 +497,67 @@ export default function Instructor_Dashboard() {
           <StatCard label="No Revision" value={cards.withoutRemarks} sublabel="Clean sections" icon={Clock} iconColor="text-yellow-500" />
         </div>
 
+        {/* ---------- UPLOAD DOCUMENTS SECTION ---------- */}
+        <div className="bg-white rounded-2xl shadow-sm border border-blue-100 overflow-hidden">
+          {/* Header with Show/Hide button */}
+          <button
+            type="button"
+            onClick={() => setShowUpload((prev) => !prev)}
+            className="w-full flex items-center justify-between px-5 py-3 hover:bg-slate-50 transition-colors duration-200"
+          >
+            <div className="flex items-center gap-2">
+              <FileText className="w-4 h-4 text-blue-900" />
+              <span className="text-sm font-semibold text-blue-950">
+                Upload Documents
+              </span>
+              <span className="text-[10px] text-slate-400 font-normal hidden sm:inline">
+                • Manage proposal attachments
+              </span>
+            </div>
+
+            <span
+              className={`flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full border transition-all duration-300 ${
+                showUpload
+                  ? 'bg-blue-50 text-blue-900 border-blue-200 hover:bg-blue-100'
+                  : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+              }`}
+            >
+              {showUpload ? (
+                <>
+                  <EyeOff className="w-3 h-3" />
+                  Hide
+                </>
+              ) : (
+                <>
+                  <Eye className="w-3 h-3" />
+                  Show
+                </>
+              )}
+            </span>
+          </button>
+
+          {/* Collapsible body */}
+          <div
+            className={`transition-all duration-300 ease-in-out ${
+              showUpload
+                ? 'max-h-[2000px] opacity-100'
+                : 'max-h-0 opacity-0 overflow-hidden'
+            }`}
+          >
+            <div className="px-4 pb-4 pt-1 border-t border-slate-100">
+              <UploadDocuments isLoading={isLoading} />
+            </div>
+          </div>
+        </div>
+
         {/* ---------- ANALYTICS + CALENDAR ---------- */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* ✅ Group Distribution — PIE / DONUT CHART (Blue & Yellow only) */}
+          {/* Group Distribution — PIE / DONUT CHART */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-blue-50 flex flex-col">
             <h3 className="text-lg font-bold text-blue-950 flex items-center gap-2 mb-4">
               <PieChartIcon className="w-5 h-5 text-blue-900" /> Group Distribution
             </h3>
 
-            {/* Donut Chart SVG */}
             <div className="flex justify-center my-2">
               {(adviserGraphs.groupPieData || []).length > 0 ? (
                 <DonutChart
@@ -523,7 +576,6 @@ export default function Instructor_Dashboard() {
               )}
             </div>
 
-            {/* Legend */}
             <div className="mt-4 space-y-2 flex-1">
               {(adviserGraphs.groupPieData || []).map((group, idx) => {
                 const percentage =
@@ -554,7 +606,7 @@ export default function Instructor_Dashboard() {
             </div>
           </div>
 
-          {/* ✅ CALENDAR — single drop-in component */}
+          {/* CALENDAR */}
           <Calendar />
         </div>
 

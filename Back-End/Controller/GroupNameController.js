@@ -113,7 +113,6 @@ exports.DisplayGroups = AsyncErrorHandler(async (req, res) => {
     const skip = (page - 1) * limit;
 
     const { search, sectionId, mentorId } = req.query;
-    const userId = req.user._id;
 
     const matchStage = {};
 
@@ -431,7 +430,7 @@ exports.getgroupdetails = AsyncErrorHandler(async (req, res) => {
         },
         {
             $lookup: {
-                from: 'sections',            // Collection name sa MongoDB
+                from: 'sections',
                 localField: 'sectionId',
                 foreignField: '_id',
                 as: 'section'
@@ -440,16 +439,53 @@ exports.getgroupdetails = AsyncErrorHandler(async (req, res) => {
         { $unwind: { path: '$section', preserveNullAndEmptyArrays: true } },
         {
             $lookup: {
-                from: 'subjects',            // Collection name sa MongoDB
+                from: 'subjects',
                 localField: 'section.subjectId',
                 foreignField: '_id',
                 as: 'section.subject'
             }
         },
         { $unwind: { path: '$section.subject', preserveNullAndEmptyArrays: true } },
+
+        // ==========================================
+        // 🔗 LOOKUP FOR FORMAT (through subject.formatID)
+        // ==========================================
         {
             $lookup: {
-                from: 'userlogins',          // Collection name sa MongoDB
+                from: 'formats',
+                localField: 'section.subject.formatID',
+                foreignField: '_id',
+                as: 'section.subject.formatDetails'
+            }
+        },
+        {
+            $unwind: {
+                path: '$section.subject.formatDetails',
+                preserveNullAndEmptyArrays: true
+            }
+        },
+
+        // ==========================================
+        // 🔗 LOOKUP FOR FORMAT UPLOADER (optional)
+        // ==========================================
+        {
+            $lookup: {
+                from: 'userloginschemas',
+                localField: 'section.subject.formatDetails.uploadedBy',
+                foreignField: '_id',
+                as: 'section.subject.formatDetails.uploaderDetails'
+            }
+        },
+        {
+            $unwind: {
+                path: '$section.subject.formatDetails.uploaderDetails',
+                preserveNullAndEmptyArrays: true
+            }
+        },
+
+        {
+            $lookup: {
+                from: 'userlogins',
                 localField: 'members',
                 foreignField: '_id',
                 as: 'membersDetails'
@@ -476,7 +512,34 @@ exports.getgroupdetails = AsyncErrorHandler(async (req, res) => {
                 section: {
                     _id: '$section._id',
                     name: '$section.name',
-                    subject: '$section.subject'
+                    subject: {
+                        _id: '$section.subject._id',
+                        title: '$section.subject.title',
+                        createdBy: '$section.subject.createdBy',
+                        formatID: '$section.subject.formatID',
+                        createdAt: '$section.subject.createdAt',
+                        updatedAt: '$section.subject.updatedAt',
+                        // ==========================================
+                        // 🔗 FORMAT DETAILS (populated)
+                        // ==========================================
+                        formatDetails: {
+                            _id: '$section.subject.formatDetails._id',
+                            titleFormat: '$section.subject.formatDetails.titleFormat',
+                            description: '$section.subject.formatDetails.description',
+                            fileUrl: '$section.subject.formatDetails.fileUrl',
+                            type: '$section.subject.formatDetails.type',
+                            uploadedBy: {
+                                _id: '$section.subject.formatDetails.uploaderDetails._id',
+                                first_name: '$section.subject.formatDetails.uploaderDetails.first_name',
+                                last_name: '$section.subject.formatDetails.uploaderDetails.last_name',
+                                username: '$section.subject.formatDetails.uploaderDetails.username',
+                                email: '$section.subject.formatDetails.uploaderDetails.username',
+                                role: '$section.subject.formatDetails.uploaderDetails.role'
+                            },
+                            createdAt: '$section.subject.formatDetails.createdAt',
+                            updatedAt: '$section.subject.formatDetails.updatedAt'
+                        }
+                    }
                 },
                 members: {
                     $map: {
@@ -509,7 +572,6 @@ exports.getgroupdetails = AsyncErrorHandler(async (req, res) => {
     // 2. Hanapin ang LAHAT ng users na nag-register gamit ang referral code na ito
     const users = await UserLoginSchema.find({ referredBy: cleanReferralCode });
 
-    // Pwedeng suriin kung parehong walang nahanap na group at users
     if ((!groupResult || groupResult.length === 0) && (!users || users.length === 0)) {
         return res.status(404).json({
             status: "fail",
@@ -676,6 +738,8 @@ exports.updateGroup = AsyncErrorHandler(async (req, res) => {
         data: populatedResult[0] || group,
     });
 });
+
+
 
 
 
@@ -1328,6 +1392,58 @@ exports.getGroupByReferralCode = AsyncErrorHandler(async (req, res) => {
                 as: "approvedTitleDetails"
             }
         },
+
+        // ==========================================
+        // 🔗 LOOKUP FOR SUBJECT (through sectionDetails.subjectId)
+        // ==========================================
+        {
+            $lookup: {
+                from: "subjects",
+                localField: "sectionDetails.subjectId",   // ✅ SA SECTION
+                foreignField: "_id",
+                as: "subjectDetails"
+            }
+        },
+        {
+            $addFields: {
+                subjectDetails: { $arrayElemAt: ["$subjectDetails", 0] }
+            }
+        },
+
+        // ==========================================
+        // 🔗 LOOKUP FOR FORMAT (through subject.formatID)
+        // ==========================================
+        {
+            $lookup: {
+                from: "formats",
+                localField: "subjectDetails.formatID",
+                foreignField: "_id",
+                as: "formatDetails"
+            }
+        },
+        {
+            $addFields: {
+                formatDetails: { $arrayElemAt: ["$formatDetails", 0] }
+            }
+        },
+
+        // ==========================================
+        // 🔗 LOOKUP FOR FORMAT UPLOADER (optional)
+        // ==========================================
+        {
+            $lookup: {
+                from: "userloginschemas",
+                localField: "formatDetails.uploadedBy",
+                foreignField: "_id",
+                as: "formatUploaderDetails"
+            }
+        },
+        {
+            $addFields: {
+                "formatDetails.uploadedBy": { $arrayElemAt: ["$formatUploaderDetails", 0] }
+            }
+        },
+
         {
             $addFields: {
                 sectionId: { $arrayElemAt: ["$sectionDetails", 0] },
@@ -1342,18 +1458,31 @@ exports.getGroupByReferralCode = AsyncErrorHandler(async (req, res) => {
                 membersDetails: 0,
                 mentorDetails: 0,
                 approvedTitleDetails: 0,
+                formatUploaderDetails: 0,
+
+                // Exclude sensitive fields from members
                 "members.password": 0,
                 "members.confirmPassword": 0,
                 "members.passwordResetToken": 0,
                 "members.passwordResetTokenExpires": 0,
                 "members.__v": 0,
                 "members.passwordChangedAt": 0,
+
+                // Exclude sensitive fields from mentor
                 "mentor.password": 0,
                 "mentor.confirmPassword": 0,
                 "mentor.passwordResetToken": 0,
                 "mentor.passwordResetTokenExpires": 0,
                 "mentor.__v": 0,
-                "mentor.passwordChangedAt": 0
+                "mentor.passwordChangedAt": 0,
+
+                // Exclude sensitive fields from format uploader
+                "formatDetails.uploadedBy.password": 0,
+                "formatDetails.uploadedBy.confirmPassword": 0,
+                "formatDetails.uploadedBy.passwordResetToken": 0,
+                "formatDetails.uploadedBy.passwordResetTokenExpires": 0,
+                "formatDetails.uploadedBy.__v": 0,
+                "formatDetails.uploadedBy.passwordChangedAt": 0
             }
         }
     ]);
@@ -1375,6 +1504,7 @@ exports.getGroupByReferralCode = AsyncErrorHandler(async (req, res) => {
     const proposedTitles = await ProposedTitle.find({ groupId: groupId })
         .populate({
             path: 'uploadedBy',
+            model: 'UserLoginSchema',
             select: 'first_name last_name id_number email role'
         })
         .sort({ createdAt: -1 });
@@ -1396,7 +1526,6 @@ exports.getGroupByReferralCode = AsyncErrorHandler(async (req, res) => {
         data: groupData,
     });
 });
-
 
 // ==========================================
 // GET SIMPLE GROUPS LIST (FOR DROPDOWNS)

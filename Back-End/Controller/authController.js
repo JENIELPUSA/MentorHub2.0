@@ -9,6 +9,7 @@ const util = require("util");
 const fs = require("fs");
 const FormData = require("form-data");
 const crypto = require("crypto");
+const sendEmail = require("./../Utils/email");
 
 const signToken = (id, role, linkId) => {
   return jwt.sign({ id, role, linkId }, process.env.SECRET_STR, {
@@ -16,111 +17,138 @@ const signToken = (id, role, linkId) => {
   });
 };
 
+
 exports.signup = async (req, res) => {
+  try {
+    const {
+      first_name,
+      last_name,
+      middle_name,
+      suffix,
+      username,
+      role,
+      selectedrole,
+      departmentId,
+      groupId,
+      address,
+      password,
+      yearLevel,
+      course,
+      major,
+      gender,
+      birthDate,
+      contactNumber,
+      referralCode,
+    } = req.body;
+
+    const userRoles = Array.isArray(selectedrole) && selectedrole.length > 0
+      ? selectedrole
+      : [role || "student"];
+
+    // ✅ Default password kung walang ibinigay
+    const defaultPassword = password || "default123";
+
+    const newUser = new UserLogin({
+      avatar: {
+        url: "",
+        public_id: "",
+      },
+      first_name: first_name || "",
+      last_name: last_name || "",
+      middle_name: middle_name || "",
+      suffix: suffix || "",
+      username: username || "",
+      password: defaultPassword,
+      role: role || "student",
+
+      departmentId: departmentId || null,
+      groupId: groupId || null,
+      yearLevel: yearLevel || null,
+      course: course || null,
+      major: major || null,
+      address: address || null,
+      gender: gender || null,
+      birthDate: birthDate || null,
+      contactNumber: contactNumber || null,
+
+      isActive: true,
+      isVerified: false,
+      status: "Active",
+      theme: "light",
+
+      referralCode: null,
+      referredBy: referralCode || null,
+    });
+
+    await newUser.save();
+
+    // =========================================================
+    // ✅ SEND EMAIL — PLAIN TEXT (text, hindi message)
+    // =========================================================
+    const text = `
+Welcome, ${first_name || username}!
+
+Your account has been created successfully.
+
+🔐 Your Login Credentials:
+Username: ${username}
+Your Default Password is: ${defaultPassword}
+
+⚠️ Please Change your preferred Password after logging in.
+
+Your Referral Code: ${newUser.referralCode}
+        `;
+
     try {
-        const {
-            first_name,
-            last_name,
-            middle_name,
-            suffix,
-            username,
-            role,
-            selectedrole,
-            departmentId,
-            groupId,
-            address,
-            password,
-            yearLevel,
-            course,
-            major,
-            gender,
-            birthDate,
-            contactNumber,
-            referralCode, // Optional: kung may nag-refer
-        } = req.body;
-
-        const userRoles = Array.isArray(selectedrole) && selectedrole.length > 0 
-            ? selectedrole 
-            : [role || "student"];
-
-        const newUser = new UserLogin({
-            avatar: {
-                url: "",
-                public_id: "",
-            },
-            first_name: first_name || "",
-            last_name: last_name || "",
-            middle_name: middle_name || "",
-            suffix: suffix || "",
-            username: username || "",
-            password: password || "default123",
-            role: role || "student",
-            
-            // Student fields
-            departmentId: departmentId || null,
-            groupId: groupId || null,
-            yearLevel: yearLevel || null,
-            course: course || null,
-            major: major || null,
-            address: address || null,
-            gender: gender || null,
-            birthDate: birthDate || null,
-            contactNumber: contactNumber || null,
-            
-            // Status
-            isActive: true,
-            isVerified: false,
-            status: "Active",
-            theme: "light",
-            
-            // Referral fields
-            referralCode: null, // Auto-generate sa pre-save
-            referredBy: referralCode || null, // Kung may nag-refer
-        });
-
-        await newUser.save();
-
-        // =========================================================
-        // 3. REMOVE SENSITIVE DATA BAGO MAG-RESPOND
-        // =========================================================
-        const userResponse = newUser.toObject();
-        delete userResponse.password;
-        delete userResponse.confirmPassword;
-        delete userResponse.passwordResetToken;
-        delete userResponse.passwordResetTokenExpires;
-        delete userResponse.__v;
-
-        return res.status(201).json({
-            success: true,
-            status: "Success",
-            message: "Account created successfully.",
-            data: {
-                user: userResponse,
-                role: role || "student",
-                selectedrole: userRoles,
-                referralCode: newUser.referralCode, // Ipakita ang auto-generated referral code
-            },
-        });
-
-    } catch (error) {
-        console.error("❌ Signup failed:", error);
-
-        // ✅ I-check kung may duplicate key error
-        if (error.code === 11000) {
-            const field = Object.keys(error.keyPattern)[0];
-            return res.status(400).json({
-                success: false,
-                message: `Duplicate ${field} error. Please use a different ${field}.`,
-            });
-        }
-
-        return res.status(500).json({
-            success: false,
-            message: error.message || "Internal Server Error",
-        });
+      await sendEmail({
+        email: username, // ✅ username ang recipient
+        subject: "Your Account Credentials",
+        text, // ✅ "text" hindi "message"
+      });
+    } catch (emailErr) {
+      console.error("❌ Email sending failed:", emailErr);
+      // Hindi i-cacancel ang signup kahit mabigo ang email
     }
-};
 
+    // =========================================================
+    // REMOVE SENSITIVE DATA BAGO MAG-RESPOND
+    // =========================================================
+    const userResponse = newUser.toObject();
+    delete userResponse.password;
+    delete userResponse.confirmPassword;
+    delete userResponse.passwordResetToken;
+    delete userResponse.passwordResetTokenExpires;
+    delete userResponse.__v;
+
+    return res.status(201).json({
+      success: true,
+      status: "Success",
+      message: "Account created successfully. Credentials sent to your email.",
+      data: {
+        user: userResponse,
+        role: role || "student",
+        selectedrole: userRoles,
+        referralCode: newUser.referralCode,
+      },
+    });
+
+  } catch (error) {
+    console.error("❌ Signup failed:", error);
+
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern)[0];
+      return res.status(400).json({
+        success: false,
+        message: `Duplicate ${field} error. Please use a different ${field}.`,
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Internal Server Error",
+    });
+  }
+};
 // ============ LOGIN FUNCTION ============
 exports.login = AsyncErrorHandler(async (req, res, next) => {
   const { email, password } = req.body;
@@ -308,24 +336,58 @@ exports.restrict = (...roles) => {
   };
 };
 
+
 exports.forgotPassword = AsyncErrorHandler(async (req, res, next) => {
-  const { username } = req.body;
+  const { email } = req.body;
 
-  const user = await UserLogin.findOne({ username: username });
+  // 🔁 Look for the user by username (which stores email in your case)
+  const user = await UserLogin.findOne({ username: email });
 
+  // If user doesn't exist, return 404
   if (!user) {
     return next(
-      new CustomError("We could not find the user with given username", 404),
+      new CustomError("We could  not find the user with given email", 404),
     );
   }
 
+  // Generate a password reset token
   const resetToken = user.createResetTokenPassword();
   await user.save({ validateBeforeSave: false });
 
+  // Generate reset URL
   const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
-
   const message = `We have received a password reset request. Please use the below link to reset your password:\n\n${resetUrl}\n\nThis link will expire in 10 minutes.`;
+
+  try {
+    // Send password reset email
+    await sendEmail({
+      email: user.username, // use username field since it holds the email
+      subject: "Password change request received",
+      text: message,
+    });
+
+    // Respond with success
+    res.status(200).json({
+      status: "Success",
+      message: "Password reset link sent to the user email",
+    });
+  } catch (err) {
+    // Clean up if sending fails
+    user.passwordResetToken = undefined;
+    user.passwordResetTokenExpires = undefined;
+    await user.save({ validateBeforeSave: false });
+
+    return next(
+      new CustomError(
+        "There was an error sending password reset email. Please try again later",
+        500,
+      ),
+    );
+  }
 });
+
+
+
 
 exports.resetPassword = AsyncErrorHandler(async (req, res, next) => {
   const hashedToken = crypto

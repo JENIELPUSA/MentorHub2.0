@@ -156,22 +156,6 @@ export const Sidebar = forwardRef(({ collapsed, onLogout }, ref) => {
                     );
                 })}
             </div>
-
-            {/* Logout Section */}
-            <div className="border-t border-slate-200 p-3 w-full">
-                <button
-                    onClick={handleLogout}
-                    className={cn(
-                        "flex items-center gap-x-3 rounded-lg px-3 py-2 text-sm font-medium text-red-600 transition-all duration-200 hover:bg-red-50 hover:text-red-700 w-full",
-                        collapsed && "md:w-[45px] md:justify-center md:px-0"
-                    )}
-                >
-                    <LogOut size={22} className="flex-shrink-0" />
-                    {!collapsed && (
-                        <p className="whitespace-nowrap font-medium">Logout</p>
-                    )}
-                </button>
-            </div>
         </aside>
     );
 });

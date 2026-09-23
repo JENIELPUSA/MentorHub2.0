@@ -1,30 +1,58 @@
 <!doctype html>
 <html lang="en">
-    <head>
-        <meta charset="UTF-8" />
-        <meta
-            name="viewport"
-            content="width=device-width, initial-scale=1.0"
-        />
-        <link
-            rel="shortcut icon"
-            href="favicon-light.svg"
-            type="image/svg+xml"
-            media="(prefers-color-scheme: light)"
-        />
-        <link
-            rel="shortcut icon"
-            href="favicon-dark.svg"
-            type="image/svg+xml"
-            media="(prefers-color-scheme: dark)"
-        />
-        <title>Dashboard UI Design | XD Code</title>
-    </head>
-    <body>
-        <div id="root"></div>
-        <script
-            type="module"
-            src="/src/main.jsx"
-        ></script>
-    </body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BiPSU ScholarSphere</title>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,300..800;1,300..800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400..800;1,8..60,400..800&display=swap"
+      rel="stylesheet"
+    />
+    <!-- Material Symbols -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+      rel="stylesheet"
+    />
+
+    <style>
+      /* Base */
+      html, body { margin: 0; padding: 0; overscroll-behavior: none; }
+
+      /* Scrollbar */
+      ::-webkit-scrollbar { width: 6px; height: 6px; }
+      ::-webkit-scrollbar-track { background: #eff4ff; }
+      ::-webkit-scrollbar-thumb { background: #c5c6d2; border-radius: 9999px; }
+      ::-webkit-scrollbar-thumb:hover { background: #757681; }
+
+      /* Hide horizontal scrollbar on pill rows */
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+      /* ============ RESPONSIVE BREAKPOINTS ============ */
+      @media (min-width: 640px) {
+        .bipsu-quickfind { display: inline-flex !important; }
+      }
+      @media (min-width: 768px) {
+        .bipsu-nav { display: flex !important; }
+        .bipsu-repo-grid { grid-template-columns: 1fr 1fr !important; }
+        .bipsu-footer-grid { grid-template-columns: 1fr 1fr !important; }
+        .bipsu-metrics-grid { grid-template-columns: 1fr 1fr !important; }
+      }
+      @media (min-width: 1024px) {
+        .bipsu-hero-grid { grid-template-columns: 1.2fr 1fr !important; }
+        .bipsu-vm-grid { grid-template-columns: 1fr 1fr !important; }
+        .bipsu-defense-grid { grid-template-columns: 1.4fr 1fr !important; }
+        .bipsu-footer-grid { grid-template-columns: 1.6fr 1.4fr 1fr !important; }
+        .bipsu-metrics-grid { grid-template-columns: repeat(4, 1fr) !important; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
 </html>

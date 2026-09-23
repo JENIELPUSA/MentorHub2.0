@@ -23,7 +23,7 @@ const ProposedTitleSchema = new Schema(
     },
     status: {
       type: String,
-      enum: ['Pending', 'Approved', 'Rejected', 'Revision', 'Ready for Defense', 'Done'],
+      enum: ['Pending', 'Approved', 'for_schedule', 'Rejected', 'Revision', 'Ready for Defense', 'Done'],
       default: 'Pending'
     },
     remarks: {
@@ -32,7 +32,6 @@ const ProposedTitleSchema = new Schema(
     },
     titleUrlTracking: [
       {
-        _id: false,
         url: {
           type: String,
           required: true
@@ -87,25 +86,30 @@ const ProposedTitleSchema = new Schema(
 );
 
 // ============================================================
-// ⭐ INDEX: Para mabilis ang queries at deleteMany
+// ⭐ INDEX
 // ============================================================
 ProposedTitleSchema.index({ groupId: 1, status: 1 });
+
+// ============================================================
+// ⭐ FINAL / MANUAL STATES — hindi dadaan sa resolveStatus
+//    (diretso update lang sa status)
+// ============================================================
+const FINAL_STATES = ['Ready for Defense', 'Rejected', 'Revision', 'Done', 'for_schedule'];
+
+function isFinalState(status) {
+  return FINAL_STATES.includes(status);
+}
 
 function resolveStatus(doc) {
   const currentStatus = doc.status;
 
   // ⭐ FINAL STATES — huwag nang baguhin
-  if (
-    currentStatus === 'Ready for Defense' ||
-    currentStatus === 'Rejected' ||
-    currentStatus === 'Revision' ||
-    currentStatus === 'Done'
-  ) {
+  if (isFinalState(currentStatus)) {
     return {
-      status: currentStatus,                              // keep as is
-      isSelected: currentStatus === 'Ready for Defense',  // ready = selected
-      isArchived: currentStatus === 'Done',               // ⭐ Done = archived
-      shouldDelete: false                                 // final = no delete
+      status: currentStatus,
+      isSelected: currentStatus === 'Ready for Defense',
+      isArchived: currentStatus === 'Done',
+      shouldDelete: false
     };
   }
 
@@ -122,7 +126,7 @@ function resolveStatus(doc) {
       status: 'Ready for Defense',
       isSelected: true,
       isArchived: false,
-      shouldDelete: bothReady    // ⭐ delete lang kapag BOTH ready
+      shouldDelete: bothReady
     };
   }
 
@@ -179,29 +183,29 @@ async function deleteOtherTitles(model, groupId, currentDocId) {
 // MIDDLEWARE: Pre-save
 // ============================================================
 ProposedTitleSchema.pre('save', function (next) {
-  const resolved = resolveStatus(this);
-
-  // ⭐ DONE: i-set ang isArchived = true
-  if (this.status === 'Done') {
-    this.isArchived = true;
-    this.isSelected = false;
+  // ⭐ FINAL STATE (kasama na for_schedule) — diretso update lang
+  if (isFinalState(this.status)) {
+    if (this.status === 'Done') {
+      this.isArchived = true;
+      this.isSelected = false;
+    } else if (this.status === 'Ready for Defense') {
+      this.isSelected = true;
+      this.isArchived = false;
+    } else {
+      // for_schedule, Rejected, Revision
+      this.isSelected = false;
+      this.isArchived = false;
+    }
     return next();
   }
 
-  // Huwag i-override ang Rejected/Revision (final states)
-  if (this.status === 'Rejected' || this.status === 'Revision') {
-    // Keep as is — pero kung may ready na, i-override pa rin
-    if (resolved.status === 'Ready for Defense') {
-      this.status = resolved.status;
-      this.isSelected = resolved.isSelected;
-    }
-  } else {
-    this.isSelected = resolved.isSelected;
-    this.status = resolved.status;
-    this.isArchived = resolved.isArchived;   // ⭐ IDINAGDAG
-  }
+  // ─── Resolve base sa current fields ───
+  const resolved = resolveStatus(this);
 
-  // Store groupId for post-save deletion
+  this.isSelected = resolved.isSelected;
+  this.status = resolved.status;
+  this.isArchived = resolved.isArchived;
+
   if (resolved.shouldDelete) {
     this._deleteGroupId = this.groupId;
   }
@@ -216,6 +220,22 @@ ProposedTitleSchema.pre('findOneAndUpdate', function (next) {
   const update = this.getUpdate();
   const query = this.getQuery();
   const set = getUpdateFields(update);
+
+  // ⭐ FINAL STATE (kasama na for_schedule) — diretso update lang
+  if (set.status !== undefined && isFinalState(set.status)) {
+    if (set.status === 'Done') {
+      set.isArchived = true;
+      set.isSelected = false;
+    } else if (set.status === 'Ready for Defense') {
+      set.isSelected = true;
+      set.isArchived = false;
+    } else {
+      // for_schedule, Rejected, Revision
+      set.isSelected = false;
+      set.isArchived = false;
+    }
+    return next();
+  }
 
   const touchesApprovalFields =
     set.adviser !== undefined ||
@@ -234,7 +254,6 @@ ProposedTitleSchema.pre('findOneAndUpdate', function (next) {
     .then((doc) => {
       if (!doc) return next();
 
-      // Build "next state" from current doc + update
       const nextState = {
         adviser: set.adviser !== undefined ? set.adviser : doc.adviser,
         coAdviser: set.coAdviser !== undefined ? set.coAdviser : doc.coAdviser,
@@ -243,27 +262,13 @@ ProposedTitleSchema.pre('findOneAndUpdate', function (next) {
         status: set.status !== undefined ? set.status : doc.status
       };
 
-      // ⭐ DONE: i-set ang isArchived = true
-      if (set.status === 'Done') {
-        update.isArchived = true;
-        update.isSelected = false;
-        return next();
-      }
-
-      // ─── Rejected / Revision: huwag i-force ───
-      if (set.status === 'Rejected' || set.status === 'Revision') {
-        update.isSelected = false;
-        return next();
-      }
-
-      // ─── Resolve base sa nextState ───
+      // ─── Resolve ───
       const resolved = resolveStatus(nextState);
 
       update.status = resolved.status;
       update.isSelected = resolved.isSelected;
-      update.isArchived = resolved.isArchived;   // ⭐ IDINAGDAG
+      update.isArchived = resolved.isArchived;
 
-      // ⭐ I-delete lang kapag BOTH ready (o both approved)
       if (resolved.shouldDelete) {
         this._deleteGroupId = doc.groupId;
         this._deleteDocId = doc._id;
@@ -275,7 +280,7 @@ ProposedTitleSchema.pre('findOneAndUpdate', function (next) {
 });
 
 // ============================================================
-// POST-UPDATE: Delete other titles in same group
+// POST-UPDATE: Delete other titles
 // ============================================================
 ProposedTitleSchema.post('findOneAndUpdate', function (doc, next) {
   if (!this._deleteGroupId || !this._deleteDocId) return next();
@@ -295,6 +300,22 @@ ProposedTitleSchema.pre('updateOne', function (next) {
   const update = this.getUpdate();
   const query = this.getQuery();
   const set = getUpdateFields(update);
+
+  // ⭐ FINAL STATE (kasama na for_schedule) — diretso update lang
+  if (set.status !== undefined && isFinalState(set.status)) {
+    if (set.status === 'Done') {
+      set.isArchived = true;
+      set.isSelected = false;
+    } else if (set.status === 'Ready for Defense') {
+      set.isSelected = true;
+      set.isArchived = false;
+    } else {
+      // for_schedule, Rejected, Revision
+      set.isSelected = false;
+      set.isArchived = false;
+    }
+    return next();
+  }
 
   const touchesApprovalFields =
     set.adviser !== undefined ||
@@ -319,23 +340,11 @@ ProposedTitleSchema.pre('updateOne', function (next) {
         status: set.status !== undefined ? set.status : doc.status
       };
 
-      // ⭐ DONE: i-set ang isArchived = true
-      if (set.status === 'Done') {
-        set.isArchived = true;
-        set.isSelected = false;
-        return next();
-      }
-
-      if (set.status === 'Rejected' || set.status === 'Revision') {
-        set.isSelected = false;
-        return next();
-      }
-
       const resolved = resolveStatus(nextState);
 
       set.status = resolved.status;
       set.isSelected = resolved.isSelected;
-      set.isArchived = resolved.isArchived;   // ⭐ IDINAGDAG
+      set.isArchived = resolved.isArchived;
 
       if (resolved.shouldDelete) {
         this._deleteGroupId = doc.groupId;
@@ -362,7 +371,7 @@ ProposedTitleSchema.post('updateOne', function (result, next) {
 });
 
 // ============================================================
-// POST-SAVE: Delete other titles in same group
+// POST-SAVE: Delete other titles
 // ============================================================
 ProposedTitleSchema.post('save', function (doc, next) {
   if (!this._deleteGroupId || !doc._id) return next();

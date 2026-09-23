@@ -7,11 +7,14 @@ import {
     PieChart as PieIcon,
     TrendingUp,
     CheckCircle2,
-    BookMarked
+    BookMarked,
+    Eye,
+    EyeOff,
 } from 'lucide-react';
 
 import { StatisticalContext } from '../../contexts/StatisticalContext/StatisticalContext';
 import { AuthContext } from '../../contexts/AuthContext';
+import UploadDocuments from './UploadDocuments';
 
 const CHART_COLORS = [
     '#1E3A8A', // Blue 900
@@ -485,6 +488,7 @@ export default function App() {
     const { role } = useContext(AuthContext);
 
     const [isLoading, setIsLoading] = useState(true);
+    const [showUpload, setShowUpload] = useState(false);
 
     useEffect(() => {
         const timer = setTimeout(() => setIsLoading(false), 1500);
@@ -592,7 +596,60 @@ export default function App() {
                     )}
                 </div>
 
-                {/* Row 1: Two Pie Graphs side by side */}
+                {/* Row 1.5: Upload Documents Section — with Show/Hide toggle */}
+                <div className="bg-white rounded-2xl shadow-sm border border-blue-100 overflow-hidden">
+                    {/* Header with Show/Hide button */}
+                    <button
+                        type="button"
+                        onClick={() => setShowUpload((prev) => !prev)}
+                        className="w-full flex items-center justify-between px-5 py-3 hover:bg-slate-50 transition-colors duration-200"
+                    >
+                        <div className="flex items-center gap-2">
+                            <FileText className="w-4 h-4 text-blue-900" />
+                            <span className="text-sm font-semibold text-blue-950">
+                                Upload Documents
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-normal hidden sm:inline">
+                                • Manage proposal attachments
+                            </span>
+                        </div>
+
+                        <span
+                            className={`flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full border transition-all duration-300 ${
+                                showUpload
+                                    ? 'bg-blue-50 text-blue-900 border-blue-200 hover:bg-blue-100'
+                                    : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                            }`}
+                        >
+                            {showUpload ? (
+                                <>
+                                    <EyeOff className="w-3 h-3" />
+                                    Hide
+                                </>
+                            ) : (
+                                <>
+                                    <Eye className="w-3 h-3" />
+                                    Show
+                                </>
+                            )}
+                        </span>
+                    </button>
+
+                    {/* Collapsible body */}
+                    <div
+                        className={`transition-all duration-300 ease-in-out ${
+                            showUpload
+                                ? 'max-h-[2000px] opacity-100'
+                                : 'max-h-0 opacity-0 overflow-hidden'
+                        }`}
+                    >
+                        <div className="px-4 pb-4 pt-1 border-t border-slate-100">
+                            <UploadDocuments isLoading={isLoading} />
+                        </div>
+                    </div>
+                </div>
+
+                {/* Row 2: Two Pie Graphs side by side */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {isLoading ? (
                         <>
@@ -680,7 +737,7 @@ export default function App() {
                     )}
                 </div>
 
-                {/* Row 2: Proposals Submitted Line Graph */}
+                {/* Row 3: Proposals Submitted Line Graph */}
                 <div className="bg-white p-4 rounded-2xl shadow-sm border border-blue-100 flex flex-col hover:shadow-lg transition-shadow duration-300">
                     {isLoading ? (
                         <>

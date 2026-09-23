@@ -32,16 +32,16 @@ export const AuthProvider = ({ children }) => {
             );
 
             if (res.data.status === "Success") {
-                const { 
-                    token, 
-                    role, 
-                    email: serverEmail, 
-                    first_name, 
-                    last_name, 
-                    contact_number, 
-                    userId, 
-                    linkId, 
-                    Designatedzone, 
+                const {
+                    token,
+                    role,
+                    email: serverEmail,
+                    first_name,
+                    last_name,
+                    contact_number,
+                    userId,
+                    linkId,
+                    Designatedzone,
                     theme,
                     referredBy // Added referredBy from response
                 } = res.data;
@@ -114,6 +114,38 @@ export const AuthProvider = ({ children }) => {
         window.location.href = "/login";
     };
 
+    const updatePassword = async (currentPassword, newPassword, confirmPassword) => {
+        try {
+            const res = await axiosInstance.put(
+                "/api/v1/authentication/update-password",
+                {
+                    currentPassword,
+                    password: newPassword,
+                    confirmPassword,
+                }
+            );
+
+            if (res.data.status === "success") {
+                const { token } = res.data;
+
+                // Update token sa localStorage at state
+                localStorage.setItem("token", token);
+                localStorage.setItem("authToken", token);
+                setAuthToken(token);
+
+                // Update axios default header
+                axiosInstance.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+
+                return { success: true, message: "Password updated successfully." };
+            }
+        } catch (error) {
+            return {
+                success: false,
+                message: error.response?.data?.message || "Failed to update password",
+            };
+        }
+    };
+
     return (
         <AuthContext.Provider
             value={{
@@ -127,9 +159,9 @@ export const AuthProvider = ({ children }) => {
                 linkId,
                 Designatedzone,
                 theme,
-                referredBy, // Added referredBy to context value
+                referredBy,
                 login,
-                logout,
+                logout, updatePassword
             }}
         >
             {children}

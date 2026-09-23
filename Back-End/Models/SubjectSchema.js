@@ -12,6 +12,10 @@ const SubjectSchema = new Schema(
       type: Schema.Types.ObjectId,
       ref: 'UserLoginSchema',
       required: true
+    },
+    formatID: {
+      type: Schema.Types.ObjectId,
+      ref: 'Format'
     }
   },
   { timestamps: true }

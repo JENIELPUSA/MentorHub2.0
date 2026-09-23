@@ -14,30 +14,33 @@ import { StatisticalProvider } from './contexts/StatisticalContext/StatisticalCo
 import { NotificationProvider } from './contexts/NotificationContext/NotificationContext.jsx'
 import { CommentProvider } from './contexts/CommentContext/CommentContext.jsx'
 import { ScheduleProvider } from './contexts/ScheduleContext/ScheduleContext.jsx'
+import { FormatProvider } from './contexts/FormatContext/FormatContext.jsx'
 createRoot(document.getElementById('root')).render(
   <AuthProvider>
-    <ScheduleProvider>
-      <CommentProvider>
-        <NotificationProvider>
-          <StatisticalProvider>
-            <ProposedTitleProvider>
-              <GroupProvider>
-                <SectionProvider>
-                  <DepartmentProvider>
-                    <UserDisplayProvider>
-                      <SubjectProvider>
-                        <StudentProvider>
-                          <App />
-                        </StudentProvider>
-                      </SubjectProvider>
-                    </UserDisplayProvider>
-                  </DepartmentProvider>
-                </SectionProvider>
-              </GroupProvider>
-            </ProposedTitleProvider>
-          </StatisticalProvider>
-        </NotificationProvider>
-      </CommentProvider>
-    </ScheduleProvider>
+    <FormatProvider>
+      <ScheduleProvider>
+        <CommentProvider>
+          <NotificationProvider>
+            <StatisticalProvider>
+              <ProposedTitleProvider>
+                <GroupProvider>
+                  <SectionProvider>
+                    <DepartmentProvider>
+                      <UserDisplayProvider>
+                        <SubjectProvider>
+                          <StudentProvider>
+                            <App />
+                          </StudentProvider>
+                        </SubjectProvider>
+                      </UserDisplayProvider>
+                    </DepartmentProvider>
+                  </SectionProvider>
+                </GroupProvider>
+              </ProposedTitleProvider>
+            </StatisticalProvider>
+          </NotificationProvider>
+        </CommentProvider>
+      </ScheduleProvider>
+    </FormatProvider>
   </AuthProvider>
 )

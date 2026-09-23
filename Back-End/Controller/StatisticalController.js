@@ -158,11 +158,9 @@ exports.getAdviserStatistics = AsyncErrorHandler(async (req, res) => {
     });
 });
 
-// ==========================================
-// GET ALL STATISTICS FOR DASHBOARD
-// ==========================================
 exports.getDashboardStatistics = AsyncErrorHandler(async (req, res) => {
     const userId = req.user._id;
+
     // ==========================================
     // STEP 1: HANAPIN ANG MGA GROUPS KUNG SAAN SI userId AY ADVISER O CO-ADVISER
     // ==========================================
@@ -198,7 +196,14 @@ exports.getDashboardStatistics = AsyncErrorHandler(async (req, res) => {
                 graphs: {
                     statusBreakdown: [],
                     monthlyTrends: [],
-                    userRoleBreakdown: []
+                    userRoleBreakdown: [],
+                    formatBreakdown: []
+                },
+                formatStatistics: {
+                    totalFormats: 0,
+                    formatsByType: [],
+                    subjectsWithFormat: 0,
+                    subjectsWithoutFormat: 0
                 },
                 groups: []
             }
@@ -226,7 +231,6 @@ exports.getDashboardStatistics = AsyncErrorHandler(async (req, res) => {
     // ==========================================
     // STEP 4.5: COUNT STUDENTS WITH MATCHING REFERRAL CODES (using referredBy)
     // ==========================================
-    // Get all referral codes from user's groups
     const referralCodes = userGroups
         .map(g => g.referralCode)
         .filter(code => code && code.trim() !== '');
@@ -239,7 +243,6 @@ exports.getDashboardStatistics = AsyncErrorHandler(async (req, res) => {
     let studentsByGroup = {};
 
     if (referralCodes.length > 0) {
-        // Find students with matching referredBy codes
         const students = await UserLoginSchema.find({
             referredBy: { $in: referralCodes },
             role: 'student'
@@ -250,7 +253,6 @@ exports.getDashboardStatistics = AsyncErrorHandler(async (req, res) => {
 
         totalStudents = students.length;
 
-        // Count students per referral code/group
         students.forEach(student => {
             const code = student.referredBy;
             if (code) {
@@ -265,9 +267,8 @@ exports.getDashboardStatistics = AsyncErrorHandler(async (req, res) => {
     }
 
     // ==========================================
-    // STEP 5: I-COUNT ANG MGA TITLES BASE SA ROLE NI USER SA GROUPS
+    // STEP 4.6: KUNIN ANG MGA SUBJECTS NA RELATED SA USER (via groups → sections → subjects)
     // ==========================================
-
     const adviserGroupIds = userGroups
         .filter(g => g.adviserId && g.adviserId.toString() === userId.toString())
         .map(g => g._id.toString());
@@ -283,10 +284,85 @@ exports.getDashboardStatistics = AsyncErrorHandler(async (req, res) => {
         )
         .map(g => g._id.toString());
 
-    console.log('Adviser Group IDs:', adviserGroupIds);
-    console.log('Co-Adviser Group IDs:', coAdviserGroupIds);
-    console.log('Both Group IDs:', bothGroupIds);
+    // Kunin ang sectionIds mula sa user's groups
+    const sectionIds = userGroups
+        .map(g => g.sectionId)
+        .filter(id => id);
 
+    // Kunin ang subjects gamit ang sections
+    let userSubjects = [];
+    if (sectionIds.length > 0) {
+        const sections = await mongoose.model('Section').find({
+            _id: { $in: sectionIds }
+        }).select('subjectId');
+
+        const subjectIds = sections.map(s => s.subjectId).filter(id => id);
+
+        if (subjectIds.length > 0) {
+            userSubjects = await Subject.find({          // ⭐ PINALITAN: SubjectModel → Subject
+                _id: { $in: subjectIds }
+            }).populate('formatID');
+        }
+    }
+
+    console.log('=== DEBUG: User Subjects ===');
+    console.log('userSubjects count:', userSubjects.length);
+
+    // ==========================================
+    // STEP 4.7: COMPUTE FORMAT STATISTICS
+    // ==========================================
+    // Kunin lahat ng formats para sa lookup
+    const allFormats = await mongoose.model('Format').find({});
+
+    // I-map ang formats by _id para mabilis hanapin
+    const formatsMap = {};
+    allFormats.forEach(f => {
+        formatsMap[f._id.toString()] = f;
+    });
+
+    // Bilangin ang subjects na may format at wala
+    let subjectsWithFormat = 0;
+    let subjectsWithoutFormat = 0;
+
+    // Bilangin ang formats by type (Thesis, Capstone, etc.)
+    const formatsByTypeMap = {};
+
+    userSubjects.forEach(subject => {
+        const formatRef = subject.formatID;
+        const formatId = typeof formatRef === 'string'
+            ? formatRef
+            : formatRef?._id?.toString() || null;
+
+        if (formatId && formatsMap[formatId]) {
+            subjectsWithFormat++;
+            const formatType = formatsMap[formatId].type || 'Unknown';
+            formatsByTypeMap[formatType] = (formatsByTypeMap[formatType] || 0) + 1;
+        } else {
+            subjectsWithoutFormat++;
+        }
+    });
+
+    // I-convert sa array format
+    const formatsByType = Object.entries(formatsByTypeMap).map(([type, count]) => ({
+        type,
+        count,
+        percentage: userSubjects.length > 0
+            ? parseFloat(((count / userSubjects.length) * 100).toFixed(2))
+            : 0,
+        color: type === 'Thesis' ? '#66BB6A' : type === 'Capstone' ? '#42A5F5' : '#9E9E9E'
+    }));
+
+    // Format breakdown para sa chart (base sa format types)
+    const formatBreakdown = formatsByType.map(item => ({
+        label: item.type,
+        count: item.count,
+        percentage: item.percentage,
+        color: item.color
+    }));
+
+    // ==========================================
+    // STEP 5: I-COUNT ANG MGA TITLES BASE SA ROLE NI USER SA GROUPS
+    // ==========================================
     const titlesAsAdviser = proposedTitles.filter(p =>
         p.groupId && adviserGroupIds.includes(p.groupId.toString())
     );
@@ -310,18 +386,15 @@ exports.getDashboardStatistics = AsyncErrorHandler(async (req, res) => {
     // ==========================================
     // STEP 6: COMPUTE CARD STATISTICS
     // ==========================================
-
-    // Count total groups based on userGroups length
     const totalGroupsCount = userGroups.length;
 
     const withRemarks = proposedTitles.filter(p => p.remarks && p.remarks.length > 0).length;
     const withoutRemarks = proposedTitles.filter(p => !p.remarks || p.remarks.length === 0).length;
 
-    // Count unique users who uploaded titles
     const uniqueUsers = new Set(proposedTitles.map(p => p.uploadedBy?.toString())).size;
 
     // ==========================================
-    // STEP 7: USER ROLE BREAKDOWN (WALANG COLOR)
+    // STEP 7: USER ROLE BREAKDOWN
     // ==========================================
     const userRoleBreakdown = [
         {
@@ -354,25 +427,25 @@ exports.getDashboardStatistics = AsyncErrorHandler(async (req, res) => {
             status: 'Pending',
             count: pending,
             percentage: totalTitles > 0 ? parseFloat(((pending / totalTitles) * 100).toFixed(2)) : 0,
-            color: '#FFA726' // Orange
+            color: '#FFA726'
         },
         {
             status: 'Approved',
             count: approved,
             percentage: totalTitles > 0 ? parseFloat(((approved / totalTitles) * 100).toFixed(2)) : 0,
-            color: '#66BB6A' // Green
+            color: '#66BB6A'
         },
         {
             status: 'Rejected',
             count: rejected,
             percentage: totalTitles > 0 ? parseFloat(((rejected / totalTitles) * 100).toFixed(2)) : 0,
-            color: '#EF5350' // Red
+            color: '#EF5350'
         },
         {
             status: 'Revision',
             count: revision,
             percentage: totalTitles > 0 ? parseFloat(((revision / totalTitles) * 100).toFixed(2)) : 0,
-            color: '#42A5F5' // Blue
+            color: '#42A5F5'
         }
     ].filter(item => item.count > 0);
 
@@ -417,7 +490,7 @@ exports.getDashboardStatistics = AsyncErrorHandler(async (req, res) => {
     }));
 
     // ==========================================
-    // STEP 10: FORMAT NG GROUP DATA (REMOVED memberCount, titleCount, titleStatus, withRemarks, withoutRemarks)
+    // STEP 10: FORMAT NG GROUP DATA
     // ==========================================
     const formattedGroups = userGroups.map(g => {
         const isAdviser = g.adviserId && g.adviserId.toString() === userId.toString();
@@ -459,12 +532,42 @@ exports.getDashboardStatistics = AsyncErrorHandler(async (req, res) => {
                 totalUsers: uniqueUsers,
                 withRemarks: withRemarks,
                 withoutRemarks: withoutRemarks,
-                totalStudents: totalStudents
+                totalStudents: totalStudents,
+                totalFormats: allFormats.length,
+                subjectsWithFormat: subjectsWithFormat,
+                subjectsWithoutFormat: subjectsWithoutFormat
             },
             graphs: {
                 statusBreakdown: statusBreakdown,
                 monthlyTrends: monthlyTrends,
-                userRoleBreakdown: userRoleBreakdown
+                userRoleBreakdown: userRoleBreakdown,
+                formatBreakdown: formatBreakdown
+            },
+            formatStatistics: {
+                totalFormats: allFormats.length,
+                formatsByType: formatsByType,
+                subjectsWithFormat: subjectsWithFormat,
+                subjectsWithoutFormat: subjectsWithoutFormat,
+                usedFormats: userSubjects
+                    .filter(s => s.formatID)
+                    .map(s => {
+                        const formatRef = s.formatID;
+                        const formatId = typeof formatRef === 'string'
+                            ? formatRef
+                            : formatRef?._id?.toString();
+                        const format = formatsMap[formatId];
+                        if (!format) return null;
+                        return {
+                            subjectId: s._id,
+                            subjectTitle: s.title,
+                            formatId: format._id,
+                            titleFormat: format.titleFormat,
+                            type: format.type,
+                            description: format.description,
+                            fileUrl: format.fileUrl
+                        };
+                    })
+                    .filter(Boolean)
             },
             groups: formattedGroups
         }

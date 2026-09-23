@@ -18,11 +18,27 @@ import {
     FolderOpen,
     GraduationCap,
     FileText,
-    ArrowLeft
+    ArrowLeft,
+    FileCog,
+    LayoutTemplate,
+    AlignLeft,
+    BookMarked,
+    ScrollText,
+    ExternalLink
 } from 'lucide-react';
 import { AuthContext } from '../../contexts/AuthContext';
 import { SubjectContext } from '../../contexts/SubjectContext/SubjectContext';
 import SubjectSections from './subjectSection';
+import { FormatContext } from '../../contexts/FormatContext/FormatContext';
+
+// ==================== FORMAT TYPE COLORS ====================
+const FORMAT_TYPE_COLORS = {
+    Thesis: { bg: 'bg-green-100', text: 'text-green-700', border: 'border-green-200', icon: 'text-green-600', solid: 'bg-green-600' },
+    Capstone: { bg: 'bg-indigo-100', text: 'text-indigo-700', border: 'border-indigo-200', icon: 'text-indigo-600', solid: 'bg-indigo-600' },
+    Research: { bg: 'bg-blue-100', text: 'text-blue-700', border: 'border-blue-200', icon: 'text-blue-600', solid: 'bg-blue-600' },
+    Dissertation: { bg: 'bg-purple-100', text: 'text-purple-700', border: 'border-purple-200', icon: 'text-purple-600', solid: 'bg-purple-600' },
+    default: { bg: 'bg-gray-100', text: 'text-gray-700', border: 'border-gray-200', icon: 'text-gray-600', solid: 'bg-gray-600' },
+};
 
 export default function SubjectManagement() {
     const { userId } = useContext(AuthContext);
@@ -41,6 +57,10 @@ export default function SubjectManagement() {
         rowsPerPage,
     } = useContext(SubjectContext);
 
+    const { formats } = useContext(FormatContext)
+
+    console.log("formats", formats)
+
     // ==================== LOCAL STATE ====================
     const [searchTerm, setSearchTerm] = useState('');
     const [dateFilter, setDateFilter] = useState('All');
@@ -55,7 +75,14 @@ export default function SubjectManagement() {
     const [formData, setFormData] = useState({ title: '' });
     const [editingId, setEditingId] = useState(null);
 
-    console.log("subjectsData",subjectsData)
+    // ==================== ASSIGN FORMAT MODAL STATE ====================
+    const [isAssignFormatModalOpen, setIsAssignFormatModalOpen] = useState(false);
+    const [assignFormatSubject, setAssignFormatSubject] = useState(null);
+    const [assignSelectedFormatId, setAssignSelectedFormatId] = useState(null);
+    const [assignFormatSearchTerm, setAssignFormatSearchTerm] = useState('');
+    const [assignFormatTypeFilter, setAssignFormatTypeFilter] = useState('All');
+
+    console.log("subjectsData", subjectsData)
 
     // ==================== SECTION STATE ====================
     const [sections, setSections] = useState([]);
@@ -73,6 +100,22 @@ export default function SubjectManagement() {
     const showNotification = (msg, isError = false) => {
         setToastMessage({ msg, isError });
         setTimeout(() => setToastMessage(null), 3000);
+    };
+
+    // Helper para sa format type color
+    const getFormatTypeColor = (type) => {
+        return FORMAT_TYPE_COLORS[type] || FORMAT_TYPE_COLORS.default;
+    };
+
+    // Helper para sa format icon base sa type
+    const getFormatIcon = (type) => {
+        const icons = {
+            Thesis: GraduationCap,
+            Capstone: LayoutTemplate,
+            Research: AlignLeft,
+            Dissertation: BookMarked,
+        };
+        return icons[type] || ScrollText;
     };
 
     // ==================== BUILD FILTER PARAMS ====================
@@ -116,7 +159,19 @@ export default function SubjectManagement() {
         if (!subject) return null;
 
         const creator = subject.createdBy || null;
-        const assignedUser = subject.userId || creator;
+
+        // ==================== FORMAT INFO (formatID field) ====================
+        const formatRef = subject.formatID || null;
+        const formatId = typeof formatRef === 'string'
+            ? formatRef
+            : formatRef?._id || formatRef?.id || null;
+
+        // Hanapin ang format details mula sa formats context
+        const formatDetails = (typeof formatRef === 'object' && formatRef?._id)
+            ? formatRef
+            : (formatId && formats
+                ? formats.find(f => f._id === formatId)
+                : null);
 
         return {
             id: subject._id,
@@ -124,9 +179,15 @@ export default function SubjectManagement() {
             createdBy: creator?._id || subject.createdBy,
             createdByName: creator ? getFullName(creator) : 'Unknown User',
             createdByUsername: creator?.username || 'N/A',
-            userId: assignedUser?._id || subject.userId || subject.createdBy,
-            userName: assignedUser ? getFullName(assignedUser) : 'Unknown User',
-            userUsername: assignedUser?.username || 'N/A',
+            // Format fields
+            formatRef: formatRef,
+            formatId: formatId,
+            formatDetails: formatDetails,
+            formatTitle: formatDetails?.titleFormat || 'No format assigned',
+            formatType: formatDetails?.type || null,
+            formatDescription: formatDetails?.description || '',
+            formatFileUrl: formatDetails?.fileUrl || null,
+            // Dates
             createdAt: subject.createdAt ? new Date(subject.createdAt) : null,
             updatedAt: subject.updatedAt ? new Date(subject.updatedAt) : null,
             formattedCreatedAt: subject.createdAt ? new Date(subject.createdAt).toLocaleDateString('en-US', {
@@ -203,6 +264,52 @@ export default function SubjectManagement() {
         }
     };
 
+    // ==================== ASSIGN FORMAT OPERATIONS ====================
+    const openAssignFormatModal = (subject, e) => {
+        if (e) e.stopPropagation();
+        setAssignFormatSubject(subject);
+        setAssignSelectedFormatId(subject.formatId || null);
+        setAssignFormatSearchTerm('');
+        setAssignFormatTypeFilter('All');
+        setIsAssignFormatModalOpen(true);
+    };
+
+    const closeAssignFormatModal = () => {
+        setIsAssignFormatModalOpen(false);
+        setAssignFormatSubject(null);
+        setAssignSelectedFormatId(null);
+        setAssignFormatSearchTerm('');
+        setAssignFormatTypeFilter('All');
+    };
+
+    const handleAssignFormatSubmit = async (e) => {
+        e.preventDefault();
+
+        if (!assignSelectedFormatId) {
+            showNotification('Please select a manuscript format.', true);
+            return;
+        }
+
+        setIsLocalLoading(true);
+        try {
+            // Update the subject with the selected format ID (field name: formatID)
+            await updateSubject(assignFormatSubject.id, {
+                formatID: assignSelectedFormatId
+            });
+
+            const selectedFormatData = formats?.find(f => f._id === assignSelectedFormatId);
+            showNotification(
+                `✅ Format "${selectedFormatData?.titleFormat || 'Unknown'}" assigned to "${assignFormatSubject.title}"!`
+            );
+            closeAssignFormatModal();
+            await fetchFilteredSubjects();
+        } catch (error) {
+            showNotification(`❌ Failed to assign format: ${error.message}`, true);
+        } finally {
+            setIsLocalLoading(false);
+        }
+    };
+
     // ==================== SECTION OPERATIONS ====================
     const handleAddSection = (title) => {
         const newSection = {
@@ -247,7 +354,8 @@ export default function SubjectManagement() {
         }
     };
 
-    const openEditModal = (subject) => {
+    const openEditModal = (subject, e) => {
+        if (e) e.stopPropagation();
         setEditingId(subject.id);
         setFormData({ title: subject.title });
         setIsEditModalOpen(true);
@@ -326,6 +434,20 @@ export default function SubjectManagement() {
         if (!name) return '?';
         return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
     };
+
+    // ==================== FILTERED FORMATS (for Assign Modal) ====================
+    const formatTypes = formats
+        ? ['All', ...new Set(formats.map(f => f.type).filter(Boolean))]
+        : ['All'];
+
+    const filteredAssignFormats = (formats || []).filter((format) => {
+        const matchesSearch = assignFormatSearchTerm
+            ? format.titleFormat?.toLowerCase().includes(assignFormatSearchTerm.toLowerCase()) ||
+              format.description?.toLowerCase().includes(assignFormatSearchTerm.toLowerCase())
+            : true;
+        const matchesType = assignFormatTypeFilter === 'All' || format.type === assignFormatTypeFilter;
+        return matchesSearch && matchesType;
+    });
 
     // ================================================================
     // ==================== VIEW PAGE ====================
@@ -494,7 +616,7 @@ export default function SubjectManagement() {
                                 <p className="text-sm text-gray-500">
                                     {totalCount > 0 ? (
                                         <span>
-                                            {totalCount} subject{totalCount > 1 ? 's' : ''} • 
+                                            {totalCount} subject{totalCount > 1 ? 's' : ''} •
                                             <span className="ml-1 text-blue-600 font-medium">
                                                 {endItem - startItem + 1} displayed
                                             </span>
@@ -564,97 +686,140 @@ export default function SubjectManagement() {
                     <>
                         {subjectList.length > 0 ? (
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                                {subjectList.map((subject, index) => (
-                                    <div
-                                        key={subject.id}
-                                        className="group bg-white rounded-2xl border border-gray-200/80 shadow-sm hover:shadow-lg transition-all duration-200 overflow-hidden cursor-pointer"
-                                        onClick={() => openViewPage(subject)}
-                                    >
-                                        {/* SOLID Blue Header Strip */}
-                                        <div className="h-2 bg-blue-600"></div>
+                                {subjectList.map((subject, index) => {
+                                    // Format details mula sa mapped subject
+                                    const formatType = subject.formatType;
+                                    const typeColors = getFormatTypeColor(formatType);
+                                    const FormatIcon = getFormatIcon(formatType);
 
-                                        {/* Card Body - WHITE background */}
-                                        <div className="p-4 space-y-3">
-                                            {/* Title Row - SOLID Blue avatar */}
-                                            <div className="flex items-start gap-3">
-                                                <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold text-sm shrink-0">
-                                                    {getInitials(subject.title)}
-                                                </div>
-                                                <div className="min-w-0">
-                                                    <h3 className="text-gray-900 font-bold text-sm leading-tight line-clamp-2">
-                                                        {subject.title}
-                                                    </h3>
-                                                </div>
-                                            </div>
+                                    return (
+                                        <div
+                                            key={subject.id}
+                                            className="group bg-white rounded-2xl border border-gray-200/80 shadow-sm hover:shadow-lg transition-all duration-200 overflow-hidden cursor-pointer"
+                                            onClick={() => openViewPage(subject)}
+                                        >
+                                            {/* SOLID Blue Header Strip */}
+                                            <div className="h-2 bg-blue-600"></div>
 
-                                            {/* Details */}
-                                            <div className="flex items-center justify-between text-xs">
-                                                <div className="flex items-center gap-1.5 text-gray-500">
-                                                    <User className="w-3.5 h-3.5" />
-                                                    <span>Created by</span>
+                                            {/* Card Body - WHITE background */}
+                                            <div className="p-4 space-y-3">
+                                                {/* Title Row - SOLID Blue avatar */}
+                                                <div className="flex items-start gap-3">
+                                                    <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold text-sm shrink-0">
+                                                        {getInitials(subject.title)}
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <h3 className="text-gray-900 font-bold text-sm leading-tight line-clamp-2">
+                                                            {subject.title}
+                                                        </h3>
+                                                    </div>
                                                 </div>
-                                                <span className="font-medium text-gray-700">
-                                                    {subject.createdByName}
-                                                </span>
-                                            </div>
-                                            <div className="flex items-center justify-between text-xs">
-                                                <div className="flex items-center gap-1.5 text-gray-500">
-                                                    <Users className="w-3.5 h-3.5" />
-                                                    <span>Assigned to</span>
-                                                </div>
-                                                <span className="font-medium text-gray-700">
-                                                    {subject.userName}
-                                                </span>
-                                            </div>
-                                            <div className="flex items-center justify-between text-xs">
-                                                <div className="flex items-center gap-1.5 text-gray-500">
-                                                    <Calendar className="w-3.5 h-3.5" />
-                                                    <span>Created</span>
-                                                </div>
-                                                <span className="text-gray-600">
-                                                    {subject.formattedCreatedAt}
-                                                </span>
-                                            </div>
-                                            {subject.sections && subject.sections.length > 0 && (
-                                                <div className="flex items-center gap-1.5 text-xs text-gray-500 pt-1">
-                                                    <FileText className="w-3.5 h-3.5" />
-                                                    <span>{subject.sections.length} section{subject.sections.length > 1 ? 's' : ''}</span>
-                                                </div>
-                                            )}
 
-                                            {/* Action Buttons - SOLID Blue & Yellow */}
-                                            <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        openViewPage(subject);
-                                                    }}
-                                                    className="flex-1 py-1.5 text-xs font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                                                {/* Details */}
+                                                <div className="flex items-center justify-between text-xs">
+                                                    <div className="flex items-center gap-1.5 text-gray-500">
+                                                        <User className="w-3.5 h-3.5" />
+                                                        <span>Created by</span>
+                                                    </div>
+                                                    <span className="font-medium text-gray-700">
+                                                        {subject.createdByName}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center justify-between text-xs">
+                                                    <div className="flex items-center gap-1.5 text-gray-500">
+                                                        <Calendar className="w-3.5 h-3.5" />
+                                                        <span>Created</span>
+                                                    </div>
+                                                    <span className="text-gray-600">
+                                                        {subject.formattedCreatedAt}
+                                                    </span>
+                                                </div>
+                                                {subject.sections && subject.sections.length > 0 && (
+                                                    <div className="flex items-center gap-1.5 text-xs text-gray-500 pt-1">
+                                                        <FileText className="w-3.5 h-3.5" />
+                                                        <span>{subject.sections.length} section{subject.sections.length > 1 ? 's' : ''}</span>
+                                                    </div>
+                                                )}
+
+                                                {/* ==================== ASSIGN FORMAT (CLICKABLE) ==================== */}
+                                                <div
+                                                    onClick={(e) => openAssignFormatModal(subject, e)}
+                                                    className="mt-2 p-3 bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-xl cursor-pointer hover:from-indigo-100 hover:to-purple-100 hover:border-indigo-300 transition-all group/assign"
                                                 >
-                                                    View
-                                                </button>
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        openEditModal(subject);
-                                                    }}
-                                                    className="flex-1 py-1.5 text-xs font-medium text-yellow-600 hover:bg-yellow-50 rounded-lg transition"
-                                                >
-                                                    Edit
-                                                </button>
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleDeleteSubject(subject.id);
-                                                    }}
-                                                    className="flex-1 py-1.5 text-xs font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition"
-                                                >
-                                                    Delete
-                                                </button>
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="p-1.5 bg-indigo-600 rounded-lg">
+                                                                <FileCog className="w-3.5 h-3.5 text-white" />
+                                                            </div>
+                                                            <div>
+                                                                <p className="text-xs font-bold text-indigo-800">
+                                                                    Assign Format
+                                                                </p>
+                                                                <p className="text-[10px] text-indigo-600">
+                                                                    Manuscript format
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex items-center gap-1">
+                                                            <ChevronRight className="w-3.5 h-3.5 text-indigo-600 group-hover/assign:translate-x-0.5 transition-transform" />
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Current format display */}
+                                                    <div className="mt-2 pt-2 border-t border-indigo-200">
+                                                        {subject.formatDetails ? (
+                                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                                                <FormatIcon className={`w-3 h-3 ${typeColors.icon} shrink-0`} />
+                                                                <span className={`text-[10px] font-semibold ${typeColors.text} truncate`}>
+                                                                    {subject.formatTitle}
+                                                                </span>
+                                                                {subject.formatType && (
+                                                                    <span className={`text-[9px] font-medium ${typeColors.bg} ${typeColors.text} px-1.5 py-0.5 rounded-full`}>
+                                                                        {subject.formatType}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        ) : (
+                                                            <div className="flex items-center gap-1.5">
+                                                                <span className="text-[10px] text-gray-400 italic">
+                                                                    No format assigned — click to assign
+                                                                </span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                {/* Action Buttons - SOLID Blue & Yellow */}
+                                                <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            openViewPage(subject);
+                                                        }}
+                                                        className="flex-1 py-1.5 text-xs font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                                                    >
+                                                        View
+                                                    </button>
+                                                    <button
+                                                        onClick={(e) => openEditModal(subject, e)}
+                                                        className="flex-1 py-1.5 text-xs font-medium text-yellow-600 hover:bg-yellow-50 rounded-lg transition"
+                                                    >
+                                                        Edit
+                                                    </button>
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleDeleteSubject(subject.id);
+                                                        }}
+                                                        className="flex-1 py-1.5 text-xs font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         ) : (
                             <div className="bg-white rounded-2xl border border-gray-200/80 shadow-sm py-16 text-center">
@@ -720,6 +885,196 @@ export default function SubjectManagement() {
                 )}
             </div>
 
+            {/* ==================== ASSIGN FORMAT POPUP MODAL ==================== */}
+            {isAssignFormatModalOpen && assignFormatSubject && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fadeIn">
+                    <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-gray-100 relative max-h-[90vh] overflow-y-auto">
+                        <button
+                            onClick={closeAssignFormatModal}
+                            className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition"
+                        >
+                            <X className="w-5 h-5" />
+                        </button>
+
+                        <div className="flex items-center gap-3 border-b border-gray-100 pb-3 mb-4">
+                            <span className="p-2 bg-indigo-100 text-indigo-600 rounded-xl">
+                                <FileCog className="w-5 h-5" />
+                            </span>
+                            <div>
+                                <h3 className="text-lg font-bold text-gray-900">Assign Manuscript Format</h3>
+                                <p className="text-xs text-gray-500">
+                                    Pumili ng format para sa "{assignFormatSubject.title}"
+                                </p>
+                            </div>
+                        </div>
+
+                        <form onSubmit={handleAssignFormatSubmit} className="space-y-4 text-sm">
+                            {/* Subject Info */}
+                            <div className="p-3 bg-gray-50 rounded-xl border border-gray-200">
+                                <div className="flex items-center gap-2">
+                                    <BookOpen className="w-4 h-4 text-blue-600" />
+                                    <span className="font-semibold text-gray-700">{assignFormatSubject.title}</span>
+                                </div>
+                            </div>
+
+                            {/* Search & Type Filter */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <div className="relative">
+                                    <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                                    <input
+                                        type="text"
+                                        placeholder="Search formats..."
+                                        value={assignFormatSearchTerm}
+                                        onChange={(e) => setAssignFormatSearchTerm(e.target.value)}
+                                        className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500"
+                                    />
+                                </div>
+                                <select
+                                    value={assignFormatTypeFilter}
+                                    onChange={(e) => setAssignFormatTypeFilter(e.target.value)}
+                                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-700 outline-none focus:ring-2 focus:ring-indigo-500"
+                                >
+                                    {formatTypes.map((type) => (
+                                        <option key={type} value={type}>
+                                            {type === 'All' ? 'All Types' : type}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* Format Selection List */}
+                            <div>
+                                <label className="block font-semibold text-gray-700 mb-2">
+                                    Pumili ng Manuscript Format *
+                                    <span className="ml-2 text-xs font-normal text-gray-500">
+                                        ({filteredAssignFormats.length} available)
+                                    </span>
+                                </label>
+
+                                {formats && formats.length > 0 ? (
+                                    filteredAssignFormats.length > 0 ? (
+                                        <div className="grid grid-cols-1 gap-2 max-h-64 overflow-y-auto pr-1">
+                                            {filteredAssignFormats.map((format) => {
+                                                const typeColors = getFormatTypeColor(format.type);
+                                                const FormatIcon = getFormatIcon(format.type);
+                                                const isSelected = assignSelectedFormatId === format._id;
+
+                                                return (
+                                                    <label
+                                                        key={format._id}
+                                                        className={`flex items-start gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                                                            isSelected
+                                                                ? `${typeColors.border} ${typeColors.bg} ring-2 ring-offset-1 ring-indigo-400`
+                                                                : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                                                        }`}
+                                                    >
+                                                        <input
+                                                            type="radio"
+                                                            name="assignFormatID"
+                                                            value={format._id}
+                                                            checked={isSelected}
+                                                            onChange={(e) => setAssignSelectedFormatId(e.target.value)}
+                                                            className="mt-0.5 w-4 h-4 text-indigo-600 focus:ring-indigo-500"
+                                                        />
+                                                        <div className={`p-1.5 ${typeColors.solid} rounded-lg shrink-0`}>
+                                                            <FormatIcon className="w-3.5 h-3.5 text-white" />
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="flex items-center gap-2 flex-wrap">
+                                                                <span className="font-semibold text-gray-800 text-xs">
+                                                                    {format.titleFormat}
+                                                                </span>
+                                                                {format.type && (
+                                                                    <span className={`text-[9px] font-medium ${typeColors.bg} ${typeColors.text} px-1.5 py-0.5 rounded-full`}>
+                                                                        {format.type}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            {format.description && (
+                                                                <p className="text-[10px] text-gray-500 mt-0.5 leading-tight line-clamp-2">
+                                                                    {format.description}
+                                                                </p>
+                                                            )}
+                                                            {format.fileUrl && (
+                                                                <a
+                                                                    href={format.fileUrl}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                    className="inline-flex items-center gap-1 text-[10px] text-indigo-600 hover:text-indigo-800 mt-1 font-medium"
+                                                                >
+                                                                    <ExternalLink className="w-2.5 h-2.5" />
+                                                                    View file
+                                                                </a>
+                                                            )}
+                                                        </div>
+                                                    </label>
+                                                );
+                                            })}
+                                        </div>
+                                    ) : (
+                                        <div className="py-8 text-center bg-gray-50 rounded-xl border border-gray-200">
+                                            <Search className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                                            <p className="text-xs text-gray-500">
+                                                Walang format na tumutugma sa iyong search.
+                                            </p>
+                                        </div>
+                                    )
+                                ) : (
+                                    <div className="py-8 text-center bg-gray-50 rounded-xl border border-gray-200">
+                                        <FileCog className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                                        <p className="text-xs text-gray-500">
+                                            Walang available na format. Mag-upload muna ng format.
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Current Format Info */}
+                            {assignFormatSubject.formatDetails && (
+                                <div className="p-3 bg-blue-50 rounded-xl border border-blue-100">
+                                    <p className="text-xs text-blue-700">
+                                        <span className="font-semibold">Kasalukuyang format:</span>{' '}
+                                        {assignFormatSubject.formatTitle}
+                                        {assignFormatSubject.formatType && (
+                                            <span className="ml-1">({assignFormatSubject.formatType})</span>
+                                        )}
+                                    </p>
+                                </div>
+                            )}
+
+                            {/* Actions */}
+                            <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">
+                                <button
+                                    type="button"
+                                    onClick={closeAssignFormatModal}
+                                    className="px-4 py-2 font-medium text-gray-600 hover:bg-gray-100 rounded-xl transition"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={isLoading || !assignSelectedFormatId}
+                                    className="flex items-center gap-2 px-5 py-2 font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {isLoading ? (
+                                        <>
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                            Assigning...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <FileCog className="w-4 h-4" />
+                                            Assign Format
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
             {/* Add Modal */}
             {isAddModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fadeIn">
@@ -774,7 +1129,7 @@ export default function SubjectManagement() {
                                 </button>
                             </div>
                         </form>
-                        </div>
+                    </div>
                 </div>
             )}
         </div>

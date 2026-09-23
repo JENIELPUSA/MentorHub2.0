@@ -90,7 +90,6 @@ exports.DisplaySubjects = AsyncErrorHandler(async (req, res) => {
 
     // 🔴 KUNG ADVISER
     if (role === "adviser") {
-        // STEP 1: Hanapin ang groups kung saan adviser/co-adviser si user
         const groups = await mongoose.model('Group').find({
             $or: [
                 { adviserId: userId },
@@ -99,7 +98,6 @@ exports.DisplaySubjects = AsyncErrorHandler(async (req, res) => {
         }).select('sectionId');
 
         const sectionIds = groups.map(g => g.sectionId);
-
         console.log("📚 Groups found:", groups.length);
         console.log("📚 Section IDs:", sectionIds);
 
@@ -114,13 +112,11 @@ exports.DisplaySubjects = AsyncErrorHandler(async (req, res) => {
             });
         }
 
-        // STEP 2: Hanapin ang sections gamit ang sectionIds, at kunin ang subjectIds
         const sections = await mongoose.model('Section').find({
             _id: { $in: sectionIds }
         }).select('subjectId');
 
         const subjectIds = sections.map(s => s.subjectId);
-
         console.log("📚 Sections found:", sections.length);
         console.log("📚 Subject IDs:", subjectIds);
 
@@ -135,7 +131,6 @@ exports.DisplaySubjects = AsyncErrorHandler(async (req, res) => {
             });
         }
 
-        // STEP 3: I-filter ang subjects gamit ang subjectIds
         matchStage._id = { $in: subjectIds };
 
     } else if (role !== "admin") {
@@ -153,6 +148,40 @@ exports.DisplaySubjects = AsyncErrorHandler(async (req, res) => {
     const result = await SubjectModel.aggregate([
         { $match: matchStage },
         { $sort: { createdAt: -1 } },
+
+        // ==========================================
+        // 🔗 JOIN FORMAT (formatID → Format)
+        // ==========================================
+        {
+            $lookup: {
+                from: "formats",
+                localField: "formatID",
+                foreignField: "_id",
+                as: "formatDetails"
+            }
+        },
+        {
+            $addFields: {
+                formatDetails: { $arrayElemAt: ["$formatDetails", 0] }
+            }
+        },
+
+        // ==========================================
+        // 🔗 JOIN FORMAT UPLOADER (formatDetails.uploadedBy → UserLogin)
+        // ==========================================
+        {
+            $lookup: {
+                from: "userlogins",
+                localField: "formatDetails.uploadedBy",
+                foreignField: "_id",
+                as: "formatUploaderDetails"
+            }
+        },
+        {
+            $addFields: {
+                "formatDetails.uploadedBy": { $arrayElemAt: ["$formatUploaderDetails", 0] }
+            }
+        },
 
         // 🔗 JOIN SECTION (subjectId → Section)
         {
@@ -248,6 +277,7 @@ exports.DisplaySubjects = AsyncErrorHandler(async (req, res) => {
         {
             $project: {
                 createdByDetails: 0,
+                formatUploaderDetails: 0,
                 "createdBy.password": 0,
                 "createdBy.confirmPassword": 0,
                 "createdBy.passwordResetToken": 0,
@@ -265,7 +295,14 @@ exports.DisplaySubjects = AsyncErrorHandler(async (req, res) => {
                 "coadviserDetails.passwordResetToken": 0,
                 "coadviserDetails.passwordResetTokenExpires": 0,
                 "coadviserDetails.__v": 0,
-                "coadviserDetails.passwordChangedAt": 0
+                "coadviserDetails.passwordChangedAt": 0,
+                // 🔒 Remove sensitive data from format uploader
+                "formatDetails.uploadedBy.password": 0,
+                "formatDetails.uploadedBy.confirmPassword": 0,
+                "formatDetails.uploadedBy.passwordResetToken": 0,
+                "formatDetails.uploadedBy.passwordResetTokenExpires": 0,
+                "formatDetails.uploadedBy.__v": 0,
+                "formatDetails.uploadedBy.passwordChangedAt": 0
             }
         },
 
@@ -281,6 +318,8 @@ exports.DisplaySubjects = AsyncErrorHandler(async (req, res) => {
                             title: 1,
                             description: 1,
                             createdBy: 1,
+                            formatID: 1,
+                            formatDetails: 1,
                             createdAt: 1,
                             updatedAt: 1,
                             sectionDetails: 1,
@@ -367,49 +406,53 @@ exports.getSingleSubject = AsyncErrorHandler(async (req, res) => {
 // UPDATE SUBJECT
 // ==========================================
 exports.updateSubject = AsyncErrorHandler(async (req, res) => {
-    const { title } = req.body;
-    const userId = req.user._id;
+    const { title, formatID } = req.body;
 
-    console.log("Update Subject Called:", req.body);
-
-    const existingSubject = await SubjectModel.findOne({
-        _id: req.params.id,
-        createdBy: userId
-    });
-
+    const existingSubject = await SubjectModel.findById(req.params.id);
     if (!existingSubject) {
         return res.status(404).json({
             status: "fail",
-            message: "Subject not found or you don't have permission",
+            message: "Subject not found",
         });
     }
 
+    // Check if title already exists (if changing)
     if (title && title !== existingSubject.title) {
         const titleExists = await SubjectModel.findOne({
             title,
-            createdBy: userId,
             _id: { $ne: req.params.id }
         });
-
         if (titleExists) {
             return res.status(400).json({
                 status: "fail",
-                message: "You already have a subject with this title",
+                message: "A subject with this title already exists",
             });
         }
     }
 
     const subject = await SubjectModel.findByIdAndUpdate(
         req.params.id,
-        { title },
+        {
+            title,
+            formatID,
+        },
         {
             new: true,
             runValidators: true,
         }
     );
 
+    // Populate the updated subject
     const populatedResult = await SubjectModel.aggregate([
         { $match: { _id: subject._id } },
+        {
+            $lookup: {
+                from: "formats",
+                localField: "formatID",
+                foreignField: "_id",
+                as: "formatDetails"
+            }
+        },
         {
             $lookup: {
                 from: "userloginschemas",
@@ -420,11 +463,13 @@ exports.updateSubject = AsyncErrorHandler(async (req, res) => {
         },
         {
             $addFields: {
+                formatID: { $arrayElemAt: ["$formatDetails", 0] },
                 createdBy: { $arrayElemAt: ["$createdByDetails", 0] }
             }
         },
         {
             $project: {
+                formatDetails: 0,
                 createdByDetails: 0,
                 "createdBy.password": 0,
                 "createdBy.confirmPassword": 0,

@@ -23,9 +23,7 @@ export const StatisticalProvider = ({ children }) => {
             setError(null);
 
             const res = await axios.get(`${BASE_URL}/api/v1/statistical`, {
-                headers: {
-                    Authorization: `Bearer ${authToken}`
-                }
+                headers: { Authorization: `Bearer ${authToken}` }
             });
 
             if (res.data?.status === "success") {
@@ -35,13 +33,23 @@ export const StatisticalProvider = ({ children }) => {
 
             return { success: false };
         } catch (error) {
-            const errorMessage = error.response?.data?.message || "Error fetching dashboard statistics";
+            // ⭐ Mas detalyadong error log
+            console.error("❌ Fetch Dashboard Statistics Error:", {
+                status: error.response?.status,
+                url: error.config?.url,
+                message: error.response?.data?.message,
+                error: error.response?.data?.error,
+                full: error.response?.data,
+            });
+
+            const errorMessage =
+                error.response?.data?.message ||
+                error.response?.data?.error ||
+                error.message ||
+                "Error fetching dashboard statistics";
+
             setError(errorMessage);
-            console.error("Fetch Dashboard Statistics Error:", error);
-            return {
-                success: false,
-                error: errorMessage,
-            };
+            return { success: false, error: errorMessage };
         } finally {
             setIsLoading(false);
         }
@@ -81,35 +89,35 @@ export const StatisticalProvider = ({ children }) => {
     }, [BASE_URL, authToken]);
 
 
- const fetchAdminStatistical = useCallback(async () => {
-    try {
-        setIsLoading(true);
-        setError(null);
+    const fetchAdminStatistical = useCallback(async () => {
+        try {
+            setIsLoading(true);
+            setError(null);
 
-        const res = await axios.get(`${BASE_URL}/api/v1/statistical/Admin_Statistical`, {
-            headers: {
-                Authorization: `Bearer ${authToken}`
+            const res = await axios.get(`${BASE_URL}/api/v1/statistical/Admin_Statistical`, {
+                headers: {
+                    Authorization: `Bearer ${authToken}`
+                }
+            });
+
+            if (res.data?.success === true) {
+                setAdmindata(res.data.data);
+                return { success: true, data: res.data.data };
             }
-        });
 
-        if (res.data?.success === true) {
-            setAdmindata(res.data.data);
-            return { success: true, data: res.data.data };
+            return { success: false };
+        } catch (error) {
+            const errorMessage = error.response?.data?.message || "Error fetching dashboard statistics";
+            setError(errorMessage);
+            console.error("Fetch Dashboard Statistics Error:", error);
+            return {
+                success: false,
+                error: errorMessage,
+            };
+        } finally {
+            setIsLoading(false);
         }
-
-        return { success: false };
-    } catch (error) {
-        const errorMessage = error.response?.data?.message || "Error fetching dashboard statistics";
-        setError(errorMessage);
-        console.error("Fetch Dashboard Statistics Error:", error);
-        return {
-            success: false,
-            error: errorMessage,
-        };
-    } finally {
-        setIsLoading(false);
-    }
-}, [BASE_URL, authToken]);
+    }, [BASE_URL, authToken]);
 
     // ==========================================
     // REFRESH DASHBOARD DATA
@@ -135,7 +143,7 @@ export const StatisticalProvider = ({ children }) => {
             fetchAdviserStatistics();
             fetchAdminStatistical();
         }
-    }, [fetchDashboardStatistics,fetchAdminStatistical, authToken]);
+    }, [fetchDashboardStatistics, fetchAdminStatistical, authToken]);
 
     // ==========================================
     // CONTEXT PROVIDER

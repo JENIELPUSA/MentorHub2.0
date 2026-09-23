@@ -19,6 +19,7 @@ const StatisticalRoute = require("./Routes/statisticalRoute")
 const Notification = require("./Routes/NotificationRoute")
 const Comment = require("./Routes/CommentRoute")
 const Schedule = require("./Routes/scheduleRoute")
+const FormatRoute = require("./Routes/FormatRoute")
 
 let app = express();
 
@@ -77,7 +78,7 @@ app.use("/api/v1/statistical", StatisticalRoute)
 app.use("/api/v1/notifications", Notification)
 app.use("/api/v1/comments", Comment)
 app.use("/api/v1/schedule", Schedule)
-
+app.use("/api/v1/formats", FormatRoute)
 app.use(ErrorController);
 
 module.exports = app;

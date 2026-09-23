@@ -6,6 +6,8 @@ exports.createComment = AsyncErrorHandler(async (req, res) => {
     const { proposedTitleId, text } = req.body;
     const userId = req.user._id;
 
+    console.log("proposedTitleId",proposedTitleId)
+
     // proposedTitleId dito ay titleUrlTracking._id
     const proposedTitle = await ProposedTitle.findOne({
         "titleUrlTracking._id": proposedTitleId

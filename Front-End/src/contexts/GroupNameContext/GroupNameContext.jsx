@@ -186,6 +186,8 @@ export const GroupProvider = ({ children }) => {
                 const usersData = res.data.referredUsers || [];
                 const count = res.data.userCount || 0;
 
+                console.log("groupData",groupData)
+
                 setGroupDetails(groupData);
                 setReferredUsers(usersData);
                 setUserCount(count);

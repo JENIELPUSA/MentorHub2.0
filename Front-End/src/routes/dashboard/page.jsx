@@ -14,6 +14,8 @@ const DashboardPage = () => {
     const { role } = useContext(AuthContext);
     const { theme } = useTheme();
 
+    console.log("role",role)
+
     // If role is student, render UserDashboard
     if (role === 'student') {
         return <UserDashboard />;

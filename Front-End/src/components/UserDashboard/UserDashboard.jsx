@@ -40,7 +40,9 @@ import {
     Shield,
     User,
     BadgeCheck,
-    UserCircle
+    UserCircle,
+    PieChart as PieChartIcon,
+    TrendingUp
 } from 'lucide-react';
 import { ProposedTitleContext } from '../../contexts/ProposedTitleContext/ProposedTitleContext';
 import { AuthContext } from '../../contexts/AuthContext';
@@ -52,7 +54,8 @@ import UserDashboardBanner from './components/UserDashboardBanner';
 import ProposedTitleSection from './components/ProposedTitleSection';
 import ReferredUsersList from './components/ReferredUsersList';
 import ClassShareLink from './components/ClassShareLink';
-import StatCards from './components/StatCards'; // <-- Import StatCards
+import StatCards from './components/StatCards';
+import FormatDetailsCard from './components/FormatDetailsCard';
 
 // ============================
 // HELPER FUNCTIONS
@@ -115,6 +118,125 @@ const getAdviserStatusDisplay = (status, type) => {
 };
 
 // ============================
+// PIE CHART COMPONENT (Pure SVG — no external library needed)
+// ============================
+const PieChart = ({ data, size = 180, thickness = 40, title, subtitle }) => {
+    const total = data.reduce((sum, d) => sum + d.value, 0) || 1;
+    const radius = (size - thickness) / 2;
+    const center = size / 2;
+    const circumference = 2 * Math.PI * radius;
+
+    let cumulativePercent = 0;
+
+    const segments = data.map((d, i) => {
+        const percent = d.value / total;
+        const dashArray = `${percent * circumference} ${circumference}`;
+        const dashOffset = -cumulativePercent * circumference;
+        cumulativePercent += percent;
+
+        return {
+            ...d,
+            percent,
+            dashArray,
+            dashOffset,
+            key: i
+        };
+    });
+
+    return (
+        <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm">
+            {/* Header */}
+            <div className="flex items-center gap-2 mb-4">
+                <div className="p-2 bg-blue-100 dark:bg-blue-900/40 rounded-lg">
+                    <PieChartIcon className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                        {title || 'Proposed Titles Overview'}
+                    </h3>
+                    {subtitle && (
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400">{subtitle}</p>
+                    )}
+                </div>
+            </div>
+
+            {/* Chart + Legend */}
+            <div className="flex flex-col sm:flex-row items-center gap-4">
+                {/* SVG Donut */}
+                <div className="relative shrink-0" style={{ width: size, height: size }}>
+                    <svg width={size} height={size} className="-rotate-90">
+                        {/* Background ring */}
+                        <circle
+                            cx={center}
+                            cy={center}
+                            r={radius}
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth={thickness}
+                            className="text-slate-100 dark:text-slate-700"
+                        />
+                        {/* Data segments */}
+                        {segments.map((seg) => (
+                            <circle
+                                key={seg.key}
+                                cx={center}
+                                cy={center}
+                                r={radius}
+                                fill="none"
+                                stroke={seg.color}
+                                strokeWidth={thickness}
+                                strokeDasharray={seg.dashArray}
+                                strokeDashoffset={seg.dashOffset}
+                                strokeLinecap="butt"
+                                className="transition-all duration-700 ease-out"
+                            />
+                        ))}
+                    </svg>
+
+                    {/* Center label */}
+                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                        <span className="text-2xl font-extrabold text-slate-900 dark:text-white">
+                            {total}
+                        </span>
+                        <span className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">
+                            Total
+                        </span>
+                    </div>
+                </div>
+
+                {/* Legend */}
+                <div className="flex-1 w-full space-y-2">
+                    {segments.map((seg) => (
+                        <div
+                            key={seg.key}
+                            className="flex items-center justify-between gap-2 text-xs"
+                        >
+                            <div className="flex items-center gap-2 min-w-0">
+                                <span
+                                    className="w-3 h-3 rounded-sm shrink-0"
+                                    style={{ backgroundColor: seg.color }}
+                                />
+                                <span className="text-slate-700 dark:text-slate-300 truncate font-medium">
+                                    {seg.label}
+                                </span>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                                <span className="font-bold text-slate-900 dark:text-white">
+                                    {seg.value}
+                                </span>
+                                <span className="text-slate-400 text-[10px] w-10 text-right">
+                                    {Math.round(seg.percent * 100)}%
+                                </span>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ============================
 // MAIN COMPONENT
 // ============================
 export default function UserDashboard() {
@@ -137,9 +259,7 @@ export default function UserDashboard() {
     const { advisers, advisersLoading } = useContext(UserDisplayContext);
     const { getGroupDetails, groupDetails, referralUrl, assignAdviserAndCoAdviser } = useContext(GroupContext);
 
-
-    console.log("advisers", advisers)
-
+    console.log("groupDetails", groupDetails)
 
     // ============================
     // STATE
@@ -255,6 +375,60 @@ export default function UserDashboard() {
             status: "loading"
         };
     }, [groupDetails]);
+
+    // ============================
+    // PIE CHART DATA (Dynamic from proposedTitles)
+    // ============================
+    const pieChartData = useMemo(() => {
+        const counts = {
+            Approved: 0,
+            Pending: 0,
+            Revision: 0,
+            Rejected: 0,
+            Draft: 0
+        };
+
+        proposedTitles?.forEach(t => {
+            const status = t.status || 'Pending';
+            if (counts[status] !== undefined) {
+                counts[status]++;
+            } else {
+                counts.Pending++;
+            }
+        });
+
+        // If no titles yet, show sample placeholder data
+        const hasData = Object.values(counts).some(v => v > 0);
+
+        if (!hasData) {
+            return [
+                { label: 'Approved', value: 3, color: '#10b981' },
+                { label: 'Pending', value: 5, color: '#f59e0b' },
+                { label: 'Revision', value: 2, color: '#3b82f6' },
+                { label: 'Rejected', value: 1, color: '#ef4444' }
+            ];
+        }
+
+        return [
+            { label: 'Approved', value: counts.Approved, color: '#10b981' },
+            { label: 'Pending', value: counts.Pending, color: '#f59e0b' },
+            { label: 'Revision', value: counts.Revision, color: '#3b82f6' },
+            { label: 'Rejected', value: counts.Rejected, color: '#ef4444' }
+        ].filter(d => d.value > 0);
+    }, [proposedTitles]);
+
+    // ============================
+    // RESOLVE FORMAT DETAILS (with fallback)
+    // ============================
+    const resolvedFormatDetails = useMemo(() => {
+        const fromSection = displayData?.group?.section?.formatDetails;
+        const fromGroup = displayData?.group?.formatDetails;
+        const resolved = fromSection || fromGroup || null;
+        console.log("🎨 [FormatDetails] fromSection:", fromSection);
+        console.log("🎨 [FormatDetails] fromGroup:", fromGroup);
+        console.log("🎨 [FormatDetails] resolved:", resolved);
+        return resolved;
+    }, [displayData]);
 
     const filteredUsers = useMemo(() => {
         const q = searchQuery.toLowerCase().trim();
@@ -797,6 +971,51 @@ export default function UserDashboard() {
         }
     };
 
+    // ============================
+    // FORMAT FILE HANDLERS
+    // ============================
+    const handleViewFormatFile = (url, title, fileName) => {
+        if (!url) {
+            triggerToast('File not found', 'error');
+            return;
+        }
+        setFileViewModal({
+            open: true,
+            url: url,
+            title: title || 'Format Document',
+            fileName: fileName || 'document.pdf'
+        });
+    };
+
+    const handleDownloadFormatFile = (url) => {
+        if (!url) {
+            triggerToast('File not found', 'error');
+            return;
+        }
+
+        try {
+            let fileUrl = url;
+            if (fileUrl.includes('/image/upload/')) {
+                fileUrl = fileUrl.replace('/image/upload/', '/raw/upload/');
+            }
+            if (fileUrl.includes('/upload/')) {
+                fileUrl = fileUrl.replace('/upload/', '/upload/fl_attachment/');
+            }
+
+            const filename = getFileNameFromUrl(url);
+            const link = document.createElement('a');
+            link.href = fileUrl;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            triggerToast(`Downloading: ${filename}`);
+        } catch (error) {
+            console.error('Error downloading format file:', error);
+            triggerToast('Failed to download file', 'error');
+        }
+    };
+
 
     // ============================
     // RENDER - GET ADVISER DISPLAY
@@ -1047,7 +1266,7 @@ export default function UserDashboard() {
                     advisersLoading={advisersLoading}
                 />
 
-                {/* STAT CARDS - GAMIT ANG SEPARATE COMPONENT */}
+                {/* STAT CARDS (FULL WIDTH) */}
                 <StatCards
                     userCount={displayData.userCount}
                     referralCode={displayData.group.referralCode}
@@ -1059,50 +1278,69 @@ export default function UserDashboard() {
                     onViewQR={() => setShowQrModal(true)}
                 />
 
-                {/* PROPOSED TITLE SECTION */}
-                <ProposedTitleSection
-                    proposedTitles={proposedTitles}
-                    totalProposedTitles={totalProposedTitles}
-                    isLoading={isLoading}
-                    handleRevisionSubmit={handleRevisionSubmit}
-                    approvedTitle={approvedTitle}
-                    formState={formState}
-                    setFormState={setFormState}
-                    uploading={uploading}
-                    handleFormSubmit={handleFormSubmit}
-                    handleResetForm={handleResetForm}
-                    updateTitleStatus={updateTitleStatus}
-                    handleDelete={handleDelete}
-                    handleViewFile={handleViewFile}
-                    handleDownloadFile={handleDownloadFile}
-                    getUserNameById={getUserNameById}
-                    formatDate={formatDate}
-                />
+                {/* ============================================
+                    LEFT: PIE CHART + FORMAT DETAILS + CLASS SHARE LINK (stacked)
+                    RIGHT: PROPOSED TITLE SECTION (wider)
+                   ============================================ */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
 
-                {/* REFERRED USERS + CLASS SHARE LINK */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* LEFT COLUMN (1/3 width) — Pie Chart + Format Details + Class Share Link */}
+                    <div className="lg:col-span-1 space-y-6">
 
-                    {/* REFERRED USERS */}
-                    <div className="lg:col-span-2 space-y-6">
-                        <ReferredUsersList
-                            displayData={displayData}
-                            searchQuery={searchQuery}
-                            setSearchQuery={setSearchQuery}
-                            filteredUsers={filteredUsers}
-                            formatDate={formatDate}
-                            onViewUser={handleViewUser}
+                        {/* 🥧 SAMPLE PIE CHART — nasa TAAS ng Format Details */}
+                        <PieChart
+                            data={pieChartData}
+                            size={180}
+                            thickness={40}
+                            title="Proposed Titles Overview"
+                            subtitle="Status distribution ng iyong titles"
                         />
-                    </div>
 
-                    {/* CLASS SHARE LINK ONLY */}
-                    <div className="space-y-6">
+                        <FormatDetailsCard
+                            formatDetails={displayData.group.section.subject.formatDetails}
+                            onViewFile={handleViewFormatFile}
+                            onDownloadFile={handleDownloadFormatFile}
+                        />
+
                         <ClassShareLink
                             referralUrl={referralUrl}
                             referralCode={displayData.group.referralCode}
                             onCopy={copyToClipboard}
                         />
                     </div>
+
+                    {/* RIGHT COLUMN (2/3 width - MAS MALAPAD) — Proposed Title Section */}
+                    <div id="proposed-title-section" className="lg:col-span-2">
+                        <ProposedTitleSection
+                            proposedTitles={proposedTitles}
+                            totalProposedTitles={totalProposedTitles}
+                            isLoading={isLoading}
+                            handleRevisionSubmit={handleRevisionSubmit}
+                            approvedTitle={approvedTitle}
+                            formState={formState}
+                            setFormState={setFormState}
+                            uploading={uploading}
+                            handleFormSubmit={handleFormSubmit}
+                            handleResetForm={handleResetForm}
+                            updateTitleStatus={updateTitleStatus}
+                            handleDelete={handleDelete}
+                            handleViewFile={handleViewFile}
+                            handleDownloadFile={handleDownloadFile}
+                            getUserNameById={getUserNameById}
+                            formatDate={formatDate}
+                        />
+                    </div>
                 </div>
+
+                {/* REFERRED USERS (FULL WIDTH) */}
+                <ReferredUsersList
+                    displayData={displayData}
+                    searchQuery={searchQuery}
+                    setSearchQuery={setSearchQuery}
+                    filteredUsers={filteredUsers}
+                    formatDate={formatDate}
+                    onViewUser={handleViewUser}
+                />
 
             </main>
 
