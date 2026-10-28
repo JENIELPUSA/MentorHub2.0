@@ -292,20 +292,12 @@ exports.DisplayGroups = AsyncErrorHandler(async (req, res) => {
 exports.getSingleGroup = AsyncErrorHandler(async (req, res) => {
     try {
         const { referredBy } = req.params;
-
-        console.log("========================================");
-        console.log("GET SINGLE GROUP");
-        console.log("========================================");
-        console.log("Request referredBy:", referredBy);
-
         // ==========================================
         // 1. GET ALL USERS WITH SAME referredBy
         // ==========================================
         const users = await UserLoginSchema.find({
             referredBy: referredBy
         }).lean();
-
-        console.log("Users found:", users.length);
 
         if (!users || users.length === 0) {
             return res.status(404).json({
@@ -322,8 +314,6 @@ exports.getSingleGroup = AsyncErrorHandler(async (req, res) => {
         // we only need to get it from one user.
         const referralCode = users[0].referredBy;
 
-        console.log("Referral Code from User:", referralCode);
-
         // ==========================================
         // 3. FIND GROUP USING referralCode
         // ==========================================
@@ -331,18 +321,11 @@ exports.getSingleGroup = AsyncErrorHandler(async (req, res) => {
             referralCode: referralCode
         }).lean();
 
-        console.log("Matched Group:", group);
-
         // ==========================================
         // 4. GET GROUP ID
         // ==========================================
         const groupId = group?._id || null;
 
-        console.log("Matched Group ID:", groupId);
-
-        // ==========================================
-        // 5. FIND PROPOSED TITLE USING GROUP ID
-        // ==========================================
         let proposedTitles = [];
 
         if (groupId) {
@@ -351,15 +334,6 @@ exports.getSingleGroup = AsyncErrorHandler(async (req, res) => {
             }).lean();
         }
 
-        console.log(
-            "Matched ProposedTitle count:",
-            proposedTitles.length
-        );
-
-        console.log(
-            "Matched ProposedTitles:",
-            proposedTitles
-        );
 
         // ==========================================
         // 6. FORMAT USERS
@@ -378,6 +352,9 @@ exports.getSingleGroup = AsyncErrorHandler(async (req, res) => {
             createdAt: user.createdAt,
             updatedAt: user.updatedAt
         }));
+
+
+        console.log("formattedUsers",formattedUsers)
 
         // ==========================================
         // 7. RESPONSE
@@ -606,8 +583,6 @@ exports.getgroupdetails = AsyncErrorHandler(async (req, res) => {
     });
 });
 
-
-
 // ==========================================
 // UPDATE GROUP
 // ==========================================
@@ -740,8 +715,117 @@ exports.updateGroup = AsyncErrorHandler(async (req, res) => {
 });
 
 
+exports.Approved_and_Reject = AsyncErrorHandler(async (req, res) => {
+    try {
+        const { referralCode } = req.params;
+        const { status } = req.body;
+        const userId = req.user?._id;
 
+        // Validate userId
+        if (!userId) {
+            return res.status(400).json({
+                status: "fail",
+                message: "userId is required.",
+            });
+        }
 
+        // Validate status
+        if (!status) {
+            return res.status(400).json({
+                status: "fail",
+                message: "Status is required.",
+            });
+        }
+
+        if (!["confirm", "rejected"].includes(status)) {
+            return res.status(400).json({
+                status: "fail",
+                message: "Status must be either confirm or rejected.",
+            });
+        }
+
+        // Validate referralCode
+        if (!referralCode || !referralCode.trim()) {
+            return res.status(400).json({
+                status: "fail",
+                message: "Referral code is required.",
+            });
+        }
+
+        // Find group
+        const existingGroup = await GroupModel.findOne({
+            referralCode: referralCode.toUpperCase().trim(),
+        });
+
+        if (!existingGroup) {
+            return res.status(404).json({
+                status: "fail",
+                message: "Group not found.",
+            });
+        }
+
+        // Adviser
+        if (
+            existingGroup.adviserId &&
+            existingGroup.adviserId.toString() === userId.toString()
+        ) {
+            existingGroup.adviserStatus = status;
+
+            await existingGroup.save();
+
+            return res.status(200).json({
+                status: "success",
+                message: `Adviser status successfully updated to ${status}.`,
+                data: {
+                    groupId: existingGroup._id,
+                    referralCode: existingGroup.referralCode,
+                    userId,
+                    role: "adviser",
+                    adviserStatus: existingGroup.adviserStatus,
+                    coadviserStatus: existingGroup.coadviserStatus,
+                },
+            });
+        }
+
+        // Co-adviser
+        if (
+            existingGroup.coadviserId &&
+            existingGroup.coadviserId.toString() === userId.toString()
+        ) {
+            existingGroup.coadviserStatus = status;
+
+            await existingGroup.save();
+
+            return res.status(200).json({
+                status: "success",
+                message: `Co-adviser status successfully updated to ${status}.`,
+                data: {
+                    groupId: existingGroup._id,
+                    referralCode: existingGroup.referralCode,
+                    userId,
+                    role: "co-adviser",
+                    adviserStatus: existingGroup.adviserStatus,
+                    coadviserStatus: existingGroup.coadviserStatus,
+                },
+            });
+        }
+
+        // User is neither adviser nor co-adviser
+        return res.status(403).json({
+            status: "fail",
+            message:
+                "The provided userId is not the adviser or co-adviser of this group.",
+        });
+    } catch (error) {
+        console.error("Error in Approved_and_Reject:", error);
+
+        return res.status(500).json({
+            status: "error",
+            message: "An error occurred while updating the group status.",
+            error: error.message,
+        });
+    }
+});
 
 exports.AssignAdviserandCoAdviser = AsyncErrorHandler(async (req, res) => {
     const { adviserId, coadviserId } = req.body;

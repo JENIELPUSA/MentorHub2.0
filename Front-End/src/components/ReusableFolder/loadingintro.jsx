@@ -3,7 +3,7 @@ import { Archive } from "lucide-react"; // Use a file-related icon
 
 const loadingintro = () => {
   return (
-    <div className="fixed top-0 left-0 right-0 bottom-0 bg-black flex items-center justify-center z-50">
+    <div className="fixed top-0 left-0 right-0 bottom-0 bg-black flex items-center justify-center z-[999]">
       <div className="flex flex-col items-center justify-center space-y-8 text-white">
         {/* Archive Icon Animation */}
         <motion.div

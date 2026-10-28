@@ -1,4 +1,12 @@
-import { createContext, useState, useCallback, useEffect, useMemo, useContext, useRef } from "react";
+import {
+    createContext,
+    useState,
+    useCallback,
+    useEffect,
+    useMemo,
+    useContext,
+    useRef,
+} from "react";
 import axios from "axios";
 import { AuthContext } from "../AuthContext";
 
@@ -7,12 +15,12 @@ export const ScheduleContext = createContext();
 export const ScheduleProvider = ({ children }) => {
     const [customError, setCustomError] = useState("");
     const { authToken } = useContext(AuthContext);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);
 
     // ====== SCHEDULE LIST STATE ======
     const [schedules, setSchedules] = useState([]);
     const [totalCount, setTotalCount] = useState(0);
-    const [totalPages, setTotalPages] = useState(0);
+    const [totalPages, setTotalPages] = useState(1);
     const [currentPage, setCurrentPage] = useState(1);
     const [rowsPerPage, setRowsPerPage] = useState(10);
 
@@ -28,7 +36,10 @@ export const ScheduleProvider = ({ children }) => {
     const [schedulesByDate, setSchedulesByDate] = useState([]);
     const [upcomingSchedules, setUpcomingSchedules] = useState([]);
 
-    // Use ref to prevent infinite loops
+    // ====== PANELIST STATUS STATE ======
+    const [panelistSummary, setPanelistSummary] = useState(null);
+
+    // ====== REFS ======
     const isInitialMount = useRef(true);
     const fetchInProgress = useRef(false);
 
@@ -36,598 +47,942 @@ export const ScheduleProvider = ({ children }) => {
     const scheduleUrl = `${BASE_URL}/api/v1/schedule`;
 
     // ==========================================
-    // FETCH SCHEDULES - FIXED
+    // HELPER: Build axios config
     // ==========================================
-    const fetchSchedules = useCallback(async (params = {}) => {
-        if (fetchInProgress.current) {
-            console.log("⏳ Fetch already in progress, skipping...");
-            return;
-        }
+    const axiosConfig = useCallback(
+        (withJson = false) => ({
+            withCredentials: true,
+            headers: {
+                Authorization: `Bearer ${authToken}`,
+                ...(withJson && { "Content-Type": "application/json" }),
+            },
+        }),
+        [authToken]
+    );
 
-        if (!authToken) {
-            console.log("❌ No authToken, skipping fetch");
-            return;
-        }
+    // ==========================================
+    // HELPER: Normalize error response
+    // ==========================================
+    const normalizeError = (error, fallback = "Something went wrong") => {
+        const status = error.response?.status;
+        const message = error.response?.data?.message || error.message || fallback;
+        return {
+            success: false,
+            error: message,
+            status,
+            conflictWith: error.response?.data?.conflictWith || null,
+        };
+    };
 
-        fetchInProgress.current = true;
+    // ==========================================
+    // FETCH SCHEDULES
+    // ==========================================
+    const fetchSchedules = useCallback(
+        async (params = {}) => {
+            if (!authToken) return { success: false, error: "No auth token" };
+            if (fetchInProgress.current) {
+                console.log("⏳ Fetch already in progress, skipping...");
+                return { success: false, error: "Fetch in progress" };
+            }
 
-        try {
-            setLoading(true);
-            setCustomError("");
+            fetchInProgress.current = true;
 
-            const page = params.page || 1;
-            const limit = params.limit || 10;
-            const search = params.search || "";
-            const date = params.date || "";
-            const groupId = params.groupId || "";
-            const panelistId = params.panelistId || "";
-            const status = params.status || "";
+            try {
+                setLoading(true);
+                setCustomError("");
 
-            const queryParams = new URLSearchParams({
-                page: page.toString(),
-                limit: limit.toString(),
-            });
+                const page = params.page ?? currentPage;
+                const limit = params.limit ?? rowsPerPage;
+                const search = params.search ?? searchQuery;
+                const date = params.date ?? dateFilter;
+                const groupId = params.groupId ?? groupFilter;
+                const panelistId = params.panelistId ?? panelistFilter;
+                const status = params.status ?? statusFilter;
 
-            if (search) queryParams.append("search", search);
-            if (date) queryParams.append("date", date);
-            if (groupId && groupId !== "All") queryParams.append("groupId", groupId);
-            if (panelistId && panelistId !== "All") queryParams.append("panelistId", panelistId);
-            if (status && status !== "All") queryParams.append("status", status);
+                const queryParams = new URLSearchParams({
+                    page: String(page),
+                    limit: String(limit),
+                });
 
-            const fullUrl = `${scheduleUrl}?${queryParams}`;
-            console.log("🔗 FULL URL:", fullUrl);
+                if (search) queryParams.append("search", search);
+                if (date) queryParams.append("date", date);
+                if (groupId && groupId !== "All")
+                    queryParams.append("groupId", groupId);
+                if (panelistId && panelistId !== "All")
+                    queryParams.append("panelistId", panelistId);
+                if (status && status !== "All")
+                    queryParams.append("status", status);
 
-            const res = await axios.get(fullUrl, {
-                withCredentials: true,
-                headers: {
-                    Authorization: `Bearer ${authToken}`,
-                    "Cache-Control": "no-cache",
-                },
-            });
+                const fullUrl = `${scheduleUrl}?${queryParams}`;
+                console.log("🔗 FULL URL:", fullUrl);
 
-            console.log("📊 Response Data:", res.data);
+                const res = await axios.get(fullUrl, axiosConfig());
 
-            if (res.data?.status === "Success" || res.data?.status === "success") {
-                setSchedules(res.data.data || []);
-                setTotalCount(res.data.totalCount || res.data.results || 0);
-                setTotalPages(res.data.totalPages || 1);
-                setCurrentPage(res.data.currentPage || page);
+                if (
+                    res.data?.status === "Success" ||
+                    res.data?.status === "success"
+                ) {
+                    const data = res.data.data || [];
+                    setSchedules(data);
 
-                if (params.limit && params.limit !== rowsPerPage) {
-                    setRowsPerPage(params.limit);
+                    // 🔧 Backend walang pagination — i-compute sa client side
+                    const backendTotal = res.data.totalCount ?? res.data.results;
+                    if (typeof backendTotal === "number") {
+                        setTotalCount(backendTotal);
+                        setTotalPages(Math.max(1, Math.ceil(backendTotal / limit)));
+                    } else {
+                        // Walang total from backend — treat current array as full
+                        setTotalCount(data.length);
+                        setTotalPages(Math.max(1, Math.ceil(data.length / limit)));
+                    }
+                    setCurrentPage(page);
+                    setRowsPerPage(limit);
+
+                    // Update filter state (para consistent)
+                    setSearchQuery(search);
+                    setDateFilter(date);
+                    setGroupFilter(groupId);
+                    setPanelistFilter(panelistId);
+                    setStatusFilter(status);
+
+                    return { success: true, data };
                 }
-                if (params.search !== undefined) setSearchQuery(params.search);
-                if (params.date !== undefined) setDateFilter(params.date);
-                if (params.groupId !== undefined) setGroupFilter(params.groupId);
-                if (params.panelistId !== undefined) setPanelistFilter(params.panelistId);
-                if (params.status !== undefined) setStatusFilter(params.status);
-            } else {
-                console.log("❌ Response status not success");
+
                 setCustomError(res.data?.message || "Failed to fetch schedules");
                 setSchedules([]);
+                return {
+                    success: false,
+                    error: res.data?.message || "Failed to fetch schedules",
+                };
+            } catch (error) {
+                console.error("❌ Fetch Schedules Error:", error);
+                const err = normalizeError(error, "Error fetching schedules");
+                setCustomError(err.error);
+                setSchedules([]);
+                return err;
+            } finally {
+                setLoading(false);
+                fetchInProgress.current = false;
             }
-        } catch (error) {
-            console.error("❌ Fetch Schedules Error:", error);
-            setCustomError(error.response?.data?.message || "Error fetching schedules");
-            setSchedules([]);
-        } finally {
-            setLoading(false);
-            fetchInProgress.current = false;
-        }
-    }, [authToken, rowsPerPage, scheduleUrl]);
+        },
+        [
+            authToken,
+            scheduleUrl,
+            axiosConfig,
+            currentPage,
+            rowsPerPage,
+            searchQuery,
+            dateFilter,
+            groupFilter,
+            panelistFilter,
+            statusFilter,
+        ]
+    );
 
     // ==========================================
     // GET SCHEDULE BY ID
     // ==========================================
-    const getScheduleById = useCallback(async (id) => {
-        if (!authToken) return { success: false, error: "No authentication token" };
-        if (!id) return { success: false, error: "Schedule ID is required" };
+    const getScheduleById = useCallback(
+        async (id) => {
+            if (!authToken) return { success: false, error: "No auth token" };
+            if (!id) return { success: false, error: "Schedule ID is required" };
 
-        try {
-            setLoading(true);
-            setCustomError("");
+            try {
+                setLoading(true);
+                setCustomError("");
 
-            const res = await axios.get(`${scheduleUrl}/${id}`, {
-                withCredentials: true,
-                headers: { Authorization: `Bearer ${authToken}` },
-            });
+                const res = await axios.get(`${scheduleUrl}/${id}`, axiosConfig());
 
-            if (res.data?.status === "Success" || res.data?.status === "success") {
-                setSelectedSchedule(res.data.data || null);
-                return { success: true, data: res.data.data };
+                if (
+                    res.data?.status === "Success" ||
+                    res.data?.status === "success"
+                ) {
+                    setSelectedSchedule(res.data.data || null);
+                    return { success: true, data: res.data.data };
+                }
+
+                return {
+                    success: false,
+                    error: res.data?.message || "Failed to fetch schedule",
+                };
+            } catch (error) {
+                console.error("❌ Get Schedule By ID Error:", error);
+                const err = normalizeError(error, "Error fetching schedule");
+                if (error.response?.status === 404) {
+                    return { success: false, error: "Schedule not found", status: 404 };
+                }
+                setCustomError(err.error);
+                return err;
+            } finally {
+                setLoading(false);
             }
-
-            return { success: false, error: res.data?.message || "Failed to fetch schedule" };
-        } catch (error) {
-            console.error("❌ Get Schedule By ID Error:", error);
-            if (error.response?.status === 404) {
-                return { success: false, error: "Schedule not found" };
-            }
-            const errorMessage = error.response?.data?.message || "Error fetching schedule";
-            setCustomError(errorMessage);
-            return { success: false, error: errorMessage };
-        } finally {
-            setLoading(false);
-        }
-    }, [authToken, scheduleUrl]);
+        },
+        [authToken, scheduleUrl, axiosConfig]
+    );
 
     // ==========================================
     // GET SCHEDULES BY DATE
     // ==========================================
-    const getSchedulesByDate = useCallback(async (date) => {
-        if (!authToken) return { success: false, data: [], error: "Authentication required" };
-        if (!date) return { success: false, data: [], error: "Date is required" };
+    const getSchedulesByDate = useCallback(
+        async (date) => {
+            if (!authToken)
+                return { success: false, data: [], error: "Authentication required" };
+            if (!date) return { success: false, data: [], error: "Date is required" };
 
-        try {
-            setLoading(true);
-            setCustomError("");
+            try {
+                setLoading(true);
+                setCustomError("");
 
-            const res = await axios.get(`${scheduleUrl}/by-date/${date}`, {
-                withCredentials: true,
-                headers: { Authorization: `Bearer ${authToken}` },
-            });
+                const res = await axios.get(
+                    `${scheduleUrl}/by-date/${date}`,
+                    axiosConfig()
+                );
 
-            if (res.data?.status === "Success" || res.data?.status === "success") {
-                setSchedulesByDate(res.data.data || []);
-                return { success: true, data: res.data.data || [] };
+                if (
+                    res.data?.status === "Success" ||
+                    res.data?.status === "success"
+                ) {
+                    const data = res.data.data || [];
+                    setSchedulesByDate(data);
+                    return { success: true, data };
+                }
+
+                return {
+                    success: false,
+                    data: [],
+                    error: res.data?.message || "Failed to fetch schedules",
+                };
+            } catch (error) {
+                console.error("❌ Get Schedules By Date Error:", error);
+                const err = normalizeError(error, "Error fetching schedules");
+                setCustomError(err.error);
+                setSchedulesByDate([]);
+                return { success: false, data: [], error: err.error };
+            } finally {
+                setLoading(false);
             }
-
-            return { success: false, data: [], error: res.data?.message || "Failed to fetch schedules" };
-        } catch (error) {
-            console.error("❌ Get Schedules By Date Error:", error);
-            const errorMessage = error.response?.data?.message || "Error fetching schedules";
-            setCustomError(errorMessage);
-            setSchedulesByDate([]);
-            return { success: false, data: [], error: errorMessage };
-        } finally {
-            setLoading(false);
-        }
-    }, [authToken, scheduleUrl]);
+        },
+        [authToken, scheduleUrl, axiosConfig]
+    );
 
     // ==========================================
     // GET UPCOMING SCHEDULES
     // ==========================================
-    const getUpcomingSchedules = useCallback(async (limit = 10) => {
-        if (!authToken) return { success: false, data: [], error: "Authentication required" };
+    const getUpcomingSchedules = useCallback(
+        async (limit = 10) => {
+            if (!authToken)
+                return { success: false, data: [], error: "Authentication required" };
 
-        try {
-            setLoading(true);
-            setCustomError("");
+            try {
+                setLoading(true);
+                setCustomError("");
 
-            const res = await axios.get(`${scheduleUrl}/upcoming?limit=${limit}`, {
-                withCredentials: true,
-                headers: { Authorization: `Bearer ${authToken}` },
-            });
+                const res = await axios.get(
+                    `${scheduleUrl}/upcoming?limit=${limit}`,
+                    axiosConfig()
+                );
 
-            if (res.data?.status === "Success" || res.data?.status === "success") {
-                setUpcomingSchedules(res.data.data || []);
-                return { success: true, data: res.data.data || [] };
+                if (
+                    res.data?.status === "Success" ||
+                    res.data?.status === "success"
+                ) {
+                    const data = res.data.data || [];
+                    setUpcomingSchedules(data);
+                    return { success: true, data };
+                }
+
+                return {
+                    success: false,
+                    data: [],
+                    error: res.data?.message || "Failed to fetch upcoming",
+                };
+            } catch (error) {
+                console.error("❌ Get Upcoming Schedules Error:", error);
+                const err = normalizeError(error, "Error fetching upcoming");
+                setCustomError(err.error);
+                setUpcomingSchedules([]);
+                return { success: false, data: [], error: err.error };
+            } finally {
+                setLoading(false);
             }
+        },
+        [authToken, scheduleUrl, axiosConfig]
+    );
 
-            return { success: false, data: [], error: res.data?.message || "Failed to fetch upcoming schedules" };
-        } catch (error) {
-            console.error("❌ Get Upcoming Schedules Error:", error);
-            const errorMessage = error.response?.data?.message || "Error fetching upcoming schedules";
-            setCustomError(errorMessage);
-            setUpcomingSchedules([]);
-            return { success: false, data: [], error: errorMessage };
-        } finally {
-            setLoading(false);
-        }
-    }, [authToken, scheduleUrl]);
+    // ==========================================
+    // REFRESH CURRENT LIST (helper)
+    // ==========================================
+    const refreshCurrentList = useCallback(async () => {
+        return fetchSchedules({
+            page: currentPage,
+            limit: rowsPerPage,
+            search: searchQuery,
+            date: dateFilter,
+            groupId: groupFilter,
+            panelistId: panelistFilter,
+            status: statusFilter,
+        });
+    }, [
+        fetchSchedules,
+        currentPage,
+        rowsPerPage,
+        searchQuery,
+        dateFilter,
+        groupFilter,
+        panelistFilter,
+        statusFilter,
+    ]);
 
     // ==========================================
     // CREATE SCHEDULE
     // ==========================================
-    const createSchedule = useCallback(async (values) => {
-        if (!authToken) return { success: false, error: "No authentication token" };
+    const createSchedule = useCallback(
+        async (values) => {
+            if (!authToken) return { success: false, error: "No auth token" };
 
-        try {
-            setLoading(true);
-            setCustomError("");
+            try {
+                setLoading(true);
+                setCustomError("");
 
-            const res = await axios.post(scheduleUrl, values, {
-                withCredentials: true,
-                headers: {
-                    Authorization: `Bearer ${authToken}`,
-                    "Content-Type": "application/json",
-                },
-            });
+                const res = await axios.post(
+                    scheduleUrl,
+                    values,
+                    axiosConfig(true)
+                );
 
-            if (res.data?.status === "Success" || res.data?.status === "success") {
-                await fetchSchedules({
-                    page: currentPage,
-                    limit: rowsPerPage,
-                    search: searchQuery,
-                    date: dateFilter,
-                    groupId: groupFilter,
-                    panelistId: panelistFilter,
-                    status: statusFilter,
-                });
-
-                return {
-                    success: true,
-                    data: res.data.data,
-                    message: res.data.message || "Schedule created successfully",
-                };
-            }
-
-            const errorMessage = res.data?.message || "Failed to create schedule";
-            setCustomError(errorMessage);
-            return { success: false, message: errorMessage };
-        } catch (error) {
-            console.error("❌ Create Schedule Error:", error);
-
-            // Handle 409 conflict
-            if (error.response?.status === 409) {
-                const conflictMessage =
-                    error.response?.data?.message || "Schedule conflict detected";
-                setCustomError(conflictMessage);
-                return {
-                    success: false,
-                    error: conflictMessage,
-                    conflictWith: error.response?.data?.conflictWith || null,
-                };
-            }
-
-            const errorMessage = error.response?.data?.message || "Error creating schedule";
-            setCustomError(errorMessage);
-            return { success: false, error: errorMessage };
-        } finally {
-            setLoading(false);
-        }
-    }, [
-        authToken, scheduleUrl, fetchSchedules,
-        currentPage, rowsPerPage, searchQuery,
-        dateFilter, groupFilter, panelistFilter, statusFilter,
-    ]);
-
-    // ==========================================
-    // UPDATE SCHEDULE
-    // ==========================================
-    const updateSchedule = useCallback(async (id, values) => {
-        if (!authToken) return { success: false, error: "No authentication token" };
-        if (!id) return { success: false, error: "Schedule ID is required" };
-
-        try {
-            setLoading(true);
-            setCustomError("");
-
-            const res = await axios.patch(`${scheduleUrl}/${id}`, values, {
-                withCredentials: true,
-                headers: {
-                    Authorization: `Bearer ${authToken}`,
-                    "Content-Type": "application/json",
-                },
-            });
-
-            if (res.data?.status === "Success" || res.data?.status === "success") {
-                await fetchSchedules({
-                    page: currentPage,
-                    limit: rowsPerPage,
-                    search: searchQuery,
-                    date: dateFilter,
-                    groupId: groupFilter,
-                    panelistId: panelistFilter,
-                    status: statusFilter,
-                });
-
-                // Update selected if same
-                if (selectedSchedule?._id === id) {
-                    setSelectedSchedule(res.data.data);
+                if (
+                    res.data?.status === "Success" ||
+                    res.data?.status === "success"
+                ) {
+                    await refreshCurrentList();
+                    return {
+                        success: true,
+                        data: res.data.data,
+                        message: res.data.message || "Schedule created successfully",
+                    };
                 }
 
-                return {
-                    success: true,
-                    data: res.data.data,
-                    message: res.data.message || "Schedule updated successfully",
-                };
+                const errorMessage = res.data?.message || "Failed to create schedule";
+                setCustomError(errorMessage);
+                return { success: false, error: errorMessage };
+            } catch (error) {
+                console.error("❌ Create Schedule Error:", error);
+                const err = normalizeError(error, "Error creating schedule");
+                setCustomError(err.error);
+                return err;
+            } finally {
+                setLoading(false);
             }
+        },
+        [authToken, scheduleUrl, axiosConfig, refreshCurrentList]
+    );
 
-            const errorMessage = res.data?.message || "Failed to update schedule";
-            setCustomError(errorMessage);
-            return { success: false, message: errorMessage };
-        } catch (error) {
-            console.error("❌ Update Schedule Error:", error);
+    // ==========================================
+    // UPDATE SCHEDULE (PUT — match backend)
+    // ==========================================
+    const updateSchedule = useCallback(
+        async (id, values) => {
+            if (!authToken) return { success: false, error: "No auth token" };
+            if (!id) return { success: false, error: "Schedule ID is required" };
 
-            if (error.response?.status === 409) {
-                const conflictMessage =
-                    error.response?.data?.message || "Schedule conflict detected";
-                setCustomError(conflictMessage);
-                return {
-                    success: false,
-                    error: conflictMessage,
-                    conflictWith: error.response?.data?.conflictWith || null,
-                };
+            try {
+                setLoading(true);
+                setCustomError("");
+
+                // ✅ FIXED: PUT, not PATCH (backend uses router.route().put)
+                const res = await axios.put(
+                    `${scheduleUrl}/${id}`,
+                    values,
+                    axiosConfig(true)
+                );
+
+                if (
+                    res.data?.status === "Success" ||
+                    res.data?.status === "success"
+                ) {
+                    await refreshCurrentList();
+
+                    if (selectedSchedule?._id === id) {
+                        setSelectedSchedule(res.data.data);
+                    }
+
+                    return {
+                        success: true,
+                        data: res.data.data,
+                        message: res.data.message || "Schedule updated successfully",
+                    };
+                }
+
+                const errorMessage = res.data?.message || "Failed to update schedule";
+                setCustomError(errorMessage);
+                return { success: false, error: errorMessage };
+            } catch (error) {
+                console.error("❌ Update Schedule Error:", error);
+                const err = normalizeError(error, "Error updating schedule");
+                setCustomError(err.error);
+                return err;
+            } finally {
+                setLoading(false);
             }
-
-            const errorMessage = error.response?.data?.message || "Error updating schedule";
-            setCustomError(errorMessage);
-            return { success: false, error: errorMessage };
-        } finally {
-            setLoading(false);
-        }
-    }, [
-        authToken, scheduleUrl, fetchSchedules, selectedSchedule,
-        currentPage, rowsPerPage, searchQuery,
-        dateFilter, groupFilter, panelistFilter, statusFilter,
-    ]);
+        },
+        [
+            authToken,
+            scheduleUrl,
+            axiosConfig,
+            refreshCurrentList,
+            selectedSchedule,
+        ]
+    );
 
     // ==========================================
     // DELETE SCHEDULE
     // ==========================================
-    const deleteSchedule = useCallback(async (id) => {
-        if (!authToken) return { success: false, error: "No authentication token" };
-        if (!id) return { success: false, error: "Schedule ID is required" };
+    const deleteSchedule = useCallback(
+        async (id) => {
+            if (!authToken) return { success: false, error: "No auth token" };
+            if (!id) return { success: false, error: "Schedule ID is required" };
 
-        try {
-            setLoading(true);
-            setCustomError("");
+            try {
+                setLoading(true);
+                setCustomError("");
 
-            const res = await axios.delete(`${scheduleUrl}/${id}`, {
-                withCredentials: true,
-                headers: { Authorization: `Bearer ${authToken}` },
-            });
+                const res = await axios.delete(
+                    `${scheduleUrl}/${id}`,
+                    axiosConfig()
+                );
 
-            if (res.data?.status === "Success" || res.data?.status === "success") {
-                // Optimistic update
-                setSchedules((prev) => prev.filter((s) => s._id !== id));
+                if (
+                    res.data?.status === "Success" ||
+                    res.data?.status === "success"
+                ) {
+                    // Optimistic
+                    setSchedules((prev) => prev.filter((s) => s._id !== id));
 
-                await fetchSchedules({
-                    page: currentPage,
-                    limit: rowsPerPage,
-                    search: searchQuery,
-                    date: dateFilter,
-                    groupId: groupFilter,
-                    panelistId: panelistFilter,
-                    status: statusFilter,
-                });
+                    await refreshCurrentList();
+                    return {
+                        success: true,
+                        message: res.data.message || "Schedule deleted successfully",
+                    };
+                }
 
-                return {
-                    success: true,
-                    message: res.data.message || "Schedule deleted successfully",
-                };
+                const errorMessage = res.data?.message || "Failed to delete schedule";
+                setCustomError(errorMessage);
+                return { success: false, error: errorMessage };
+            } catch (error) {
+                console.error("❌ Delete Schedule Error:", error);
+                const err = normalizeError(error, "Error deleting schedule");
+                setCustomError(err.error);
+                return err;
+            } finally {
+                setLoading(false);
             }
-
-            const errorMessage = res.data?.message || "Failed to delete schedule";
-            setCustomError(errorMessage);
-            return { success: false, message: errorMessage };
-        } catch (error) {
-            console.error("❌ Delete Schedule Error:", error);
-            const errorMessage = error.response?.data?.message || "Error deleting schedule";
-            setCustomError(errorMessage);
-            return { success: false, error: errorMessage };
-        } finally {
-            setLoading(false);
-        }
-    }, [
-        authToken, scheduleUrl, fetchSchedules,
-        currentPage, rowsPerPage, searchQuery,
-        dateFilter, groupFilter, panelistFilter, statusFilter,
-    ]);
+        },
+        [authToken, scheduleUrl, axiosConfig, refreshCurrentList]
+    );
 
     // ==========================================
     // CANCEL SCHEDULE (soft delete)
     // ==========================================
-    const cancelSchedule = useCallback(async (id) => {
-        if (!authToken) return { success: false, error: "No authentication token" };
-        if (!id) return { success: false, error: "Schedule ID is required" };
+    const cancelSchedule = useCallback(
+        async (id) => {
+            if (!authToken) return { success: false, error: "No auth token" };
+            if (!id) return { success: false, error: "Schedule ID is required" };
 
-        try {
-            setLoading(true);
-            setCustomError("");
+            try {
+                setLoading(true);
+                setCustomError("");
 
-            const res = await axios.patch(`${scheduleUrl}/${id}/cancel`, {}, {
-                withCredentials: true,
-                headers: { Authorization: `Bearer ${authToken}` },
-            });
+                const res = await axios.patch(
+                    `${scheduleUrl}/${id}/cancel`,
+                    {},
+                    axiosConfig()
+                );
 
-            if (res.data?.status === "Success" || res.data?.status === "success") {
-                await fetchSchedules({
-                    page: currentPage,
-                    limit: rowsPerPage,
-                    search: searchQuery,
-                    date: dateFilter,
-                    groupId: groupFilter,
-                    panelistId: panelistFilter,
-                    status: statusFilter,
-                });
+                if (
+                    res.data?.status === "Success" ||
+                    res.data?.status === "success"
+                ) {
+                    await refreshCurrentList();
 
-                if (selectedSchedule?._id === id) {
-                    setSelectedSchedule(res.data.data);
+                    if (selectedSchedule?._id === id) {
+                        setSelectedSchedule(res.data.data);
+                    }
+
+                    return {
+                        success: true,
+                        data: res.data.data,
+                        message: res.data.message || "Schedule cancelled",
+                    };
                 }
 
                 return {
-                    success: true,
-                    data: res.data.data,
-                    message: res.data.message || "Schedule cancelled",
+                    success: false,
+                    error: res.data?.message || "Failed to cancel schedule",
                 };
+            } catch (error) {
+                console.error("❌ Cancel Schedule Error:", error);
+                const err = normalizeError(error, "Error cancelling schedule");
+                setCustomError(err.error);
+                return err;
+            } finally {
+                setLoading(false);
             }
+        },
+        [
+            authToken,
+            scheduleUrl,
+            axiosConfig,
+            refreshCurrentList,
+            selectedSchedule,
+        ]
+    );
 
-            return { success: false, error: res.data?.message || "Failed to cancel schedule" };
-        } catch (error) {
-            console.error("❌ Cancel Schedule Error:", error);
-            const errorMessage = error.response?.data?.message || "Error cancelling schedule";
-            setCustomError(errorMessage);
-            return { success: false, error: errorMessage };
-        } finally {
-            setLoading(false);
-        }
-    }, [
-        authToken, scheduleUrl, fetchSchedules, selectedSchedule,
-        currentPage, rowsPerPage, searchQuery,
-        dateFilter, groupFilter, panelistFilter, statusFilter,
-    ]);
+    // ==========================================
+    // 🆕 CHANGE STATUS (scheduled/ongoing/completed/cancelled)
+    // ==========================================
+    const changeStatus = useCallback(
+        async (id, status, remarks = "") => {
+            if (!authToken) return { success: false, error: "No auth token" };
+            if (!id) return { success: false, error: "Schedule ID is required" };
+            if (!status) return { success: false, error: "Status is required" };
+
+            try {
+                setLoading(true);
+                setCustomError("");
+
+                const res = await axios.put(
+                    `${scheduleUrl}/${id}/status`,
+                    { status, remarks },
+                    axiosConfig(true)
+                );
+
+                if (
+                    res.data?.status === "Success" ||
+                    res.data?.status === "success"
+                ) {
+                    await refreshCurrentList();
+                    if (selectedSchedule?._id === id) {
+                        setSelectedSchedule(res.data.data);
+                    }
+                    return {
+                        success: true,
+                        data: res.data.data,
+                        message: res.data.message || `Status changed to "${status}"`,
+                    };
+                }
+
+                const errorMessage =
+                    res.data?.message || "Failed to change status";
+                setCustomError(errorMessage);
+                return { success: false, error: errorMessage };
+            } catch (error) {
+                console.error("❌ Change Status Error:", error);
+                const err = normalizeError(error, "Error changing status");
+                setCustomError(err.error);
+                return err;
+            } finally {
+                setLoading(false);
+            }
+        },
+        [
+            authToken,
+            scheduleUrl,
+            axiosConfig,
+            refreshCurrentList,
+            selectedSchedule,
+        ]
+    );
+
+    // ==========================================
+    // 🆕 CONFIRM PANELIST
+    // ==========================================
+    const confirmPanelist = useCallback(
+        async (scheduleId, panelistId, notes = "") => {
+            if (!authToken) return { success: false, error: "No auth token" };
+            if (!scheduleId || !panelistId)
+                return { success: false, error: "Schedule ID and Panelist ID required" };
+
+            try {
+                setLoading(true);
+                setCustomError("");
+
+                const res = await axios.patch(
+                    `${scheduleUrl}/${scheduleId}/panelists/${panelistId}/confirm`,
+                    { notes },
+                    axiosConfig(true)
+                );
+
+                if (
+                    res.data?.status === "Success" ||
+                    res.data?.status === "success"
+                ) {
+                    if (selectedSchedule?._id === scheduleId) {
+                        setSelectedSchedule(res.data.data);
+                    }
+                    await refreshCurrentList();
+                    return {
+                        success: true,
+                        data: res.data.data,
+                        message: res.data.message || "Panelist confirmed",
+                    };
+                }
+
+                return {
+                    success: false,
+                    error: res.data?.message || "Failed to confirm panelist",
+                };
+            } catch (error) {
+                console.error("❌ Confirm Panelist Error:", error);
+                const err = normalizeError(error, "Error confirming panelist");
+                setCustomError(err.error);
+                return err;
+            } finally {
+                setLoading(false);
+            }
+        },
+        [
+            authToken,
+            scheduleUrl,
+            axiosConfig,
+            refreshCurrentList,
+            selectedSchedule,
+        ]
+    );
+
+    // ==========================================
+    // 🆕 REJECT PANELIST (soft delete — keeps history)
+    // ==========================================
+    const rejectPanelist = useCallback(
+        async (scheduleId, panelistId, notes = "") => {
+            if (!authToken) return { success: false, error: "No auth token" };
+            if (!scheduleId || !panelistId)
+                return { success: false, error: "Schedule ID and Panelist ID required" };
+
+            try {
+                setLoading(true);
+                setCustomError("");
+
+                const res = await axios.patch(
+                    `${scheduleUrl}/${scheduleId}/panelists/${panelistId}/reject`,
+                    { notes },
+                    axiosConfig(true)
+                );
+
+                if (
+                    res.data?.status === "Success" ||
+                    res.data?.status === "success"
+                ) {
+                    if (selectedSchedule?._id === scheduleId) {
+                        setSelectedSchedule(res.data.data);
+                    }
+                    await refreshCurrentList();
+                    return {
+                        success: true,
+                        data: res.data.data,
+                        rejectedPanelist: res.data.rejectedPanelist || null,
+                        message:
+                            res.data.message ||
+                            "Panelist rejected. Assign a replacement.",
+                    };
+                }
+
+                return {
+                    success: false,
+                    error: res.data?.message || "Failed to reject panelist",
+                };
+            } catch (error) {
+                console.error("❌ Reject Panelist Error:", error);
+                const err = normalizeError(error, "Error rejecting panelist");
+                setCustomError(err.error);
+                return err;
+            } finally {
+                setLoading(false);
+            }
+        },
+        [
+            authToken,
+            scheduleUrl,
+            axiosConfig,
+            refreshCurrentList,
+            selectedSchedule,
+        ]
+    );
+
+    // ==========================================
+    // 🆕 RESET PANELIST RESPONSE
+    // ==========================================
+    const resetPanelistResponse = useCallback(
+        async (scheduleId, panelistId) => {
+            if (!authToken) return { success: false, error: "No auth token" };
+            if (!scheduleId || !panelistId)
+                return { success: false, error: "Schedule ID and Panelist ID required" };
+
+            try {
+                setLoading(true);
+                setCustomError("");
+
+                const res = await axios.patch(
+                    `${scheduleUrl}/${scheduleId}/panelists/${panelistId}/reset`,
+                    {},
+                    axiosConfig()
+                );
+
+                if (
+                    res.data?.status === "Success" ||
+                    res.data?.status === "success"
+                ) {
+                    if (selectedSchedule?._id === scheduleId) {
+                        setSelectedSchedule(res.data.data);
+                    }
+                    await refreshCurrentList();
+                    return {
+                        success: true,
+                        data: res.data.data,
+                        message: res.data.message || "Panelist response reset",
+                    };
+                }
+
+                return {
+                    success: false,
+                    error: res.data?.message || "Failed to reset panelist",
+                };
+            } catch (error) {
+                console.error("❌ Reset Panelist Error:", error);
+                const err = normalizeError(error, "Error resetting panelist");
+                setCustomError(err.error);
+                return err;
+            } finally {
+                setLoading(false);
+            }
+        },
+        [
+            authToken,
+            scheduleUrl,
+            axiosConfig,
+            refreshCurrentList,
+            selectedSchedule,
+        ]
+    );
+
+    // ==========================================
+    // 🆕 ADD REPLACEMENT PANELIST
+    // ==========================================
+    const addPanelist = useCallback(
+        async (scheduleId, panelistId) => {
+            if (!authToken) return { success: false, error: "No auth token" };
+            if (!scheduleId || !panelistId)
+                return { success: false, error: "Schedule ID and Panelist ID required" };
+
+            try {
+                setLoading(true);
+                setCustomError("");
+
+                const res = await axios.post(
+                    `${scheduleUrl}/${scheduleId}/panelists`,
+                    { panelistId },
+                    axiosConfig(true)
+                );
+
+                if (
+                    res.data?.status === "Success" ||
+                    res.data?.status === "success"
+                ) {
+                    if (selectedSchedule?._id === scheduleId) {
+                        setSelectedSchedule(res.data.data);
+                    }
+                    await refreshCurrentList();
+                    return {
+                        success: true,
+                        data: res.data.data,
+                        message:
+                            res.data.message || "Replacement panelist added",
+                    };
+                }
+
+                return {
+                    success: false,
+                    error: res.data?.message || "Failed to add panelist",
+                };
+            } catch (error) {
+                console.error("❌ Add Panelist Error:", error);
+                const err = normalizeError(error, "Error adding panelist");
+                setCustomError(err.error);
+                return err;
+            } finally {
+                setLoading(false);
+            }
+        },
+        [
+            authToken,
+            scheduleUrl,
+            axiosConfig,
+            refreshCurrentList,
+            selectedSchedule,
+        ]
+    );
+
+    // ==========================================
+    // 🆕 GET PANELIST STATUS SUMMARY
+    // ==========================================
+    const getPanelistStatus = useCallback(
+        async (scheduleId) => {
+            if (!authToken) return { success: false, error: "No auth token" };
+            if (!scheduleId) return { success: false, error: "Schedule ID is required" };
+
+            try {
+                setLoading(true);
+                setCustomError("");
+
+                const res = await axios.get(
+                    `${scheduleUrl}/${scheduleId}/panelists/status`,
+                    axiosConfig()
+                );
+
+                if (
+                    res.data?.status === "Success" ||
+                    res.data?.status === "success"
+                ) {
+                    setPanelistSummary(res.data.summary || null);
+                    return {
+                        success: true,
+                        defenseStatus: res.data.defenseStatus,
+                        summary: res.data.summary,
+                        panelists: res.data.panelists,
+                    };
+                }
+
+                return {
+                    success: false,
+                    error: res.data?.message || "Failed to fetch panelist status",
+                };
+            } catch (error) {
+                console.error("❌ Get Panelist Status Error:", error);
+                const err = normalizeError(error, "Error fetching panelist status");
+                setCustomError(err.error);
+                setPanelistSummary(null);
+                return err;
+            } finally {
+                setLoading(false);
+            }
+        },
+        [authToken, scheduleUrl, axiosConfig]
+    );
 
     // ==========================================
     // CHECK CONFLICT (standalone)
     // ==========================================
-    const checkConflict = useCallback(async (payload) => {
-        if (!authToken) return { success: false, error: "No authentication token" };
+    const checkConflict = useCallback(
+        async (payload) => {
+            if (!authToken) return { success: false, error: "No auth token" };
 
-        try {
-            const res = await axios.post(`${scheduleUrl}/check-conflict`, payload, {
-                withCredentials: true,
-                headers: {
-                    Authorization: `Bearer ${authToken}`,
-                    "Content-Type": "application/json",
-                },
-            });
+            try {
+                const res = await axios.post(
+                    `${scheduleUrl}/check-conflict`,
+                    payload,
+                    axiosConfig(true)
+                );
 
-            if (res.data?.status === "Success" || res.data?.status === "success") {
+                if (
+                    res.data?.status === "Success" ||
+                    res.data?.status === "success"
+                ) {
+                    return {
+                        success: true,
+                        hasConflict: res.data.hasConflict,
+                        conflicts: res.data.conflicts || [],
+                    };
+                }
+
                 return {
-                    success: true,
-                    hasConflict: res.data.hasConflict,
-                    conflicts: res.data.conflicts || [],
+                    success: false,
+                    error: res.data?.message || "Failed to check conflict",
                 };
+            } catch (error) {
+                console.error("❌ Check Conflict Error:", error);
+                const err = normalizeError(error, "Error checking conflict");
+                return err;
             }
-
-            return { success: false, error: res.data?.message || "Failed to check conflict" };
-        } catch (error) {
-            console.error("❌ Check Conflict Error:", error);
-            const errorMessage = error.response?.data?.message || "Error checking conflict";
-            return { success: false, error: errorMessage };
-        }
-    }, [authToken, scheduleUrl]);
+        },
+        [authToken, scheduleUrl, axiosConfig]
+    );
 
     // ==========================================
-    // CLEAR SELECTED SCHEDULE
+    // CLEAR SELECTED
     // ==========================================
     const clearSelectedSchedule = useCallback(() => {
         setSelectedSchedule(null);
+        setPanelistSummary(null);
     }, []);
 
     // ==========================================
-    // SEARCH
+    // FILTER HANDLERS
     // ==========================================
-    const handleSearch = useCallback((query) => {
-        setSearchQuery(query);
-        setCurrentPage(1);
-        fetchSchedules({
-            page: 1,
-            limit: rowsPerPage,
-            search: query,
-            date: dateFilter,
-            groupId: groupFilter,
-            panelistId: panelistFilter,
-            status: statusFilter,
-        });
-    }, [fetchSchedules, rowsPerPage, dateFilter, groupFilter, panelistFilter, statusFilter]);
-
-    // ==========================================
-    // FILTER BY DATE
-    // ==========================================
-    const handleDateFilter = useCallback((date) => {
-        setDateFilter(date);
-        setCurrentPage(1);
-        fetchSchedules({
-            page: 1,
-            limit: rowsPerPage,
-            search: searchQuery,
-            date,
-            groupId: groupFilter,
-            panelistId: panelistFilter,
-            status: statusFilter,
-        });
-    }, [fetchSchedules, rowsPerPage, searchQuery, groupFilter, panelistFilter, statusFilter]);
-
-    // ==========================================
-    // FILTER BY GROUP
-    // ==========================================
-    const handleGroupFilter = useCallback((groupId) => {
-        setGroupFilter(groupId);
-        setCurrentPage(1);
-        fetchSchedules({
-            page: 1,
-            limit: rowsPerPage,
-            search: searchQuery,
-            date: dateFilter,
-            groupId,
-            panelistId: panelistFilter,
-            status: statusFilter,
-        });
-    }, [fetchSchedules, rowsPerPage, searchQuery, dateFilter, panelistFilter, statusFilter]);
-
-    // ==========================================
-    // FILTER BY PANELIST
-    // ==========================================
-    const handlePanelistFilter = useCallback((panelistId) => {
-        setPanelistFilter(panelistId);
-        setCurrentPage(1);
-        fetchSchedules({
-            page: 1,
-            limit: rowsPerPage,
-            search: searchQuery,
-            date: dateFilter,
-            groupId: groupFilter,
-            panelistId,
-            status: statusFilter,
-        });
-    }, [fetchSchedules, rowsPerPage, searchQuery, dateFilter, groupFilter, statusFilter]);
-
-    // ==========================================
-    // FILTER BY STATUS
-    // ==========================================
-    const handleStatusFilter = useCallback((status) => {
-        setStatusFilter(status);
-        setCurrentPage(1);
-        fetchSchedules({
-            page: 1,
-            limit: rowsPerPage,
-            search: searchQuery,
-            date: dateFilter,
-            groupId: groupFilter,
-            panelistId: panelistFilter,
-            status,
-        });
-    }, [fetchSchedules, rowsPerPage, searchQuery, dateFilter, groupFilter, panelistFilter]);
-
-    // ==========================================
-    // CHANGE PAGE
-    // ==========================================
-    const handlePageChange = useCallback((page) => {
-        if (page !== currentPage) {
-            setCurrentPage(page);
-            fetchSchedules({
-                page,
-                limit: rowsPerPage,
-                search: searchQuery,
-                date: dateFilter,
-                groupId: groupFilter,
-                panelistId: panelistFilter,
-                status: statusFilter,
-            });
-        }
-    }, [
-        fetchSchedules, rowsPerPage, searchQuery, currentPage,
-        dateFilter, groupFilter, panelistFilter, statusFilter,
-    ]);
-
-    // ==========================================
-    // CHANGE ROWS PER PAGE
-    // ==========================================
-    const handleRowsPerPageChange = useCallback((rows) => {
-        if (rows !== rowsPerPage) {
-            setRowsPerPage(rows);
+    const handleSearch = useCallback(
+        (query) => {
+            setSearchQuery(query);
             setCurrentPage(1);
-            fetchSchedules({
-                page: 1,
-                limit: rows,
-                search: searchQuery,
-                date: dateFilter,
-                groupId: groupFilter,
-                panelistId: panelistFilter,
-                status: statusFilter,
-            });
-        }
-    }, [
-        fetchSchedules, searchQuery, rowsPerPage,
-        dateFilter, groupFilter, panelistFilter, statusFilter,
-    ]);
+            fetchSchedules({ page: 1, search: query });
+        },
+        [fetchSchedules]
+    );
 
-    // ==========================================
-    // CLEAR ALL FILTERS
-    // ==========================================
+    const handleDateFilter = useCallback(
+        (date) => {
+            setDateFilter(date);
+            setCurrentPage(1);
+            fetchSchedules({ page: 1, date });
+        },
+        [fetchSchedules]
+    );
+
+    const handleGroupFilter = useCallback(
+        (groupId) => {
+            setGroupFilter(groupId);
+            setCurrentPage(1);
+            fetchSchedules({ page: 1, groupId });
+        },
+        [fetchSchedules]
+    );
+
+    const handlePanelistFilter = useCallback(
+        (panelistId) => {
+            setPanelistFilter(panelistId);
+            setCurrentPage(1);
+            fetchSchedules({ page: 1, panelistId });
+        },
+        [fetchSchedules]
+    );
+
+    const handleStatusFilter = useCallback(
+        (status) => {
+            setStatusFilter(status);
+            setCurrentPage(1);
+            fetchSchedules({ page: 1, status });
+        },
+        [fetchSchedules]
+    );
+
+    const handlePageChange = useCallback(
+        (page) => {
+            if (page !== currentPage) {
+                setCurrentPage(page);
+                fetchSchedules({ page });
+            }
+        },
+        [fetchSchedules, currentPage]
+    );
+
+    const handleRowsPerPageChange = useCallback(
+        (rows) => {
+            if (rows !== rowsPerPage) {
+                setRowsPerPage(rows);
+                setCurrentPage(1);
+                fetchSchedules({ page: 1, limit: rows });
+            }
+        },
+        [fetchSchedules, rowsPerPage]
+    );
+
     const clearFilters = useCallback(() => {
         setSearchQuery("");
         setDateFilter("");
@@ -637,146 +992,144 @@ export const ScheduleProvider = ({ children }) => {
         setCurrentPage(1);
         fetchSchedules({
             page: 1,
-            limit: rowsPerPage,
             search: "",
             date: "",
             groupId: "",
             panelistId: "",
             status: "",
         });
-    }, [fetchSchedules, rowsPerPage]);
+    }, [fetchSchedules]);
 
     // ==========================================
-    // INITIAL FETCH ON MOUNT & AUTH CHANGE
-    // ==========================================
-    useEffect(() => {
-        if (authToken && isInitialMount.current) {
-            isInitialMount.current = false;
-            fetchSchedules({ page: 1, limit: rowsPerPage });
-        }
-    }, [authToken, fetchSchedules, rowsPerPage]);
-
-    // ==========================================
-    // FETCH WHEN PAGINATION OR FILTERS CHANGE
+    // INITIAL FETCH (single effect, no double fetch)
     // ==========================================
     useEffect(() => {
-        if (isInitialMount.current) return;
+        if (!authToken) return;
+        if (!isInitialMount.current) return;
 
-        if (authToken) {
-            fetchSchedules({
-                page: currentPage,
-                limit: rowsPerPage,
-                search: searchQuery,
-                date: dateFilter,
-                groupId: groupFilter,
-                panelistId: panelistFilter,
-                status: statusFilter,
-            });
-        }
-    }, [
-        currentPage, searchQuery, rowsPerPage, authToken,
-        dateFilter, groupFilter, panelistFilter, statusFilter,
-        fetchSchedules,
-    ]);
+        isInitialMount.current = false;
+        fetchSchedules({ page: 1, limit: 10 });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [authToken]);
 
     // ==========================================
-    // MEMOIZED CONTEXT VALUE
+    // MEMOIZED VALUE
     // ==========================================
-    const value = useMemo(() => ({
-        // State
-        schedules,
-        loading,
-        customError,
-        totalCount,
-        totalPages,
-        currentPage,
-        rowsPerPage,
+    const value = useMemo(
+        () => ({
+            // State
+            schedules,
+            loading,
+            customError,
+            totalCount,
+            totalPages,
+            currentPage,
+            rowsPerPage,
 
-        // Filters
-        searchQuery,
-        dateFilter,
-        groupFilter,
-        panelistFilter,
-        statusFilter,
+            // Filters
+            searchQuery,
+            dateFilter,
+            groupFilter,
+            panelistFilter,
+            statusFilter,
 
-        // Detail State
-        selectedSchedule,
-        schedulesByDate,
-        upcomingSchedules,
+            // Detail State
+            selectedSchedule,
+            schedulesByDate,
+            upcomingSchedules,
+            panelistSummary,
 
-        // CRUD Operations
-        fetchSchedules,
-        getScheduleById,
-        getSchedulesByDate,
-        getUpcomingSchedules,
-        createSchedule,
-        updateSchedule,
-        deleteSchedule,
-        cancelSchedule,
-        checkConflict,
+            // CRUD
+            fetchSchedules,
+            getScheduleById,
+            getSchedulesByDate,
+            getUpcomingSchedules,
+            createSchedule,
+            updateSchedule,
+            deleteSchedule,
+            cancelSchedule,
+            checkConflict,
 
-        // Detail helpers
-        clearSelectedSchedule,
+            // Status & Panelist actions
+            changeStatus,
+            confirmPanelist,
+            rejectPanelist,
+            resetPanelistResponse,
+            addPanelist,
+            getPanelistStatus,
 
-        // Utility Functions
-        handleSearch,
-        handleDateFilter,
-        handleGroupFilter,
-        handlePanelistFilter,
-        handleStatusFilter,
-        handlePageChange,
-        handleRowsPerPageChange,
-        clearFilters,
+            // Detail helpers
+            clearSelectedSchedule,
 
-        // Setters
-        setSearchQuery,
-        setDateFilter,
-        setGroupFilter,
-        setPanelistFilter,
-        setStatusFilter,
-        setSchedules,
-        setSelectedSchedule,
-        setSchedulesByDate,
-        setUpcomingSchedules,
+            // Utility
+            handleSearch,
+            handleDateFilter,
+            handleGroupFilter,
+            handlePanelistFilter,
+            handleStatusFilter,
+            handlePageChange,
+            handleRowsPerPageChange,
+            clearFilters,
 
-        // URL
-        scheduleUrl,
-    }), [
-        schedules,
-        loading,
-        customError,
-        totalCount,
-        totalPages,
-        currentPage,
-        rowsPerPage,
-        searchQuery,
-        dateFilter,
-        groupFilter,
-        panelistFilter,
-        statusFilter,
-        selectedSchedule,
-        schedulesByDate,
-        upcomingSchedules,
-        fetchSchedules,
-        getScheduleById,
-        getSchedulesByDate,
-        getUpcomingSchedules,
-        createSchedule,
-        updateSchedule,
-        deleteSchedule,
-        cancelSchedule,
-        checkConflict,
-        clearSelectedSchedule,
-        handleSearch,
-        handleDateFilter,
-        handleGroupFilter,
-        handlePanelistFilter,
-        handleStatusFilter,
-        handlePageChange,
-        handleRowsPerPageChange,
-        clearFilters,
-        scheduleUrl,
-    ]);
+            // Setters
+            setSearchQuery,
+            setDateFilter,
+            setGroupFilter,
+            setPanelistFilter,
+            setStatusFilter,
+            setSchedules,
+            setSelectedSchedule,
+            setSchedulesByDate,
+            setUpcomingSchedules,
+            setPanelistSummary,
+
+            // URL
+            scheduleUrl,
+        }),
+        [
+            schedules,
+            loading,
+            customError,
+            totalCount,
+            totalPages,
+            currentPage,
+            rowsPerPage,
+            searchQuery,
+            dateFilter,
+            groupFilter,
+            panelistFilter,
+            statusFilter,
+            selectedSchedule,
+            schedulesByDate,
+            upcomingSchedules,
+            panelistSummary,
+            fetchSchedules,
+            getScheduleById,
+            getSchedulesByDate,
+            getUpcomingSchedules,
+            createSchedule,
+            updateSchedule,
+            deleteSchedule,
+            cancelSchedule,
+            checkConflict,
+            changeStatus,
+            confirmPanelist,
+            rejectPanelist,
+            resetPanelistResponse,
+            addPanelist,
+            getPanelistStatus,
+            clearSelectedSchedule,
+            handleSearch,
+            handleDateFilter,
+            handleGroupFilter,
+            handlePanelistFilter,
+            handleStatusFilter,
+            handlePageChange,
+            handleRowsPerPageChange,
+            clearFilters,
+            scheduleUrl,
+        ]
+    );
 
     return (
         <ScheduleContext.Provider value={value}>

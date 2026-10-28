@@ -186,7 +186,7 @@ export const GroupProvider = ({ children }) => {
                 const usersData = res.data.referredUsers || [];
                 const count = res.data.userCount || 0;
 
-                console.log("groupData",groupData)
+                console.log("groupData", groupData);
 
                 setGroupDetails(groupData);
                 setReferredUsers(usersData);
@@ -465,7 +465,7 @@ export const GroupProvider = ({ children }) => {
                     sectionId: sectionFilter,
                     mentorId: mentorFilter,
                 });
-                await getGroupForDefense();   // ✅ refresh defense groups
+                await getGroupForDefense();
                 return {
                     success: true,
                     data: res.data.data,
@@ -508,7 +508,7 @@ export const GroupProvider = ({ children }) => {
                     sectionId: sectionFilter,
                     mentorId: mentorFilter,
                 });
-                await getGroupForDefense();   // ✅ refresh defense groups
+                await getGroupForDefense();
                 return {
                     success: true,
                     data: res.data.data,
@@ -549,7 +549,7 @@ export const GroupProvider = ({ children }) => {
                     sectionId: sectionFilter,
                     mentorId: mentorFilter,
                 });
-                await getGroupForDefense();   // ✅ refresh defense groups
+                await getGroupForDefense();
                 return { success: true, message: res.data.message || "Group deleted successfully" };
             }
             const errorMessage = res.data?.message || "Failed to delete group";
@@ -730,7 +730,7 @@ export const GroupProvider = ({ children }) => {
                     sectionId: sectionFilter,
                     mentorId: mentorFilter,
                 });
-                await getGroupForDefense();   // ✅ refresh defense groups
+                await getGroupForDefense();
                 return {
                     success: true,
                     data: res.data.data,
@@ -750,6 +750,85 @@ export const GroupProvider = ({ children }) => {
             setLoading(false);
         }
     }, [BASE_URL, authToken, fetchGroups, getGroupForDefense, currentPage, rowsPerPage, searchQuery, sectionFilter, mentorFilter]);
+
+    // ==========================================
+    // APPROVE / REJECT (Adviser or Co-adviser)
+    // ==========================================
+    const approvedAndReject = useCallback(async (referralCode, status) => {
+        if (!authToken) return { success: false, error: "No authentication token" };
+
+        if (!referralCode || !referralCode.trim()) {
+            return { success: false, error: "Referral code is required" };
+        }
+
+        if (!["confirm", "rejected"].includes(status)) {
+            return {
+                success: false,
+                error: "Status must be either 'confirm' or 'rejected'",
+            };
+        }
+
+        try {
+            setLoading(true);
+            setCustomError("");
+
+            const cleanReferralCode = referralCode.toUpperCase().trim();
+
+            const res = await axios.patch(
+                `${BASE_URL}/api/v1/groups/Approved_and_Reject/${cleanReferralCode}`,
+                { status },
+                {
+                    withCredentials: true,
+                    headers: {
+                        Authorization: `Bearer ${authToken}`,
+                        "Content-Type": "application/json",
+                    },
+                }
+            );
+
+            if (res.data?.status === "success") {
+                await fetchGroups({
+                    page: currentPage,
+                    limit: rowsPerPage,
+                    search: searchQuery,
+                    sectionId: sectionFilter,
+                    mentorId: mentorFilter,
+                });
+                await getGroupForDefense();
+
+                return {
+                    success: true,
+                    data: res.data.data,
+                    message: res.data.message || `Status updated to ${status}`,
+                    role: res.data.data?.role,
+                };
+            }
+
+            const errorMessage =
+                res.data?.message || "Failed to update approval status";
+            setCustomError(errorMessage);
+            return { success: false, message: errorMessage };
+        } catch (error) {
+            console.error("ApprovedAndReject Error:", error);
+            const errorMessage =
+                error.response?.data?.message ||
+                "Error updating approval status";
+            setCustomError(errorMessage);
+            return { success: false, error: errorMessage };
+        } finally {
+            setLoading(false);
+        }
+    }, [
+        BASE_URL,
+        authToken,
+        fetchGroups,
+        getGroupForDefense,
+        currentPage,
+        rowsPerPage,
+        searchQuery,
+        sectionFilter,
+        mentorFilter,
+    ]);
 
     // ==========================================
     // SEARCH GROUPS
@@ -853,13 +932,12 @@ export const GroupProvider = ({ children }) => {
         if (authToken && isInitialMount.current) {
             isInitialMount.current = false;
             fetchGroups({ page: 1, limit: rowsPerPage });
-            getGroupForDefense();   // ✅ isang beses lang sa initial mount
+            getGroupForDefense();
         }
     }, [authToken, fetchGroups, rowsPerPage, getGroupForDefense]);
 
     // ==========================================
     // FETCH GROUPS WHEN PAGINATION OR FILTERS CHANGE
-    // (Defense groups hindi kasama — hindi nagre-refetch sa filter changes)
     // ==========================================
     useEffect(() => {
         if (isInitialMount.current) return;
@@ -915,6 +993,7 @@ export const GroupProvider = ({ children }) => {
         removeMemberFromGroup,
         assignMentor,
         assignAdviserAndCoAdviser,
+        approvedAndReject,
 
         // ===== GROUP DETAILS FUNCTIONS =====
         getGroupDetails,
@@ -974,6 +1053,7 @@ export const GroupProvider = ({ children }) => {
         removeMemberFromGroup,
         assignMentor,
         assignAdviserAndCoAdviser,
+        approvedAndReject,
         getGroupDetails,
         clearGroupDetails,
         getGroupForDefense,

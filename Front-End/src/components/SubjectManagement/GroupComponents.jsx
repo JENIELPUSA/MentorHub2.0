@@ -1,4 +1,4 @@
-// GroupDashboard.jsx
+// GroupDashboard.jsx — My Class Advisory Design (Compact Header, No Hero Banner)
 import React, { useContext, useState, useEffect } from 'react';
 import {
     Users,
@@ -41,7 +41,10 @@ import {
     UserCircle,
     Shield,
     ChevronDown,
-    Hourglass
+    Hourglass,
+    GraduationCap,
+    BookOpen,
+    School
 } from 'lucide-react';
 import { GroupContext } from '../../contexts/GroupNameContext/GroupNameContext';
 import { UserDisplayContext } from '../../contexts/UserManagementContext/UserManagementContext';
@@ -76,9 +79,6 @@ const GroupDashboard = ({
     const [searchTerm, setSearchTerm] = useState('');
     const [viewMode, setViewMode] = useState('grid');
 
-
-    console.log("isProposedTitle",isProposedTitle)
-
     // States for detail view
     const [selectedGroup, setSelectedGroup] = useState(null);
     const [isEditing, setIsEditing] = useState(false);
@@ -88,7 +88,6 @@ const GroupDashboard = ({
     const [memberSearchTerm, setMemberSearchTerm] = useState('');
     const [memberFilter, setMemberFilter] = useState('all');
 
-
     // States for Adviser/Co-Adviser
     const [showAdviserModal, setShowAdviserModal] = useState(false);
     const [adviserModalType, setAdviserModalType] = useState('adviser');
@@ -96,12 +95,9 @@ const GroupDashboard = ({
     const [isAssigning, setIsAssigning] = useState(false);
     const [assignError, setAssignError] = useState('');
 
-    // availableUsers ay nakabase sa advisers mula sa context
     const [availableUsers, setAvailableUsers] = useState([]);
 
-    // Use either props groupsData or context groupsData
     const displayGroups = groupsData.length > 0 ? groupsData : contextGroupsData || [];
-
 
     // Kapag nagbago ang advisers, i-update ang availableUsers
     useEffect(() => {
@@ -117,16 +113,16 @@ const GroupDashboard = ({
         }
     }, [advisers, selectedGroup]);
 
+
+
+    console.log("section",section)
+
     // Reset all internal view state whenever the dashboard is closed
     useEffect(() => {
         if (!isOpen) {
-            console.log("🔚 [GroupDashboard] Dashboard closed - Resetting all states");
-
             if (setReferralData) {
-                console.log("🧹 [GroupDashboard] Clearing referral data");
                 setReferralData(null);
             }
-
             setSelectedGroup(null);
             setIsEditing(false);
             setShowDeleteConfirm(false);
@@ -143,13 +139,9 @@ const GroupDashboard = ({
     }, [isOpen, setReferralData]);
 
     useEffect(() => {
-        console.log("📂 [GroupDashboard] Section changed:", section?.title || section?.name || 'Unknown');
-
         if (setReferralData) {
-            console.log("🧹 [GroupDashboard] Clearing referral data on section change");
             setReferralData(null);
         }
-
         setSelectedGroup(null);
         setIsEditing(false);
         setShowDeleteConfirm(false);
@@ -158,25 +150,33 @@ const GroupDashboard = ({
         setSelectedAdviserId('');
     }, [section, setReferralData]);
 
-    // ==================== GATE: DO NOT RENDER UNTIL "VIEW GROUPS" OPENS THIS ====================
+    // ==================== CLOSE CREATE MODAL ON ESCAPE ====================
+    useEffect(() => {
+        if (!showForm) return;
+        const handleEscape = (e) => {
+            if (e.key === 'Escape' && !isLoading) {
+                handleCancel();
+            }
+        };
+        document.addEventListener('keydown', handleEscape);
+        return () => document.removeEventListener('keydown', handleEscape);
+    }, [showForm, isLoading]);
+
+    // ==================== GATE ====================
     if (!isOpen || !section) {
         return null;
     }
 
-    // Use real data only - no dummy fallback
     const filteredGroups = displayGroups?.filter(group => {
         const groupSectionId = group.sectionId?._id || group.sectionId || group.sectionId?.id;
         const currentSectionId = section?.id || section?._id || section?.sectionId;
         return groupSectionId === currentSectionId;
     }) || [];
 
-
-    // Search filter for groups
     const searchedGroups = filteredGroups.filter(group =>
         group.name?.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-    // Get members for selected group - use isReferralData if available
     const getGroupMembers = () => {
         if (isReferralData?.length > 0 && selectedGroup?.referralCode) {
             return isReferralData;
@@ -184,7 +184,6 @@ const GroupDashboard = ({
         return selectedGroup?.members || [];
     };
 
-    // Filter members
     const filteredMembers = getGroupMembers().filter(member => {
         const fullName = `${member.first_name || ''} ${member.last_name || ''}`.toLowerCase();
         const matchesSearch = fullName.includes(memberSearchTerm.toLowerCase()) ||
@@ -197,15 +196,11 @@ const GroupDashboard = ({
         return matchesSearch && matchesStatus;
     });
 
-    // ===================== HANDLE BACK TO SECTIONS =====================
+    // ===================== HANDLE BACK =====================
     const handleBackToSections = () => {
-        console.log("⬅️ [GroupDashboard] Going back to sections view");
-
         if (setReferralData) {
-            console.log("🧹 [GroupDashboard] Clearing referral data on back to sections");
             setReferralData(null);
         }
-
         setSelectedGroup(null);
         setIsEditing(false);
         setShowDeleteConfirm(false);
@@ -214,7 +209,6 @@ const GroupDashboard = ({
         setAvailableUsers([]);
         setSelectedAdviserId('');
 
-        // Use callback if provided, otherwise use onSectionChange/onClose
         if (onBackToSections) {
             onBackToSections();
         } else if (onSectionChange) {
@@ -229,7 +223,7 @@ const GroupDashboard = ({
         e.preventDefault();
 
         if (!groupName.trim()) {
-            setError('Group name is required');
+            setError('Class name is required');
             return;
         }
 
@@ -247,24 +241,28 @@ const GroupDashboard = ({
                 sectionId: sectionId
             };
 
-            console.log("📝 [GroupDashboard] Creating new group:", payload);
             await createGroup(payload);
 
             setGroupName('');
             setShowForm(false);
         } catch (err) {
-            setError(err.message || 'Failed to create group');
-            console.error('❌ [GroupDashboard] Error creating group:', err);
+            setError(err.message || 'Failed to create class');
         } finally {
             setIsLoading(false);
         }
     };
 
     const handleCancel = () => {
-        console.log("❌ [GroupDashboard] Form cancelled");
+        if (isLoading) return;
         setGroupName('');
         setShowForm(false);
         setError('');
+    };
+
+    const openCreateModal = () => {
+        setGroupName('');
+        setError('');
+        setShowForm(true);
     };
 
     const getReferralLink = (referralCode) => {
@@ -275,7 +273,6 @@ const GroupDashboard = ({
 
     const handleCopyReferralLink = (referralCode, groupId) => {
         const link = getReferralLink(referralCode);
-        console.log("📋 [GroupDashboard] Copying referral link for group:", groupId, "Link:", link);
 
         navigator.clipboard.writeText(link).then(() => {
             setCopiedCode(groupId);
@@ -315,22 +312,17 @@ const GroupDashboard = ({
 
         if (group.referralCode) {
             try {
-                console.log(`[GroupDashboard] Fetching fresh data for: ${group.referralCode}`);
                 await fetchReferralBy(group.referralCode);
             } catch (error) {
-                console.error("❌ [GroupDashboard] Error fetching referral data:", error);
+                console.error("Error fetching referral data:", error);
             }
         }
     };
 
     const handleCloseDashboard = () => {
-        console.log("🚪 [GroupDashboard] Closing dashboard");
-
         if (setReferralData) {
-            console.log("🧹 [GroupDashboard] Clearing referral data on close");
             setReferralData(null);
         }
-
         setSelectedGroup(null);
         setIsEditing(false);
         setShowDeleteConfirm(false);
@@ -348,7 +340,7 @@ const GroupDashboard = ({
 
     const handleSaveEdit = async () => {
         if (!editName.trim()) {
-            setError('Group name is required');
+            setError('Class name is required');
             return;
         }
 
@@ -356,21 +348,17 @@ const GroupDashboard = ({
         setError('');
 
         try {
-            console.log("✏️ [GroupDashboard] Updating group:", selectedGroup._id, "New name:", editName.trim());
             await updateGroup(selectedGroup._id, { name: editName.trim() });
             setIsEditing(false);
             setSelectedGroup({ ...selectedGroup, name: editName.trim() });
         } catch (err) {
-            setError(err.message || 'Failed to update group');
-            console.error('❌ [GroupDashboard] Error updating group:', err);
+            setError(err.message || 'Failed to update class');
         } finally {
             setIsSaving(false);
         }
     };
 
-
-    // ===================== ADVISER/CO-ADVISER FUNCTIONS =====================
-
+    // ===================== ADVISER FUNCTIONS =====================
     const handleOpenAdviserModal = (type) => {
         setAdviserModalType(type);
         setShowAdviserModal(true);
@@ -395,8 +383,6 @@ const GroupDashboard = ({
             setAssignError('No advisers available');
         }
     };
-
-    console.log("selectedGroup",selectedGroup)
 
     const handleAssignAdviser = async () => {
         if (!selectedAdviserId) {
@@ -450,7 +436,6 @@ const GroupDashboard = ({
             }
         } catch (error) {
             setAssignError(error.message || 'Failed to assign adviser');
-            console.error('Error assigning adviser:', error);
         } finally {
             setIsAssigning(false);
         }
@@ -491,7 +476,6 @@ const GroupDashboard = ({
             }
         } catch (error) {
             setError(error.message || 'Failed to remove adviser');
-            console.error('Error removing adviser:', error);
         }
     };
 
@@ -531,7 +515,6 @@ const GroupDashboard = ({
         );
     };
 
-    // ===================== ADVISER STATUS DISPLAY HELPER =====================
     const getAdviserStatusDisplay = (status, type) => {
         const statusConfigs = {
             'approved': {
@@ -574,7 +557,6 @@ const GroupDashboard = ({
         };
     };
 
-    // ===================== PROPOSED TITLE STATUS BADGE =====================
     const getProposedTitleStatusBadge = (status) => {
         const statusMap = {
             'Approved':  { bg: 'bg-green-100',  text: 'text-green-700',  icon: BadgeCheck, label: 'Approved' },
@@ -591,7 +573,7 @@ const GroupDashboard = ({
         );
     };
 
-    // ===================== STATISTICS COMPUTATIONS =====================
+    // ===================== STATISTICS =====================
     const calculateGroupStats = (group) => {
         let members = group?.members || [];
         if (isReferralData?.length > 0 && group?.referralCode) {
@@ -631,7 +613,6 @@ const GroupDashboard = ({
         };
     };
 
-    // ===================== STATISTICS CARD COMPONENT =====================
     const StatCard = ({ icon: Icon, title, value, subtitle, color, trend, trendLabel }) => (
         <div className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition">
             <div className="flex items-start justify-between">
@@ -661,34 +642,35 @@ const GroupDashboard = ({
 
     return (
         <div className="w-full h-full bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
-            {/* Header with Back Button */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50 shrink-0">
-                <div className="flex items-center gap-3">
+            {/* ==================== COMPACT TOOLBAR HEADER (NO HERO BANNER) ==================== */}
+            <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-200 bg-white shrink-0">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
                     <button
                         onClick={handleBackToSections}
-                        className="flex items-center gap-2 text-blue-600 hover:text-blue-800 font-medium text-sm transition-colors"
+                        className="p-1.5 hover:bg-gray-100 rounded-lg transition text-gray-600 hover:text-gray-900 shrink-0"
+                        title="Back to Classes"
                     >
                         <ArrowLeft className="w-4 h-4" />
-                        Back to Sections
                     </button>
-                    <div className="w-px h-6 bg-gray-300"></div>
-                    <div className="flex items-center gap-2">
-                        <div className="p-1.5 bg-blue-100 rounded-lg">
-                            <Users className="w-4 h-4 text-blue-600" />
-                        </div>
-                        <div>
-                            <h2 className="text-sm font-bold text-gray-900">
-                                {section?.title || section?.name || 'Section'}
-                            </h2>
-                            <p className="text-xs text-gray-500">
-                                {filteredGroups.length} group{filteredGroups.length !== 1 ? 's' : ''}
-                            </p>
-                        </div>
+
+                    <div className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg shrink-0">
+                        <School className="w-4 h-4" />
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                        <h2 className="text-sm font-bold text-gray-900 truncate">
+                            My Class Advisory
+                        </h2>
+                        <p className="text-[11px] text-gray-500 truncate">
+                            {section?.title || section?.name || 'Section'} • {filteredGroups.length} group{filteredGroups.length !== 1 ? 's' : ''}
+                        </p>
                     </div>
                 </div>
+
                 <button
                     onClick={handleCloseDashboard}
-                    className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition"
+                    className="p-1.5 hover:bg-gray-100 rounded-lg transition text-gray-400 hover:text-gray-700 shrink-0"
+                    title="Close"
                 >
                     <X className="w-4 h-4" />
                 </button>
@@ -699,9 +681,7 @@ const GroupDashboard = ({
                 {selectedGroup ? (
                     // ==================== DETAIL VIEW ====================
                     <div>
-
-
-                        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+                        <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
                             {/* Header */}
                             <div className="p-6 border-b border-gray-100">
                                 <div className="flex items-start gap-3">
@@ -736,7 +716,7 @@ const GroupDashboard = ({
                                             <button
                                                 onClick={() => setIsEditing(true)}
                                                 className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
-                                                title="Edit Group Name"
+                                                title="Edit Class Name"
                                             >
                                                 <Edit className="w-4 h-4" />
                                             </button>
@@ -828,17 +808,17 @@ const GroupDashboard = ({
                                                                             {statusDisplay.badge}
                                                                             {statusDisplay.isPending && (
                                                                                 <p className="text-[10px] text-yellow-600">
-                                                                                    ⚠️ This request is waiting for approval from the approver
+                                                                                    ⚠️ Waiting for approval
                                                                                 </p>
                                                                             )}
                                                                             {statusDisplay.isApproved && (
                                                                                 <p className="text-[10px] text-green-600">
-                                                                                    ✅ Adviser has been approved and can now manage the group
+                                                                                    ✅ Approved
                                                                                 </p>
                                                                             )}
                                                                             {statusDisplay.isRejected && (
                                                                                 <p className="text-[10px] text-red-600">
-                                                                                    ❌ Request has been rejected. Please contact the approver.
+                                                                                    ❌ Rejected
                                                                                 </p>
                                                                             )}
                                                                         </div>
@@ -893,17 +873,17 @@ const GroupDashboard = ({
                                                                             {statusDisplay.badge}
                                                                             {statusDisplay.isPending && (
                                                                                 <p className="text-[10px] text-yellow-600">
-                                                                                    ⚠️ This request is waiting for approval from the approver
+                                                                                    ⚠️ Waiting for approval
                                                                                 </p>
                                                                             )}
                                                                             {statusDisplay.isApproved && (
                                                                                 <p className="text-[10px] text-green-600">
-                                                                                    ✅ Co-adviser has been approved and can now assist with the group
+                                                                                    ✅ Approved
                                                                                 </p>
                                                                             )}
                                                                             {statusDisplay.isRejected && (
                                                                                 <p className="text-[10px] text-red-600">
-                                                                                    ❌ Request has been rejected. Please contact the approver.
+                                                                                    ❌ Rejected
                                                                                 </p>
                                                                             )}
                                                                         </div>
@@ -936,7 +916,7 @@ const GroupDashboard = ({
                                 <div className="flex items-center gap-2 mb-4">
                                     <BarChart3 className="w-5 h-5 text-blue-600" />
                                     <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">
-                                        Group Statistics & Analytics
+                                        Class Statistics & Analytics
                                     </h4>
                                     <span className="ml-auto text-xs text-gray-400">
                                         Updated: {formatDateTime(new Date().toISOString())}
@@ -1035,8 +1015,6 @@ const GroupDashboard = ({
                                                                     strokeLinecap="round"
                                                                 />
                                                             )}
-
-                    
                                                             {calculateGroupStats(selectedGroup).pending > 0 && (
                                                                 <circle
                                                                     cx="18" cy="18" r="15.9"
@@ -1147,7 +1125,7 @@ const GroupDashboard = ({
                                 </div>
                             </div>
 
-                            {/* ==================== PROPOSED TITLES TABLE (BELOW STATISTICS) ==================== */}
+                            {/* PROPOSED TITLES TABLE */}
                             <div className="p-6 border-b border-gray-100 bg-gradient-to-r from-indigo-50 to-blue-50">
                                 <div className="flex items-center justify-between mb-4">
                                     <div className="flex items-center gap-2">
@@ -1333,7 +1311,7 @@ const GroupDashboard = ({
                                             {filteredMembers.length === 0 ? (
                                                 <tr>
                                                     <td colSpan="5" className="px-6 py-8 text-center text-gray-500">
-                                                        {memberSearchTerm ? 'No members match your search' : 'No members in this group yet'}
+                                                        {memberSearchTerm ? 'No members match your search' : 'No members in this class yet'}
                                                     </td>
                                                 </tr>
                                             ) : (
@@ -1377,12 +1355,11 @@ const GroupDashboard = ({
                                         </tbody>
                                     </table>
                                 </div>
-
                             </div>
                         </div>
                     </div>
                 ) : (
-                    // ==================== GROUP LIST VIEW ====================
+                    // ==================== CLASS LIST VIEW ====================
                     <>
                         {/* Dashboard Controls */}
                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
@@ -1391,7 +1368,7 @@ const GroupDashboard = ({
                                     <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
                                     <input
                                         type="text"
-                                        placeholder="Search groups..."
+                                        placeholder="Search classes..."
                                         value={searchTerm}
                                         onChange={(e) => setSearchTerm(e.target.value)}
                                         className="pl-9 pr-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none w-48 md:w-64 text-sm"
@@ -1414,74 +1391,17 @@ const GroupDashboard = ({
                                 </div>
                             </div>
 
+                            {/* Create Class Button — Opens Popup Modal */}
                             <button
-                                onClick={() => setShowForm(!showForm)}
+                                onClick={openCreateModal}
                                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl shadow-sm transition flex items-center gap-2"
                             >
                                 <Plus className="w-4 h-4" />
-                                New Group
+                                Create Class
                             </button>
                         </div>
 
-                        {/* ADD GROUP FORM */}
-                        {showForm && (
-                            <div className="mb-6 bg-blue-50 border border-blue-200 rounded-xl p-4 animate-fadeIn">
-                                <div className="flex items-center justify-between mb-3">
-                                    <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                                        <Plus className="w-4 h-4 text-blue-600" />
-                                        Create New Group
-                                    </h4>
-                                    <button
-                                        onClick={handleCancel}
-                                        className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition"
-                                    >
-                                        <X className="w-4 h-4" />
-                                    </button>
-                                </div>
-                                <form onSubmit={handleSubmit}>
-                                    <div className="flex flex-col md:flex-row gap-3">
-                                        <div className="flex-1">
-                                            <input
-                                                type="text"
-                                                value={groupName}
-                                                onChange={(e) => {
-                                                    setGroupName(e.target.value);
-                                                    setError('');
-                                                }}
-                                                placeholder="Enter group name..."
-                                                className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                                                autoFocus
-                                                disabled={isLoading}
-                                            />
-                                            {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <button
-                                                type="submit"
-                                                disabled={isLoading}
-                                                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl shadow-sm transition flex items-center gap-2 disabled:opacity-50"
-                                            >
-                                                {isLoading ? (
-                                                    <><Loader2 className="w-4 h-4 animate-spin" /> Creating...</>
-                                                ) : (
-                                                    <><Plus className="w-4 h-4" /> Create Group</>
-                                                )}
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={handleCancel}
-                                                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold rounded-xl transition"
-                                                disabled={isLoading}
-                                            >
-                                                Cancel
-                                            </button>
-                                        </div>
-                                    </div>
-                                </form>
-                            </div>
-                        )}
-
-                        {/* Groups Grid/List */}
+                        {/* Classes Grid/List */}
                         {contextLoading || isLoadingGroupsData ? (
                             <div className="flex items-center justify-center py-20">
                                 <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
@@ -1492,18 +1412,18 @@ const GroupDashboard = ({
                                     <Users className="w-10 h-10 text-gray-400" />
                                 </div>
                                 <h4 className="text-lg font-semibold text-gray-700">
-                                    {searchTerm ? 'No matching groups found' : 'No groups yet'}
+                                    {searchTerm ? 'No matching classes found' : 'No classes yet'}
                                 </h4>
                                 <p className="text-sm text-gray-500 mt-1">
-                                    {searchTerm ? 'Try adjusting your search terms' : 'Click "New Group" to create your first group'}
+                                    {searchTerm ? 'Try adjusting your search terms' : 'Click "Create Class" to create your first class'}
                                 </p>
                                 {!searchTerm && (
                                     <button
-                                        onClick={() => setShowForm(true)}
+                                        onClick={openCreateModal}
                                         className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl shadow-sm transition flex items-center gap-2 mx-auto"
                                     >
                                         <Plus className="w-4 h-4" />
-                                        Create First Group
+                                        Create First Class
                                     </button>
                                 )}
                             </div>
@@ -1531,7 +1451,6 @@ const GroupDashboard = ({
                                                 </span>
                                             </div>
 
-                                            {/* Display Adviser/Co-Adviser in Grid View with status */}
                                             <div className="flex flex-wrap gap-1 mb-2">
                                                 {group.adviserId && group.adviserId._id && (
                                                     <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${group.adviserStatus === 'approved' ? 'bg-green-100 text-green-700' :
@@ -1614,7 +1533,7 @@ const GroupDashboard = ({
                                 <table className="w-full">
                                     <thead className="bg-gray-50 border-b border-gray-200">
                                         <tr>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Group</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Class</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Adviser</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Co-Adviser</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Members</th>
@@ -1653,7 +1572,7 @@ const GroupDashboard = ({
                                                                     {group.adviserStatus === 'approved' && <BadgeCheck className="w-3 h-3" />}
                                                                     {group.adviserStatus === 'rejected' && <X className="w-3 h-3" />}
                                                                     {group.adviserStatus === 'approved' ? '✓ Approved' :
-                                                                        group.adviserStatus === 'pending' ? '⏳ Waiting for Approval' :
+                                                                        group.adviserStatus === 'pending' ? '⏳ Waiting' :
                                                                             group.adviserStatus === 'rejected' ? '✗ Rejected' :
                                                                                 group.adviserStatus || 'Pending'}
                                                                 </span>
@@ -1677,7 +1596,7 @@ const GroupDashboard = ({
                                                                     {group.coadviserStatus === 'approved' && <BadgeCheck className="w-3 h-3" />}
                                                                     {group.coadviserStatus === 'rejected' && <X className="w-3 h-3" />}
                                                                     {group.coadviserStatus === 'approved' ? '✓ Approved' :
-                                                                        group.coadviserStatus === 'pending' ? '⏳ Waiting for Approval' :
+                                                                        group.coadviserStatus === 'pending' ? '⏳ Waiting' :
                                                                             group.coadviserStatus === 'rejected' ? '✗ Rejected' :
                                                                                 group.coadviserStatus || 'Pending'}
                                                                 </span>
@@ -1734,6 +1653,99 @@ const GroupDashboard = ({
                 )}
             </div>
 
+            {/* ==================== CREATE CLASS POPUP MODAL ==================== */}
+            {showForm && (
+                <div
+                    className="fixed inset-0 z-[1000] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn"
+                    onClick={(e) => {
+                        if (e.target === e.currentTarget) handleCancel();
+                    }}
+                >
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full relative max-h-[90vh] overflow-y-auto">
+                        {/* Modal Header */}
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-blue-100 text-blue-600 rounded-xl">
+                                    <Plus className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-bold text-gray-900">Create New Class</h3>
+                                    <p className="text-xs text-gray-500">Add a new class to this section</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={handleCancel}
+                                disabled={isLoading}
+                                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition disabled:opacity-50"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {/* Modal Body */}
+                        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                                    Class Name *
+                                </label>
+                                <input
+                                    type="text"
+                                    value={groupName}
+                                    onChange={(e) => {
+                                        setGroupName(e.target.value);
+                                        setError('');
+                                    }}
+                                    placeholder="e.g. Class A - Web Development"
+                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:bg-white outline-none transition"
+                                    autoFocus
+                                    disabled={isLoading}
+                                />
+                                <p className="mt-1.5 text-[11px] text-gray-500">
+                                    Give your class a clear and descriptive name.
+                                </p>
+                            </div>
+
+                            {/* Error inside modal */}
+                            {error && (
+                                <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 text-sm flex items-start gap-2">
+                                    <X className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                                    <span>{error}</span>
+                                </div>
+                            )}
+
+                            {/* Modal Footer */}
+                            <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">
+                                <button
+                                    type="button"
+                                    onClick={handleCancel}
+                                    disabled={isLoading}
+                                    className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-xl transition disabled:opacity-50"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={isLoading || !groupName.trim()}
+                                    className="flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {isLoading ? (
+                                        <>
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                            Creating...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Check className="w-4 h-4" />
+                                            Create Class
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
             {/* ==================== ADVISER MODAL ==================== */}
             {showAdviserModal && (
                 <div
@@ -1770,7 +1782,7 @@ const GroupDashboard = ({
 
                         <p className="text-sm text-gray-500 mb-4">
                             {adviserModalType === 'adviser'
-                                ? 'Select a main adviser to assign to this group. The request will need approval.'
+                                ? 'Select a main adviser to assign to this class. The request will need approval.'
                                 : 'Select a co-adviser to assist the main adviser. The request will need approval.'}
                         </p>
 

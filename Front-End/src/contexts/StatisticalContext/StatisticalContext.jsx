@@ -1,167 +1,186 @@
 import { createContext, useState, useCallback, useEffect, useContext } from "react";
-import axios from "axios";
 import { AuthContext } from "../AuthContext";
+import axiosInstance from "../../components/ReusableFolder/axiosinstance";
 
 export const StatisticalContext = createContext();
 
 export const StatisticalProvider = ({ children }) => {
-    const [dashboardData, setDashboardData] = useState(null);
-    const [Adviserdata, setAdviserdata] = useState()
-    const [Admindata, setAdmindata] = useState()
-    const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState(null);
-    const { authToken } = useContext(AuthContext);
+  const [dashboardData, setDashboardData] = useState(null);
+  const [Adviserdata, setAdviserdata] = useState(null);
+  const [Admindata, setAdmindata] = useState(null);
+  const [Studentdata, setStudentdata] = useState(null);   // ⭐ NEW
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const { authToken } = useContext(AuthContext);
+  const authConfig = useCallback(() => {
+    if (!authToken) {
+      console.warn("⚠️ authToken is missing — request will likely 401");
+      return {};
+    }
+    return {
+      headers: {
+        Authorization: `Bearer ${authToken}`,
+      },
+    };
+  }, [authToken]);
 
-    const BASE_URL = import.meta.env.VITE_REACT_APP_BACKEND_BASEURL;
+  // ==========================================
+  // GET DASHBOARD STATISTICS
+  // ==========================================
+  const fetchDashboardStatistics = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
 
-    // ==========================================
-    // GET DASHBOARD STATISTICS
-    // ==========================================
-    const fetchDashboardStatistics = useCallback(async () => {
-        try {
-            setIsLoading(true);
-            setError(null);
+      const res = await axiosInstance.get("/api/v1/statistical", authConfig());
 
-            const res = await axios.get(`${BASE_URL}/api/v1/statistical`, {
-                headers: { Authorization: `Bearer ${authToken}` }
-            });
+      if (res.data?.status === "success") {
+        setDashboardData(res.data.data);
+        return { success: true, data: res.data.data };
+      }
 
-            if (res.data?.status === "success") {
-                setDashboardData(res.data.data);
-                return { success: true, data: res.data.data };
-            }
+      return { success: false };
+    } catch (error) {
+      console.error("❌ Fetch Dashboard Statistics Error:", {
+        status: error.response?.status,
+        url: error.config?.url,
+        message: error.response?.data?.message,
+        error: error.response?.data?.error,
+        full: error.response?.data,
+      });
 
-            return { success: false };
-        } catch (error) {
-            // ⭐ Mas detalyadong error log
-            console.error("❌ Fetch Dashboard Statistics Error:", {
-                status: error.response?.status,
-                url: error.config?.url,
-                message: error.response?.data?.message,
-                error: error.response?.data?.error,
-                full: error.response?.data,
-            });
+      const errorMessage =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.message ||
+        "Error fetching dashboard statistics";
 
-            const errorMessage =
-                error.response?.data?.message ||
-                error.response?.data?.error ||
-                error.message ||
-                "Error fetching dashboard statistics";
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
+    } finally {
+      setIsLoading(false);
+    }
+  }, [authConfig]);
 
-            setError(errorMessage);
-            return { success: false, error: errorMessage };
-        } finally {
-            setIsLoading(false);
-        }
-    }, [BASE_URL, authToken]);
+  // ==========================================
+  // GET ADVISER STATISTICS
+  // ==========================================
+  const fetchAdviserStatistics = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
 
-    // ==========================================
-    // GET DASHBOARD STATISTICS
-    // ==========================================
-    const fetchAdviserStatistics = useCallback(async () => {
-        try {
-            setIsLoading(true);
-            setError(null);
+      const res = await axiosInstance.get(
+        "/api/v1/statistical/subject_instructor",
+        authConfig()
+      );
 
-            const res = await axios.get(`${BASE_URL}/api/v1/statistical/subject_instructor`, {
-                headers: {
-                    Authorization: `Bearer ${authToken}`
-                }
-            });
+      if (res.data?.status === "success") {
+        setAdviserdata(res.data.data);
+        return { success: true, data: res.data.data };
+      }
 
-            if (res.data?.status === "success") {
-                setAdviserdata(res.data.data);
-                return { success: true, data: res.data.data };
-            }
+      return { success: false };
+    } catch (error) {
+      const errorMessage =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.message ||
+        "Error fetching adviser statistics";
 
-            return { success: false };
-        } catch (error) {
-            const errorMessage = error.response?.data?.message || "Error fetching dashboard statistics";
-            setError(errorMessage);
-            console.error("Fetch Dashboard Statistics Error:", error);
-            return {
-                success: false,
-                error: errorMessage,
-            };
-        } finally {
-            setIsLoading(false);
-        }
-    }, [BASE_URL, authToken]);
+      setError(errorMessage);
+      console.error("❌ Fetch Adviser Statistics Error:", error);
+      return { success: false, error: errorMessage };
+    } finally {
+      setIsLoading(false);
+    }
+  }, [authConfig]);
 
+  // ==========================================
+  // GET ADMIN STATISTICS
+  // ==========================================
+  const fetchAdminStatistical = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
 
-    const fetchAdminStatistical = useCallback(async () => {
-        try {
-            setIsLoading(true);
-            setError(null);
+      const res = await axiosInstance.get(
+        "/api/v1/statistical/Admin_Statistical",
+        authConfig()
+      );
 
-            const res = await axios.get(`${BASE_URL}/api/v1/statistical/Admin_Statistical`, {
-                headers: {
-                    Authorization: `Bearer ${authToken}`
-                }
-            });
+      if (res.data?.status === "success" || res.data?.success === true) {
+        setAdmindata(res.data.data);
+        return { success: true, data: res.data.data };
+      }
 
-            if (res.data?.success === true) {
-                setAdmindata(res.data.data);
-                return { success: true, data: res.data.data };
-            }
+      return { success: false };
+    } catch (error) {
+      const errorMessage =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.message ||
+        "Error fetching admin statistics";
 
-            return { success: false };
-        } catch (error) {
-            const errorMessage = error.response?.data?.message || "Error fetching dashboard statistics";
-            setError(errorMessage);
-            console.error("Fetch Dashboard Statistics Error:", error);
-            return {
-                success: false,
-                error: errorMessage,
-            };
-        } finally {
-            setIsLoading(false);
-        }
-    }, [BASE_URL, authToken]);
+      setError(errorMessage);
+      console.error("❌ Fetch Admin Statistics Error:", error);
+      return { success: false, error: errorMessage };
+    } finally {
+      setIsLoading(false);
+    }
+  }, [authConfig]);
 
-    // ==========================================
-    // REFRESH DASHBOARD DATA
-    // ==========================================
-    const refreshDashboard = useCallback(async () => {
-        return await fetchDashboardStatistics();
-    }, [fetchDashboardStatistics]);
+  // ==========================================
+  // REFRESH DASHBOARD DATA
+  // ==========================================
+  const refreshDashboard = useCallback(async () => {
+    return await fetchDashboardStatistics();
+  }, [fetchDashboardStatistics]);
 
-    // ==========================================
-    // CLEAR DASHBOARD DATA
-    // ==========================================
-    const clearDashboardData = useCallback(() => {
-        setDashboardData(null);
-        setError(null);
-    }, []);
+  // ==========================================
+  // CLEAR DASHBOARD DATA
+  // ==========================================
+  const clearDashboardData = useCallback(() => {
+    setDashboardData(null);
+    setError(null);
+  }, []);
 
-    // ==========================================
-    // AUTO-FETCH ON MOUNT
-    // ==========================================
-    useEffect(() => {
-        if (authToken) {
-            fetchDashboardStatistics();
-            fetchAdviserStatistics();
-            fetchAdminStatistical();
-        }
-    }, [fetchDashboardStatistics, fetchAdminStatistical, authToken]);
+  // ==========================================
+  // AUTO-FETCH ON MOUNT
+  // ==========================================
+  useEffect(() => {
+    if (authToken) {
+      fetchDashboardStatistics();
+      fetchAdviserStatistics();
+      fetchAdminStatistical();
+    }
+  }, [
+    fetchDashboardStatistics,
+    fetchAdviserStatistics,
+    fetchAdminStatistical,         // ⭐ NEW
+    authToken,
+  ]);
 
-    // ==========================================
-    // CONTEXT PROVIDER
-    // ==========================================
-    return (
-        <StatisticalContext.Provider
-            value={{
-                dashboardData,
-                isLoading,
-                Adviserdata,
-                Admindata,
-                error,
-                fetchDashboardStatistics,
-                refreshDashboard,
-                clearDashboardData,
-            }}
-        >
-            {children}
-        </StatisticalContext.Provider>
-    );
+  // ==========================================
+  // CONTEXT PROVIDER
+  // ==========================================
+  return (
+    <StatisticalContext.Provider
+      value={{
+        dashboardData,
+        Adviserdata,
+        Admindata,
+        Studentdata,                // ⭐ NEW
+        isLoading,
+        error,
+        fetchDashboardStatistics,
+        fetchAdviserStatistics,
+        fetchAdminStatistical,  // ⭐ NEW
+        refreshDashboard,
+        clearDashboardData,
+      }}
+    >
+      {children}
+    </StatisticalContext.Provider>
+  );
 };

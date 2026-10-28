@@ -1,178 +1,168 @@
-import React, { useState } from 'react';
-import {
-    CheckCircle2,
-    Shield,
-    User,
-    UserCog,
-    UserPlus,
-    Lightbulb,
-    Eye,
-    X
-} from 'lucide-react';
+import React from 'react';
+import { CheckCircle2, Sparkles, User, Calendar, BookOpen, Users } from 'lucide-react';
 
-import AdviserCoAdviser from './AdviserCoAdviser';
-import { AuthContext } from '../../../contexts/AuthContext';
+import bipsulogo from '../../../assets/bipsulogo.png';
 
 const UserDashboardBanner = ({
     displayData,
-    adviserDisplay,
-    coadviserDisplay,
-    onAssignAdviser,
-    onAssignCoAdviser,
-    onProposeTitle,
-    advisers,
-    advisersLoading
+    role,
+    first_name,
+    last_name,
 }) => {
-    // State para sa View Mentor Modal
-    const [showMentorModal, setShowMentorModal] = useState(false);
+    // ✅ Personalized greeting base sa oras
+    const getGreeting = () => {
+        const hour = new Date().getHours();
+        if (hour < 12) return 'Good morning';
+        if (hour < 18) return 'Good afternoon';
+        return 'Good evening';
+    };
+
+    const fullName = `${first_name || ''} ${last_name || ''}`.trim() || 'Student';
+
+    const roleLabel = role
+        ? role.charAt(0).toUpperCase() + role.slice(1)
+        : 'Student';
+
+    const today = new Date().toLocaleDateString('en-US', {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric',
+    });
 
     return (
-        <>
-            {/* VIEW MENTOR MODAL */}
-            {showMentorModal && (
-                <div
-                    className="fixed inset-0 z-[1000] bg-black/60 backdrop-blur-sm flex items-center justify-center animate-fadeIn p-4"
-                    onClick={(e) => {
-                        if (e.target === e.currentTarget) {
-                            setShowMentorModal(false);
-                        }
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-900 text-white p-6 sm:p-10 shadow-2xl shadow-blue-900/30 border border-white/10 my-6">
+
+            {/* ═══════════════════════════════════════════════════ */}
+            {/* 🎬 CINEMATIC BACKGROUND — BIPSU LOGO              */}
+            {/* ═══════════════════════════════════════════════════ */}
+            <div
+                aria-hidden="true"
+                className="absolute inset-0 pointer-events-none select-none"
+                style={{ zIndex: 0 }}
+            >
+                {/* Main logo — malaki, naka-rotate, naka-blend sa gradient */}
+                <img
+                    src={bipsulogo}
+                    alt=""
+                    draggable="false"
+                    className="
+                        absolute
+                        right-[-6%] sm:right-[-4%] md:right-[2%]
+                        top-1/2 -translate-y-1/2
+                        w-[280px] h-[280px]
+                        sm:w-[360px] sm:h-[360px]
+                        md:w-[420px] md:h-[420px]
+                        object-contain
+                        opacity-[0.10]
+                        mix-blend-screen
+                        rotate-[-8deg]
+                        blur-[0.5px]
+                    "
+                    style={{
+                        filter: 'drop-shadow(0 0 60px rgba(255,255,255,0.25)) brightness(2.2) saturate(0.4)',
                     }}
+                />
+
+                {/* Secondary ghost — mas maliit, mirrored, sa kaliwang side para balanced */}
+                <img
+                    src={bipsulogo}
+                    alt=""
+                    draggable="false"
+                    className="
+                        absolute
+                        left-[-10%] bottom-[-20%]
+                        w-[220px] h-[220px] sm:w-[300px] sm:h-[300px]
+                        object-contain
+                        opacity-[0.05]
+                        mix-blend-screen
+                        rotate-[12deg]
+                        blur-[2px]
+                    "
+                    style={{
+                        filter: 'brightness(2.5) saturate(0.2)',
+                    }}
+                />
+
+                {/* Cinematic spotlight — radial gradient na nag-ce-center sa logo */}
+                <div
+                    className="absolute inset-0"
+                    style={{
+                        background:
+                            'radial-gradient(circle at 78% 50%, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.06) 25%, rgba(0,0,0,0) 55%)',
+                    }}
+                />
+
+                {/* Vignette — para lumalim ang edges parang film */}
+                <div
+                    className="absolute inset-0"
+                    style={{
+                        background:
+                            'radial-gradient(ellipse at center, rgba(0,0,0,0) 45%, rgba(15,23,42,0.45) 100%)',
+                    }}
+                />
+
+                {/* Subtle film grain (SVG noise) */}
+                <svg
+                    className="absolute inset-0 w-full h-full opacity-[0.06] mix-blend-overlay"
+                    xmlns="http://www.w3.org/2000/svg"
                 >
-                    <div className="relative w-full max-w-5xl max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-2xl">
-                        {/* Close Button */}
-                        <button
-                            onClick={() => setShowMentorModal(false)}
-                            className="absolute top-4 right-4 z-10 p-2 rounded-full bg-white/90 hover:bg-blue-100 transition shadow-lg text-slate-600 hover:text-blue-700 cursor-pointer"
-                            title="Close"
-                        >
-                            <X className="w-5 h-5" />
-                        </button>
-
-                        {/* AdviserCoAdviser Component */}
-                        <AdviserCoAdviser
-                            advisers={advisers}
-                            advisersLoading={advisersLoading}
-                            isOpen={showMentorModal}
-                            onClose={() => setShowMentorModal(false)}
+                    <filter id="cinegrain">
+                        <feTurbulence
+                            type="fractalNoise"
+                            baseFrequency="0.9"
+                            numOctaves="2"
+                            stitchTiles="stitch"
                         />
-                    </div>
-                </div>
-            )}
-
-            {/* BANNER - Blue and Yellow Theme */}
-            <div className="relative overflow-hidden rounded-2xl bg-blue-600 text-white p-6 sm:p-8 shadow-xl shadow-blue-900/20">
-                <div className="absolute -right-10 -bottom-10 w-64 h-64 bg-yellow-400/20 rounded-full blur-2xl pointer-events-none" />
-                <div className="absolute -left-10 -top-10 w-48 h-48 bg-white/5 rounded-full blur-2xl pointer-events-none" />
-                <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-                    <div className="space-y-2">
-                        <div className="flex items-center gap-2 flex-wrap">
-                            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-yellow-400 text-blue-900 border border-yellow-300 flex items-center gap-1">
-                                <CheckCircle2 className="w-3.5 h-3.5 text-blue-900" /> Active Group
-                            </span>
-                            <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-white/20 text-white backdrop-blur-md border border-white/20">
-                                Section: <strong className="text-white">{displayData.group.section?.name || 'N/A'}</strong>
-                            </span>
-                            <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-white/20 text-white backdrop-blur-md border border-white/20">
-                                Subject: <strong className="text-white">{displayData.group.section?.subject?.title || 'N/A'}</strong>
-                            </span>
-                        </div>
-                        <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight">{displayData.group.name}</h2>
-
-                        {/* Adviser Display */}
-                        <div className="flex flex-wrap items-center gap-3 mt-2">
-                            {adviserDisplay.exists ? (
-                                <div className="flex flex-col gap-1">
-                                    <div className="flex items-center gap-2 px-3 py-1.5 bg-white/20 backdrop-blur-md rounded-lg border border-white/20">
-                                        <Shield className="w-4 h-4 text-yellow-300" />
-                                        <span className="text-sm font-medium text-white/80">Adviser:</span>
-                                        <span className="text-sm font-semibold text-white">{adviserDisplay.name}</span>
-                                        <span className={`text-xs px-2 py-0.5 rounded-full ${adviserDisplay.status === 'approved'
-                                                ? 'bg-emerald-500/30 text-emerald-200'
-                                                : adviserDisplay.status === 'pending'
-                                                    ? 'bg-yellow-500/30 text-yellow-200'
-                                                    : 'bg-red-500/30 text-red-200'
-                                            }`}>
-                                            {adviserDisplay.status}
-                                        </span>
-                                        <span className="text-xs text-white/60">({adviserDisplay.role})</span>
-                                    </div>
-                                    {adviserDisplay.status === 'pending' && (
-                                        <p className="text-[10px] text-yellow-300 ml-2">⚠️ Waiting for approval from approver</p>
-                                    )}
-                                    {adviserDisplay.status === 'approved' && (
-                                        <p className="text-[10px] text-emerald-300 ml-2">✅ Adviser is approved and can manage the group</p>
-                                    )}
-                                    {adviserDisplay.status === 'rejected' && (
-                                        <p className="text-[10px] text-red-300 ml-2">❌ Request has been rejected. Please contact approver.</p>
-                                    )}
-                                </div>
-                            ) : (
-                                <span className="text-sm text-white/60">No adviser assigned yet</span>
-                            )}
-
-                            {coadviserDisplay.exists ? (
-                                <div className="flex flex-col gap-1">
-                                    <div className="flex items-center gap-2 px-3 py-1.5 bg-white/20 backdrop-blur-md rounded-lg border border-white/20">
-                                        <User className="w-4 h-4 text-yellow-300" />
-                                        <span className="text-sm font-medium text-white/80">Co-Adviser:</span>
-                                        <span className="text-sm font-semibold text-white">{coadviserDisplay.name}</span>
-                                        <span className={`text-xs px-2 py-0.5 rounded-full ${coadviserDisplay.status === 'approved'
-                                                ? 'bg-emerald-500/30 text-emerald-200'
-                                                : coadviserDisplay.status === 'pending'
-                                                    ? 'bg-yellow-500/30 text-yellow-200'
-                                                    : 'bg-red-500/30 text-red-200'
-                                            }`}>
-                                            {coadviserDisplay.status}
-                                        </span>
-                                        <span className="text-xs text-white/60">({coadviserDisplay.role})</span>
-                                    </div>
-                                    {coadviserDisplay.status === 'pending' && (
-                                        <p className="text-[10px] text-yellow-300 ml-2">⚠️ Waiting for approval from approver</p>
-                                    )}
-                                    {coadviserDisplay.status === 'approved' && (
-                                        <p className="text-[10px] text-emerald-300 ml-2">✅ Co-adviser is approved and can assist the group</p>
-                                    )}
-                                    {coadviserDisplay.status === 'rejected' && (
-                                        <p className="text-[10px] text-red-300 ml-2">❌ Request has been rejected. Please contact approver.</p>
-                                    )}
-                                </div>
-                            ) : (
-                                <span className="text-sm text-white/60">No co-adviser assigned yet</span>
-                            )}
-                        </div>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-3">
-                        {/* VIEW MENTOR BUTTON - Yellow */}
-                        <button
-                            onClick={() => setShowMentorModal(true)}
-                            className="px-4 py-2.5 bg-yellow-400 hover:bg-yellow-500 text-blue-900 font-semibold rounded-xl text-sm shadow-md hover:shadow-lg transition flex items-center gap-2"
-                            title="View full mentor details"
-                        >
-                            <Eye className="w-4 h-4" />
-                            View Mentor
-                        </button>
-
-                        {/* Assign Adviser - Yellow */}
-                        <button
-                            onClick={onAssignAdviser}
-                            className="px-4 py-2.5 bg-yellow-400 hover:bg-yellow-500 text-blue-900 font-semibold rounded-xl text-sm shadow-md hover:shadow-lg transition flex items-center gap-2"
-                        >
-                            <UserCog className="w-4 h-4" />
-                            {adviserDisplay.exists ? 'Change Adviser' : 'Assign Adviser'}
-                        </button>
-                        {/* Propose Title - Yellow */}
-                        <a
-                            href="#proposed-title-section"
-                            className="px-4 py-2.5 bg-yellow-400 hover:bg-yellow-500 text-blue-900 font-semibold rounded-xl text-sm shadow-md hover:shadow-lg transition flex items-center gap-2"
-                        >
-                            <Lightbulb className="w-4 h-4" />
-                            Propose New Title
-                        </a>
-                    </div>
-                </div>
+                        <feColorMatrix type="saturate" values="0" />
+                    </filter>
+                    <rect width="100%" height="100%" filter="url(#cinegrain)" />
+                </svg>
             </div>
-        </>
+
+            {/* Decorative blobs sa background (above logo, below content) */}
+            <div className="absolute -right-10 -bottom-10 w-64 h-64 bg-yellow-400/20 rounded-full blur-3xl pointer-events-none z-[1]" />
+            <div className="absolute -left-10 -top-10 w-48 h-48 bg-white/10 rounded-full blur-3xl pointer-events-none z-[1]" />
+            <div className="absolute right-1/3 top-0 w-32 h-32 bg-purple-400/15 rounded-full blur-2xl pointer-events-none z-[1]" />
+
+            <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                {/* LEFT — Welcome greeting */}
+                <div className="space-y-3 flex-1 min-w-0">
+                    {/* Top badges */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <span className="px-3 py-1 rounded-xl text-xs font-bold uppercase tracking-wider bg-gradient-to-r from-yellow-400 to-amber-400 text-blue-950 shadow-md shadow-yellow-500/20 flex items-center gap-1.5 border border-yellow-300/50">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-blue-950" /> Active Group
+                        </span>
+
+                        {role && (
+                            <span className="px-3 py-1 rounded-xl text-xs font-semibold bg-white/10 text-white backdrop-blur-md border border-white/20 shadow-sm flex items-center gap-1.5 capitalize">
+                                <User className="w-3.5 h-3.5 text-yellow-300" /> {roleLabel}
+                            </span>
+                        )}
+
+                        <span className="px-3 py-1 rounded-xl text-xs font-medium bg-white/10 text-white backdrop-blur-md border border-white/20 shadow-sm flex items-center gap-1.5">
+                            <Calendar className="w-3.5 h-3.5 text-yellow-300" /> {today}
+                        </span>
+                    </div>
+
+                    {/* Welcome heading */}
+                    <div>
+                        <p className="text-sm text-blue-100/90 font-medium flex items-center gap-1.5">
+                            <Sparkles className="w-4 h-4 text-yellow-300 animate-spin" style={{ animationDuration: '4s' }} />
+                            {getGreeting()},
+                        </p>
+                        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight mt-1 leading-tight drop-shadow-sm">
+                            Welcome, <span className="text-yellow-300 drop-shadow">{fullName}</span>!
+                        </h1>
+                        <p className="text-sm text-blue-100/80 mt-1.5 max-w-xl">
+                            Here's an overview of your academic group activity and progress.
+                        </p>
+                    </div>
+                </div>
+
+    
+            </div>
+        </div>
     );
 };
 

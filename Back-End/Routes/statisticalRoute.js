@@ -19,6 +19,4 @@ router.route("/subject_instructor")
 router.route("/Admin_Statistical")
     .get(authController.protect, statisticalController.getAdminStatistics)
 
-
-
 module.exports = router;

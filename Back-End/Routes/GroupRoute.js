@@ -67,4 +67,8 @@ router.route("/:id/members")
 router.route("/:id/mentor")
     .post(authController.protect, GroupController.assignMentor);
 
+// ASSIGN mentor to group
+router.route("/Approved_and_Reject/:referralCode")
+    .patch(authController.protect, GroupController.Approved_and_Reject);
+
 module.exports = router;

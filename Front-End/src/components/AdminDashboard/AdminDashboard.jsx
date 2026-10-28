@@ -10,20 +10,37 @@ import {
     BookMarked,
     Eye,
     EyeOff,
+    AlertCircle,
+    Inbox,
 } from 'lucide-react';
 
 import { StatisticalContext } from '../../contexts/StatisticalContext/StatisticalContext';
 import { AuthContext } from '../../contexts/AuthContext';
 import UploadDocuments from './UploadDocuments';
+import UserDashboardBanner from '../UserDashboard/components/UserDashboardBanner';
 
+/* ⭐ CHART COLORS — blue → yellow accent palette */
 const CHART_COLORS = [
     '#1E3A8A', // Blue 900
-    '#FBBF24', // Yellow 400
+    '#FACC15', // Yellow 400
     '#3B82F6', // Blue 500
-    '#FCD34D', // Yellow 300
-    '#1E40AF', // Blue 800
-    '#F59E0B', // Amber 500
+    '#93C5FD', // Blue 300
+    '#2563EB', // Blue 600
+    '#FDE047', // Yellow 300
 ];
+
+/* ⭐ SEMANTIC status colors — always meaningful */
+const STATUS_COLOR_MAP = {
+    Pending: '#FACC15',           // yellow
+    Approved: '#1E3A8A',          // navy
+    Revision: '#A855F7',          // purple
+    'Ready for Defense': '#10B981', // emerald
+    Rejected: '#EF4444',          // red
+};
+
+const getStatusColor = (label, fallbackIdx = 0) => {
+    return STATUS_COLOR_MAP[label] || CHART_COLORS[fallbackIdx % CHART_COLORS.length];
+};
 
 const formatRole = (role) => {
     if (!role) return '';
@@ -39,11 +56,11 @@ const formatRole = (role) => {
    ============================ */
 
 const SkeletonPulse = ({ className = '' }) => (
-    <div className={`animate-pulse bg-slate-200 rounded ${className}`} />
+    <div className={`animate-pulse bg-blue-100 rounded ${className}`} />
 );
 
 const StatCardSkeleton = () => (
-    <div className="bg-white p-4 rounded-2xl shadow-sm border border-blue-100 flex flex-col justify-between">
+    <div className="bg-white p-4 rounded-2xl shadow-sm border border-blue-100 border-t-4 border-t-yellow-300 flex flex-col justify-between">
         <div className="flex items-center justify-between mb-2">
             <SkeletonPulse className="h-3 w-14" />
             <SkeletonPulse className="h-8 w-8 rounded-xl" />
@@ -55,10 +72,10 @@ const StatCardSkeleton = () => (
     </div>
 );
 
-const DonutChartSkeleton = ({ size = 120 }) => (
+const DonutChartSkeleton = ({ size = 140 }) => (
     <div className="relative flex items-center justify-center" style={{ height: size }}>
         <div
-            className="rounded-full border-[14px] border-slate-200 animate-pulse"
+            className="rounded-full border-[14px] border-blue-100 animate-pulse"
             style={{ width: size, height: size }}
         />
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-1">
@@ -69,13 +86,13 @@ const DonutChartSkeleton = ({ size = 120 }) => (
 );
 
 const PieCardSkeleton = () => (
-    <div className="bg-white p-4 rounded-2xl shadow-sm border border-blue-100 flex flex-col">
+    <div className="bg-white p-4 rounded-2xl shadow-sm border border-blue-100 border-t-4 border-t-blue-900 flex flex-col">
         <div className="mb-2 space-y-2">
             <SkeletonPulse className="h-4 w-32" />
             <SkeletonPulse className="h-3 w-24" />
         </div>
         <div className="flex-1 flex items-center justify-center py-1">
-            <DonutChartSkeleton size={120} />
+            <DonutChartSkeleton size={140} />
         </div>
         <div className="mt-2 space-y-2">
             {[...Array(3)].map((_, i) => (
@@ -93,7 +110,7 @@ const PieCardSkeleton = () => (
 
 const LineGraphSkeleton = () => (
     <div className="w-full">
-        <div className="relative w-full" style={{ height: 160 }}>
+        <div className="relative w-full" style={{ height: 180 }}>
             <div className="absolute left-0 top-0 bottom-0 flex flex-col justify-between py-4">
                 {[...Array(5)].map((_, i) => (
                     <SkeletonPulse key={i} className="h-2 w-4" />
@@ -119,17 +136,37 @@ const LineGraphSkeleton = () => (
 );
 
 /* ============================
+   EMPTY STATE COMPONENT
+   ============================ */
+const EmptyChartState = ({ icon: Icon = Inbox, title = 'No data available', subtitle = 'Data will appear once available' }) => (
+    <div className="flex flex-col items-center justify-center h-full py-8 text-center">
+        <div className="w-14 h-14 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center mb-3">
+            <Icon className="w-6 h-6 text-blue-300" />
+        </div>
+        <p className="text-sm font-semibold text-blue-900">{title}</p>
+        <p className="text-[11px] text-blue-400 mt-1 max-w-[180px]">{subtitle}</p>
+    </div>
+);
+
+/* ============================
    CHART COMPONENTS
    ============================ */
 
-const DonutChart = ({ data = [], size = 180, innerRadius = 48 }) => {
+const DonutChart = ({ data = [], size = 160, innerRadius = 46 }) => {
     const [hoveredIndex, setHoveredIndex] = useState(null);
     const total = data.reduce((sum, d) => sum + (d.value || 0), 0);
-    if (total === 0) return (
-        <div className="flex flex-col items-center justify-center text-slate-400 text-xs font-medium" style={{ height: size }}>
-            No data available
-        </div>
-    );
+
+    if (total === 0) {
+        return (
+            <div className="flex items-center justify-center" style={{ height: size }}>
+                <EmptyChartState
+                    icon={PieIcon}
+                    title="No data available"
+                    subtitle="Charts will populate once submissions arrive"
+                />
+            </div>
+        );
+    }
 
     const radius = size / 2;
     const center = radius;
@@ -179,7 +216,7 @@ const DonutChart = ({ data = [], size = 180, innerRadius = 48 }) => {
                     const isHovered = hoveredIndex === i;
                     const scale = isHovered ? 1.05 : 1;
                     const translate = isHovered ? 'translate(2px, -2px)' : 'translate(0, 0)';
-                    
+
                     return (
                         <g
                             key={i}
@@ -209,28 +246,27 @@ const DonutChart = ({ data = [], size = 180, innerRadius = 48 }) => {
                     );
                 })}
             </svg>
-            
-            {/* Center label with hover info */}
+
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                 {hoveredSlice ? (
                     <>
-                        <span 
-                            className="text-sm font-semibold transition-all duration-300 leading-none"
+                        <span
+                            className="text-xl font-extrabold transition-all duration-300 leading-none"
                             style={{ color: hoveredSlice.color }}
                         >
                             {hoveredSlice.value}
                         </span>
-                        <span className="text-[8px] uppercase tracking-wider text-slate-400 font-medium text-center px-1 leading-tight mt-0.5">
+                        <span className="text-[9px] uppercase tracking-wider text-blue-500 font-bold text-center px-1 leading-tight mt-1">
                             {hoveredSlice.label}
                         </span>
-                        <span className="text-[9px] font-medium text-slate-500 mt-0.5">
+                        <span className="text-[10px] font-semibold text-blue-700 mt-0.5">
                             {hoveredSlice.percent}%
                         </span>
                     </>
                 ) : (
                     <>
-                        <span className="text-sm font-semibold text-blue-950 transition-all duration-300 leading-none">{total}</span>
-                        <span className="text-[8px] uppercase tracking-wider text-slate-400 font-medium mt-0.5">
+                        <span className="text-2xl font-extrabold text-blue-950 transition-all duration-300 leading-none">{total}</span>
+                        <span className="text-[9px] uppercase tracking-widest text-blue-500 font-bold mt-1">
                             Total
                         </span>
                     </>
@@ -244,8 +280,8 @@ const LineGraph = ({ data = [], labels = [], label = "Proposals Submitted" }) =>
     const [hoveredPoint, setHoveredPoint] = useState(null);
     const maxVal = Math.max(...data, 5);
     const width = 600;
-    const height = 160;
-    const padding = 25;
+    const height = 180;
+    const padding = 30;
     const graphWidth = width - padding * 2;
     const graphHeight = height - padding * 2;
 
@@ -263,39 +299,45 @@ const LineGraph = ({ data = [], labels = [], label = "Proposals Submitted" }) =>
         ? `${pathD} L ${points[points.length - 1].x} ${height - padding} L ${points[0].x} ${height - padding} Z`
         : '';
 
+    const hasData = data.some((v) => v > 0);
+
     return (
         <div className="w-full flex flex-col items-center">
             <div className="w-full overflow-x-auto">
                 <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto">
                     <defs>
                         <linearGradient id="lineGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#1E3A8A" stopOpacity="0.25" />
+                            <stop offset="0%" stopColor="#1E3A8A" stopOpacity="0.22" />
                             <stop offset="100%" stopColor="#1E3A8A" stopOpacity="0.0" />
+                        </linearGradient>
+                        <linearGradient id="strokeGrad" x1="0" y1="0" x2="1" y2="0">
+                            <stop offset="0%" stopColor="#1E3A8A" />
+                            <stop offset="60%" stopColor="#3B82F6" />
+                            <stop offset="100%" stopColor="#FACC15" />
                         </linearGradient>
                     </defs>
 
-                    {/* Grid lines - THINNER */}
                     {[0, 0.25, 0.5, 0.75, 1.0].map((ratio, i) => {
                         const y = padding + graphHeight * ratio;
                         const val = Math.round(maxVal * (1 - ratio));
                         return (
                             <g key={i}>
-                                <line 
-                                    x1={padding} 
-                                    y1={y} 
-                                    x2={width - padding} 
-                                    y2={y} 
-                                    stroke="#e2e8f0" 
-                                    strokeDasharray="4 4" 
+                                <line
+                                    x1={padding}
+                                    y1={y}
+                                    x2={width - padding}
+                                    y2={y}
+                                    stroke="#dbeafe"
+                                    strokeDasharray="4 4"
                                     strokeWidth="1"
                                 />
-                                <text 
-                                    x={padding - 8} 
-                                    y={y + 3} 
-                                    fontSize="7.5" 
-                                    fill="#94a3b8" 
+                                <text
+                                    x={padding - 8}
+                                    y={y + 3}
+                                    fontSize="8"
+                                    fill="#93c5fd"
                                     textAnchor="end"
-                                    fontWeight="400"
+                                    fontWeight="500"
                                 >
                                     {val}
                                 </text>
@@ -303,26 +345,22 @@ const LineGraph = ({ data = [], labels = [], label = "Proposals Submitted" }) =>
                         );
                     })}
 
-                    {/* Area fill */}
-                    {areaD && (
-                        <path 
-                            d={areaD} 
-                            fill="url(#lineGrad)" 
+                    {hasData && areaD && (
+                        <path
+                            d={areaD}
+                            fill="url(#lineGrad)"
                             className="transition-all duration-500"
-                            style={{
-                                opacity: hoveredPoint !== null ? 0.7 : 1,
-                            }}
+                            style={{ opacity: hoveredPoint !== null ? 0.7 : 1 }}
                         />
                     )}
 
-                    {/* Line path - THINNER STROKE */}
-                    {pathD && (
-                        <path 
-                            d={pathD} 
-                            fill="none" 
-                            stroke="#1E3A8A" 
-                            strokeWidth="2.5" 
-                            strokeLinecap="round" 
+                    {hasData && pathD && (
+                        <path
+                            d={pathD}
+                            fill="none"
+                            stroke="url(#strokeGrad)"
+                            strokeWidth="2.5"
+                            strokeLinecap="round"
                             strokeLinejoin="round"
                             className="transition-all duration-500"
                             style={{
@@ -331,92 +369,78 @@ const LineGraph = ({ data = [], labels = [], label = "Proposals Submitted" }) =>
                         />
                     )}
 
-                    {/* Data points with hover effect */}
                     {points.map((pt, i) => {
                         const isHovered = hoveredPoint === i;
+                        const isEmpty = !pt.val;
                         return (
-                            <g 
-                                key={i} 
+                            <g
+                                key={i}
                                 className="cursor-pointer"
                                 onMouseEnter={() => setHoveredPoint(i)}
                                 onMouseLeave={() => setHoveredPoint(null)}
                             >
-                                {/* Invisible larger hit area */}
-                                <circle
-                                    cx={pt.x}
-                                    cy={pt.y}
-                                    r="14"
-                                    fill="transparent"
-                                />
-                                
-                                {/* Outer glow ring on hover */}
-                                {isHovered && (
+                                <circle cx={pt.x} cy={pt.y} r="14" fill="transparent" />
+
+                                {isHovered && !isEmpty && (
                                     <circle
                                         cx={pt.x}
                                         cy={pt.y}
                                         r="9"
                                         fill="none"
-                                        stroke="#3B82F6"
+                                        stroke="#FACC15"
                                         strokeWidth="1.5"
-                                        opacity="0.5"
+                                        opacity="0.6"
                                         className="animate-ping"
                                         style={{ animationDuration: '1.5s' }}
                                     />
                                 )}
-                                
-                                {/* Main point - SMALLER & THINNER */}
+
                                 <circle
                                     cx={pt.x}
                                     cy={pt.y}
-                                    r={isHovered ? 4.5 : 3}
-                                    fill="#FBBF24"
-                                    stroke={isHovered ? '#3B82F6' : '#1E3A8A'}
+                                    r={isHovered ? 4.5 : (isEmpty ? 2.5 : 3.5)}
+                                    fill={isEmpty ? '#CBD5E1' : '#3B82F6'}
+                                    stroke={isHovered ? '#FACC15' : (isEmpty ? '#94A3B8' : '#1E3A8A')}
                                     strokeWidth={isHovered ? 2 : 1.5}
                                     className="transition-all duration-300 ease-out"
                                     style={{
-                                        filter: isHovered ? 'drop-shadow(0 2px 4px rgba(251, 191, 36, 0.5))' : 'none',
+                                        filter: isHovered ? 'drop-shadow(0 2px 4px rgba(59, 130, 246, 0.5))' : 'none',
                                     }}
                                 />
-                                
-                                {/* Tooltip on hover */}
+
                                 {isHovered && (
                                     <g>
-                                        {/* Tooltip background */}
                                         <rect
-                                            x={pt.x - 38}
-                                            y={pt.y - 36}
-                                            width="76"
-                                            height="24"
-                                            rx="5"
+                                            x={pt.x - 40}
+                                            y={pt.y - 38}
+                                            width="80"
+                                            height="26"
+                                            rx="6"
                                             fill="#1E3A8A"
                                             className="drop-shadow-lg"
-                                            style={{
-                                                animation: 'fadeIn 0.2s ease-out',
-                                            }}
+                                            style={{ animation: 'fadeIn 0.2s ease-out' }}
                                         />
-                                        {/* Tooltip arrow */}
                                         <polygon
                                             points={`${pt.x - 5},${pt.y - 12} ${pt.x + 5},${pt.y - 12} ${pt.x},${pt.y - 7}`}
                                             fill="#1E3A8A"
                                         />
-                                        {/* Tooltip text - THINNER */}
                                         <text
                                             x={pt.x}
-                                            y={pt.y - 24}
+                                            y={pt.y - 26}
                                             textAnchor="middle"
-                                            fill="#FBBF24"
-                                            fontSize="7.5"
-                                            fontWeight="600"
+                                            fill="#FACC15"
+                                            fontSize="8"
+                                            fontWeight="700"
                                         >
                                             {pt.val} {label}
                                         </text>
                                         <text
                                             x={pt.x}
-                                            y={pt.y - 16}
+                                            y={pt.y - 17}
                                             textAnchor="middle"
-                                            fill="#ffffff"
-                                            fontSize="6"
-                                            fontWeight="400"
+                                            fill="#FFFFFF"
+                                            fontSize="6.5"
+                                            fontWeight="500"
                                             opacity="0.85"
                                         >
                                             {pt.label}
@@ -427,38 +451,41 @@ const LineGraph = ({ data = [], labels = [], label = "Proposals Submitted" }) =>
                         );
                     })}
 
-                    {/* Vertical hover guide line - THINNER */}
-                    {hoveredPoint !== null && (
+                    {hoveredPoint !== null && points[hoveredPoint] && (
                         <line
                             x1={points[hoveredPoint].x}
                             y1={padding}
                             x2={points[hoveredPoint].x}
                             y2={height - padding}
-                            stroke="#3B82F6"
+                            stroke="#FACC15"
                             strokeWidth="1"
                             strokeDasharray="3 3"
-                            opacity="0.4"
+                            opacity="0.5"
                             className="transition-all duration-200"
                         />
                     )}
                 </svg>
             </div>
 
-            {/* X-axis labels - THINNER */}
-            <div className="grid grid-cols-6 sm:grid-cols-12 gap-1 w-full text-[9px] text-slate-500 font-medium text-center mt-2 border-t border-slate-100 pt-2">
+            <div className="grid grid-cols-6 sm:grid-cols-12 gap-1 w-full text-[9px] text-blue-600 font-medium text-center mt-2 border-t border-blue-100 pt-2">
                 {labels.map((lbl, idx) => {
                     const isHovered = hoveredPoint === idx;
+                    const [month, year] = lbl.split(' ');
                     return (
-                        <div 
-                            key={idx} 
-                            className={`truncate transition-all duration-200 cursor-default ${
-                                isHovered ? 'text-blue-900 font-semibold scale-105' : ''
-                            }`}
+                        <div
+                            key={idx}
+                            className={`truncate transition-all duration-200 cursor-default ${isHovered ? 'text-blue-900 font-semibold' : ''
+                                }`}
                             title={lbl}
                             onMouseEnter={() => setHoveredPoint(idx)}
                             onMouseLeave={() => setHoveredPoint(null)}
                         >
-                            {lbl.split(' ')[0]} <span className={`text-[8px] font-normal ${isHovered ? 'text-blue-600' : 'text-slate-400'}`}>{lbl.split(' ')[1]}</span>
+                            <div className={`${isHovered ? 'scale-110' : ''} transition-transform`}>
+                                {month}{' '}
+                                <span className={`text-[8px] font-normal ${isHovered ? 'text-yellow-600' : 'text-blue-400'}`}>
+                                    {year}
+                                </span>
+                            </div>
                         </div>
                     );
                 })}
@@ -467,25 +494,42 @@ const LineGraph = ({ data = [], labels = [], label = "Proposals Submitted" }) =>
     );
 };
 
-// StatCard - THINNER borders, cleaner look
+/* ⭐ STAT CARD — yellow top accent + navy icon badge */
 const StatCard = ({ label, value, sublabel, icon: Icon, iconColor }) => (
-    <div className="bg-white p-4 rounded-2xl shadow-sm border border-blue-100 flex flex-col justify-between hover:border-blue-300 hover:shadow-lg transition-all duration-300 group">
-        <div className="flex items-center justify-between text-slate-400 mb-2">
-            <span className="text-[10px] font-semibold uppercase tracking-wider">{label}</span>
-            <div className="p-1.5 bg-blue-50 rounded-lg border border-blue-100 group-hover:scale-110 group-hover:bg-blue-100 group-hover:border-blue-200 transition-all duration-300">
+    <div className="bg-white p-4 rounded-2xl shadow-sm border border-blue-100 border-t-4 border-t-yellow-400 flex flex-col justify-between hover:-translate-y-0.5 hover:shadow-lg hover:shadow-blue-900/15 transition-all duration-300 group">
+        <div className="flex items-center justify-between text-blue-800 mb-2">
+            <span className="text-[10px] font-bold uppercase tracking-wider">{label}</span>
+            <div className="p-1.5 bg-blue-900 rounded-lg group-hover:scale-110 transition-all duration-300 shadow-sm">
                 <Icon className={`w-4 h-4 ${iconColor}`} />
             </div>
         </div>
         <div>
-            <div className="text-lg font-semibold text-blue-950 group-hover:text-blue-800 transition-colors duration-300 leading-tight">{value}</div>
-            <div className="text-[10px] text-slate-500 mt-0.5 font-normal">{sublabel}</div>
+            <div className="text-lg font-extrabold text-blue-950 group-hover:text-blue-800 transition-colors duration-300 leading-tight">{value}</div>
+            <div className="text-[10px] text-blue-600/80 mt-0.5 font-normal">{sublabel}</div>
         </div>
     </div>
 );
 
+/* ⭐ PROFESSIONAL LEGEND ROW */
+const LegendRow = ({ color, label, value, total }) => {
+    const pct = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
+    return (
+        <div className="flex items-center justify-between text-[11px] hover:bg-blue-50 rounded-lg px-2 py-1.5 transition-colors duration-200 group">
+            <div className="flex items-center gap-2 min-w-0">
+                <span className="w-2.5 h-2.5 rounded-full shrink-0 shadow-sm" style={{ backgroundColor: color }} />
+                <span className="text-blue-800 font-medium truncate">{label}</span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+                <span className="text-[10px] text-blue-400 font-normal tabular-nums">{pct}%</span>
+                <span className="font-bold text-blue-900 tabular-nums min-w-[20px] text-right">{value}</span>
+            </div>
+        </div>
+    );
+};
+
 export default function App() {
     const { Admindata } = useContext(StatisticalContext);
-    const { role } = useContext(AuthContext);
+    const { role, first_name, last_name } = useContext(AuthContext);
 
     const [isLoading, setIsLoading] = useState(true);
     const [showUpload, setShowUpload] = useState(false);
@@ -540,11 +584,52 @@ export default function App() {
 
     const stats = dashboardData.statisticalCards;
 
-    // Use context role, fallback to 'User' if none provided
     const displayRole = formatRole(role) || 'User';
 
+    const bannerDisplayData = useMemo(() => ({
+        group: {
+            name: 'BiPSU Faculty Portal',
+            referralCode: 'N/A',
+            section: {
+                name: `${displayRole} Access`,
+                subject: {
+                    title: 'Institutional Dashboard',
+                },
+            },
+        },
+        referredUsers: [],
+        userCount: stats.totalUsers || 0,
+        status: 'success',
+    }), [displayRole, stats.totalUsers]);
+
+    /* ⭐ computed totals for pie cards */
+    const proposalStatusTotal = useMemo(
+        () => dashboardData.pieGraph.data.reduce((s, v) => s + (v || 0), 0),
+        [dashboardData.pieGraph.data]
+    );
+
+    const groupDistTotal = useMemo(
+        () => dashboardData.pieGraphGroups.data.reduce((s, v) => s + (v || 0), 0),
+        [dashboardData.pieGraphGroups.data]
+    );
+
+    const peakProposals = useMemo(() => {
+        const arr = dashboardData.lineGraph.data.length ? dashboardData.lineGraph.data : [0];
+        return Math.max(...arr);
+    }, [dashboardData.lineGraph.data]);
+
+    /* ⭐ peak label */
+    const peakLabel = useMemo(() => {
+        const arr = dashboardData.lineGraph.data;
+        const labels = dashboardData.lineGraph.labels;
+        if (!arr.length || !labels.length) return 'N/A';
+        const max = Math.max(...arr);
+        const idx = arr.indexOf(max);
+        return labels[idx] || 'N/A';
+    }, [dashboardData.lineGraph.data, dashboardData.lineGraph.labels]);
+
     return (
-        <div className="flex flex-col h-screen bg-slate-50 font-sans overflow-hidden">
+        <div className="flex flex-col h-screen bg-gradient-to-b from-blue-100 via-blue-50 to-sky-50 font-sans overflow-hidden">
             <style>{`
                 @keyframes fadeIn {
                     from { opacity: 0; transform: translateY(4px); }
@@ -552,33 +637,25 @@ export default function App() {
                 }
             `}</style>
 
-            <main className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/50">
-                {/* Welcome Banner */}
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-blue-100">
-                    {isLoading ? (
-                        <div className="w-full space-y-3">
-                            <div className="flex items-center gap-2">
-                                <SkeletonPulse className="h-6 w-28 rounded-full" />
-                                <SkeletonPulse className="h-4 w-40" />
-                            </div>
-                            <SkeletonPulse className="h-8 w-72" />
-                            <SkeletonPulse className="h-4 w-96 max-w-full" />
+            <main className="flex-1 overflow-y-auto p-6 space-y-6">
+                {/* ⭐ Banner */}
+                {isLoading ? (
+                    <div className="w-full space-y-3 bg-white p-6 rounded-3xl shadow-sm border border-blue-100 border-t-4 border-t-yellow-400">
+                        <div className="flex items-center gap-2">
+                            <SkeletonPulse className="h-6 w-28 rounded-full" />
+                            <SkeletonPulse className="h-4 w-40" />
                         </div>
-                    ) : (
-                        <div>
-                            <div className="flex items-center gap-2 mb-1">
-                                <span className="px-3 py-1 bg-blue-50 text-blue-900 text-xs font-semibold rounded-full uppercase tracking-wider border border-blue-200">
-                                    Active Session
-                                </span>
-                                <span className="text-slate-400 text-sm font-normal">• BiPSU Faculty Portal</span>
-                            </div>
-                            <h2 className="text-2xl md:text-3xl font-bold text-blue-950 tracking-tight">
-                                BiPSU {displayRole} Dashboard
-                            </h2>
-                            <p className="text-slate-500 text-sm mt-1 font-normal">Manage assigned groups, reviews, and institutional project timelines.</p>
-                        </div>
-                    )}
-                </div>
+                        <SkeletonPulse className="h-8 w-72" />
+                        <SkeletonPulse className="h-4 w-96 max-w-full" />
+                    </div>
+                ) : (
+                    <UserDashboardBanner
+                        first_name={first_name}
+                        last_name={last_name}
+                        role={role}
+                        displayData={bannerDisplayData}
+                    />
+                )}
 
                 {/* Statistical Cards Grid */}
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
@@ -586,41 +663,36 @@ export default function App() {
                         [...Array(6)].map((_, i) => <StatCardSkeleton key={i} />)
                     ) : (
                         <>
-                            <StatCard label="Users" value={stats.totalUsers} sublabel="System users" icon={Users} iconColor="text-blue-900" />
-                            <StatCard label="Groups" value={stats.totalGroups} sublabel="Total groups" icon={Layers} iconColor="text-blue-800" />
-                            <StatCard label="Proposals" value={stats.totalProposals} sublabel="Submitted total" icon={FileText} iconColor="text-blue-900" />
-                            <StatCard label="Subjects" value={stats.totalSubjects} sublabel="Total subjects" icon={BookMarked} iconColor="text-blue-700" />
-                            <StatCard label="Sections" value={stats.totalSections} sublabel="Total sections" icon={BookOpen} iconColor="text-amber-600" />
-                            <StatCard label="Ready Defense" value={stats.readyForDefenseProposals} sublabel="Cleared status" icon={CheckCircle2} iconColor="text-emerald-600" />
+                            <StatCard label="Users" value={stats.totalUsers} sublabel="System users" icon={Users} iconColor="text-yellow-300" />
+                            <StatCard label="Groups" value={stats.totalGroups} sublabel="Total groups" icon={Layers} iconColor="text-yellow-300" />
+                            <StatCard label="Proposals" value={stats.totalProposals} sublabel="Submitted total" icon={FileText} iconColor="text-yellow-300" />
+                            <StatCard label="Subjects" value={stats.totalSubjects} sublabel="Total subjects" icon={BookMarked} iconColor="text-yellow-300" />
+                            <StatCard label="Sections" value={stats.totalSections} sublabel="Total sections" icon={BookOpen} iconColor="text-yellow-300" />
+                            <StatCard label="Ready Defense" value={stats.readyForDefenseProposals} sublabel="Cleared status" icon={CheckCircle2} iconColor="text-yellow-300" />
                         </>
                     )}
                 </div>
 
-                {/* Row 1.5: Upload Documents Section — with Show/Hide toggle */}
+                {/* Upload Documents */}
                 <div className="bg-white rounded-2xl shadow-sm border border-blue-100 overflow-hidden">
-                    {/* Header with Show/Hide button */}
                     <button
                         type="button"
                         onClick={() => setShowUpload((prev) => !prev)}
-                        className="w-full flex items-center justify-between px-5 py-3 hover:bg-slate-50 transition-colors duration-200"
+                        className="w-full flex items-center justify-between px-5 py-3 hover:bg-blue-50 transition-colors duration-200"
                     >
                         <div className="flex items-center gap-2">
-                            <FileText className="w-4 h-4 text-blue-900" />
-                            <span className="text-sm font-semibold text-blue-950">
+                            <span className="p-1.5 bg-blue-900 rounded-lg">
+                                <FileText className="w-3.5 h-3.5 text-yellow-300" />
+                            </span>
+                            <span className="text-sm font-semibold text-blue-900">
                                 Upload Documents
                             </span>
-                            <span className="text-[10px] text-slate-400 font-normal hidden sm:inline">
+                            <span className="text-[10px] text-blue-500 font-normal hidden sm:inline">
                                 • Manage proposal attachments
                             </span>
                         </div>
 
-                        <span
-                            className={`flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full border transition-all duration-300 ${
-                                showUpload
-                                    ? 'bg-blue-50 text-blue-900 border-blue-200 hover:bg-blue-100'
-                                    : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
-                            }`}
-                        >
+                        <span className="flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full border transition-all duration-300 bg-yellow-100 text-yellow-900 border-yellow-300 hover:bg-yellow-200">
                             {showUpload ? (
                                 <>
                                     <EyeOff className="w-3 h-3" />
@@ -635,21 +707,19 @@ export default function App() {
                         </span>
                     </button>
 
-                    {/* Collapsible body */}
                     <div
-                        className={`transition-all duration-300 ease-in-out ${
-                            showUpload
-                                ? 'max-h-[2000px] opacity-100'
-                                : 'max-h-0 opacity-0 overflow-hidden'
-                        }`}
+                        className={`transition-all duration-300 ease-in-out ${showUpload
+                            ? 'max-h-[2000px] opacity-100'
+                            : 'max-h-0 opacity-0 overflow-hidden'
+                            }`}
                     >
-                        <div className="px-4 pb-4 pt-1 border-t border-slate-100">
+                        <div className="px-4 pb-4 pt-1 border-t border-blue-100">
                             <UploadDocuments isLoading={isLoading} />
                         </div>
                     </div>
                 </div>
 
-                {/* Row 2: Two Pie Graphs side by side */}
+                {/* Two Pie Graphs */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {isLoading ? (
                         <>
@@ -658,87 +728,137 @@ export default function App() {
                         </>
                     ) : (
                         <>
-                            {/* Proposal Status Distribution */}
-                            <div className="bg-white p-4 rounded-2xl shadow-sm border border-blue-100 flex flex-col hover:shadow-lg transition-shadow duration-300">
-                                <div className="mb-2">
-                                    <h3 className="text-sm font-semibold text-blue-950 flex items-center gap-2">
-                                        <PieIcon className="w-4 h-4 text-blue-900" /> Proposal Status
-                                    </h3>
-                                    <p className="text-[11px] text-slate-400 font-normal">By lifecycle status</p>
+                            {/* ── Proposal Status ── */}
+                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-blue-100 border-t-4 border-t-blue-900 flex flex-col hover:shadow-lg transition-shadow duration-300">
+                                <div className="mb-3 flex items-start justify-between">
+                                    <div>
+                                        <h3 className="text-sm font-bold text-blue-900 flex items-center gap-2">
+                                            <span className="p-1.5 bg-blue-900 rounded-lg">
+                                                <PieIcon className="w-3.5 h-3.5 text-yellow-300" />
+                                            </span>
+                                            Proposal Status
+                                        </h3>
+                                        <p className="text-[11px] text-blue-500 font-normal mt-0.5">By lifecycle status</p>
+                                    </div>
+                                    <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${proposalStatusTotal > 0
+                                        ? 'text-blue-900 bg-yellow-300'
+                                        : 'text-blue-600 bg-blue-100 border border-blue-200'
+                                        }`}>
+                                        {proposalStatusTotal} total
+                                    </span>
                                 </div>
 
-                                <div className="flex-1 flex items-center justify-center py-1">
-                                    <DonutChart
-                                        data={dashboardData.pieGraph.labels.map((label, idx) => ({
-                                            label,
-                                            value: dashboardData.pieGraph.data[idx],
-                                            color: CHART_COLORS[idx % CHART_COLORS.length]
-                                        }))}
-                                        size={120}
-                                        innerRadius={34}
-                                    />
+                                <div className="flex-1 flex items-center justify-center py-2 min-h-[180px]">
+                                    {proposalStatusTotal > 0 ? (
+                                        <DonutChart
+                                            data={dashboardData.pieGraph.labels.map((label, idx) => ({
+                                                label,
+                                                value: dashboardData.pieGraph.data[idx],
+                                                color: getStatusColor(label, idx),
+                                            }))}
+                                            size={160}
+                                            innerRadius={46}
+                                        />
+                                    ) : (
+                                        <EmptyChartState
+                                            icon={PieIcon}
+                                            title="No data available"
+                                            subtitle="Status breakdown will appear once proposals are submitted"
+                                        />
+                                    )}
                                 </div>
 
-                                <div className="mt-2 space-y-1">
-                                    {dashboardData.pieGraph.labels.map((label, idx) => {
-                                        const val = dashboardData.pieGraph.data[idx];
-                                        const color = CHART_COLORS[idx % CHART_COLORS.length];
-                                        return (
-                                            <div key={label} className="flex items-center justify-between text-[11px] hover:bg-slate-50 rounded px-1.5 py-0.5 transition-colors duration-200">
-                                                <div className="flex items-center gap-1.5">
-                                                    <span className="w-2 h-2 rounded-sm" style={{ backgroundColor: color }} />
-                                                    <span className="text-slate-700 font-normal">{label}</span>
-                                                </div>
-                                                <span className="font-semibold text-slate-900">{val}</span>
-                                            </div>
-                                        );
-                                    })}
+                                <div className="mt-3 pt-3 border-t border-blue-100 space-y-0.5">
+                                    {dashboardData.pieGraph.labels.length > 0 ? (
+                                        dashboardData.pieGraph.labels.map((label, idx) => {
+                                            const val = dashboardData.pieGraph.data[idx];
+                                            const color = getStatusColor(label, idx);
+                                            return (
+                                                <LegendRow
+                                                    key={label}
+                                                    color={color}
+                                                    label={label}
+                                                    value={val}
+                                                    total={proposalStatusTotal}
+                                                />
+                                            );
+                                        })
+                                    ) : (
+                                        <p className="text-[11px] text-blue-400 text-center py-2 italic">
+                                            No status categories defined
+                                        </p>
+                                    )}
                                 </div>
                             </div>
 
-                            {/* Group Distribution */}
-                            <div className="bg-white p-4 rounded-2xl shadow-sm border border-blue-100 flex flex-col hover:shadow-lg transition-shadow duration-300">
-                                <div className="mb-2">
-                                    <h3 className="text-sm font-semibold text-blue-950 flex items-center gap-2">
-                                        <PieIcon className="w-4 h-4 text-blue-900" /> Group Distribution
-                                    </h3>
-                                    <p className="text-[11px] text-slate-400 font-normal">Members across units</p>
+                            {/* ── Group Distribution ── */}
+                            <div className="bg-white p-5 rounded-2xl shadow-sm border border-blue-100 border-t-4 border-t-blue-900 flex flex-col hover:shadow-lg transition-shadow duration-300">
+                                <div className="mb-3 flex items-start justify-between">
+                                    <div>
+                                        <h3 className="text-sm font-bold text-blue-900 flex items-center gap-2">
+                                            <span className="p-1.5 bg-blue-900 rounded-lg">
+                                                <Layers className="w-3.5 h-3.5 text-yellow-300" />
+                                            </span>
+                                            Group Distribution
+                                        </h3>
+                                        <p className="text-[11px] text-blue-500 font-normal mt-0.5">Members across units</p>
+                                    </div>
+                                    <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${groupDistTotal > 0
+                                        ? 'text-blue-900 bg-yellow-300'
+                                        : 'text-blue-600 bg-blue-100 border border-blue-200'
+                                        }`}>
+                                        {groupDistTotal} total
+                                    </span>
                                 </div>
 
-                                <div className="flex-1 flex items-center justify-center py-1">
-                                    <DonutChart
-                                        data={dashboardData.pieGraphGroups.labels.map((label, idx) => ({
-                                            label,
-                                            value: dashboardData.pieGraphGroups.data[idx],
-                                            color: CHART_COLORS[idx % CHART_COLORS.length]
-                                        }))}
-                                        size={120}
-                                        innerRadius={34}
-                                    />
+                                <div className="flex-1 flex items-center justify-center py-2 min-h-[180px]">
+                                    {groupDistTotal > 0 ? (
+                                        <DonutChart
+                                            data={dashboardData.pieGraphGroups.labels.map((label, idx) => ({
+                                                label,
+                                                value: dashboardData.pieGraphGroups.data[idx],
+                                                color: CHART_COLORS[idx % CHART_COLORS.length],
+                                            }))}
+                                            size={160}
+                                            innerRadius={46}
+                                        />
+                                    ) : (
+                                        <EmptyChartState
+                                            icon={Layers}
+                                            title="No groups yet"
+                                            subtitle="Group assignments will appear once created"
+                                        />
+                                    )}
                                 </div>
 
-                                <div className="mt-2 space-y-1">
-                                    {dashboardData.pieGraphGroups.labels.map((label, idx) => {
-                                        const val = dashboardData.pieGraphGroups.data[idx];
-                                        const color = CHART_COLORS[idx % CHART_COLORS.length];
-                                        return (
-                                            <div key={label} className="flex items-center justify-between text-[11px] hover:bg-slate-50 rounded px-1.5 py-0.5 transition-colors duration-200">
-                                                <div className="flex items-center gap-1.5">
-                                                    <span className="w-2 h-2 rounded-sm" style={{ backgroundColor: color }} />
-                                                    <span className="text-slate-700 font-normal">{label}</span>
-                                                </div>
-                                                <span className="font-semibold text-slate-900">{val}</span>
-                                            </div>
-                                        );
-                                    })}
+                                <div className="mt-3 pt-3 border-t border-blue-100 space-y-0.5">
+                                    {dashboardData.pieGraphGroups.labels.length > 0 ? (
+                                        dashboardData.pieGraphGroups.labels.map((label, idx) => {
+                                            const val = dashboardData.pieGraphGroups.data[idx];
+                                            const color = CHART_COLORS[idx % CHART_COLORS.length];
+                                            return (
+                                                <LegendRow
+                                                    key={label}
+                                                    color={color}
+                                                    label={label}
+                                                    value={val}
+                                                    total={groupDistTotal}
+                                                />
+                                            );
+                                        })
+                                    ) : (
+                                        <p className="text-[11px] text-blue-400 text-center py-2 italic">
+                                            No group categories defined
+                                        </p>
+                                    )}
                                 </div>
                             </div>
                         </>
                     )}
                 </div>
 
-                {/* Row 3: Proposals Submitted Line Graph */}
-                <div className="bg-white p-4 rounded-2xl shadow-sm border border-blue-100 flex flex-col hover:shadow-lg transition-shadow duration-300">
+                {/* Line Graph — Proposals Submitted */}
+                <div className="bg-white p-5 rounded-2xl shadow-sm border border-blue-100 border-t-4 border-t-blue-900 flex flex-col hover:shadow-lg transition-shadow duration-300">
                     {isLoading ? (
                         <>
                             <div className="flex items-start justify-between mb-2">
@@ -754,29 +874,55 @@ export default function App() {
                         </>
                     ) : (
                         <>
-                            <div className="flex items-start justify-between mb-2">
+                            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-3">
                                 <div>
-                                    <h3 className="text-sm font-semibold text-blue-950 flex items-center gap-2">
-                                        <TrendingUp className="w-4 h-4 text-blue-900" /> Proposals Submitted
+                                    <h3 className="text-sm font-bold text-blue-900 flex items-center gap-2">
+                                        <span className="p-1.5 bg-blue-900 rounded-lg">
+                                            <TrendingUp className="w-3.5 h-3.5 text-yellow-300" />
+                                        </span>
+                                        Proposals Submitted
                                     </h3>
-                                    <p className="text-[11px] text-slate-400 font-normal">12-month submission trend</p>
+                                    <p className="text-[11px] text-blue-500 font-normal mt-0.5">
+                                        12-month submission trend
+                                    </p>
                                 </div>
-                                <div className="text-[11px] text-slate-500 flex items-center gap-3 font-normal">
-                                    <span>Peak: <span className="font-medium text-slate-700">Sep 2026</span></span>
-                                    <span className="font-semibold text-blue-900">
-                                        {Math.max(...(dashboardData.lineGraph.data.length ? dashboardData.lineGraph.data : [0]))} Proposal
-                                        {Math.max(...(dashboardData.lineGraph.data.length ? dashboardData.lineGraph.data : [0])) !== 1 ? 's' : ''}
+                                <div className="flex items-center gap-3 text-[11px] text-blue-600 font-normal flex-wrap">
+                                    <span className="flex items-center gap-1.5">
+                                        <span className="text-blue-500">Peak:</span>
+                                        <span className="font-semibold text-blue-900 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md">
+                                            {peakLabel}
+                                        </span>
+                                    </span>
+                                    <span className="flex items-center gap-1.5 font-bold text-blue-900 bg-yellow-300 px-2.5 py-1 rounded-full shadow-sm">
+                                        {peakProposals} Proposal{peakProposals !== 1 ? 's' : ''}
                                     </span>
                                 </div>
                             </div>
 
-                            <div className="flex-1">
-                                <LineGraph
-                                    data={dashboardData.lineGraph.data}
-                                    labels={dashboardData.lineGraph.labels}
-                                    label={dashboardData.lineGraph.label}
-                                />
+                            <div className="flex-1 min-h-[200px]">
+                                {dashboardData.lineGraph.data.length > 0 ? (
+                                    <LineGraph
+                                        data={dashboardData.lineGraph.data}
+                                        labels={dashboardData.lineGraph.labels}
+                                        label={dashboardData.lineGraph.label}
+                                    />
+                                ) : (
+                                    <EmptyChartState
+                                        icon={TrendingUp}
+                                        title="No submission history"
+                                        subtitle="Trend data will appear once proposals are logged"
+                                    />
+                                )}
                             </div>
+
+                            {dashboardData.lineGraph.data.length > 0 && (
+                                <div className="mt-3 pt-3 border-t border-blue-100 text-[10px] text-blue-500 flex justify-between items-center">
+                                    <span>Hover points to inspect values</span>
+                                    <span className="font-semibold text-blue-900">
+                                        {dashboardData.lineGraph.data.reduce((s, v) => s + (v || 0), 0)} total in period
+                                    </span>
+                                </div>
+                            )}
                         </>
                     )}
                 </div>

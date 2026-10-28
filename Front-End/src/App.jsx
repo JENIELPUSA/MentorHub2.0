@@ -14,6 +14,11 @@ import ProposedTitle from "./components/ProposedTitle/ProposedTitle";
 import DefenseSchedule from "./components/DefenseSchedule/DefenseSchedule";
 import Archivecomponents from "./components/ArchiveComponents/Archivecomponents";
 import AuditLogs from "./components/AuditLogs/AuditLogs";
+import MyProject from "./components/MyProject/myproject"
+import ManuscriptUpload from "./components/ManuscriptUpload/manuscriptupload"
+import MyResearchGroups from "./components/PanelistDashboard/MyResearchGroups";
+import DefenseCalendar from "./components/Subject_InstructorDashboard/DefenseCalendar";
+import ProposedTopics from "./components/PanelistDashboard/ProposedTopics";
 
 function App() {
     const router = createBrowserRouter([
@@ -67,7 +72,30 @@ function App() {
                         {
                             path: "/dashboard/logs-audit",
                             element: <AuditLogs />,
-                        }
+                        },
+                        {
+                            path: "/dashboard/myproject",
+                            element: <MyProject />,
+                        },
+
+                        {
+                            path: "/dashboard/manuscript-upload",
+                            element: <ManuscriptUpload />,
+                        },
+                        {
+                            path: "/dashboard/my-researchGroups",
+                            element: <MyResearchGroups />,
+                        },
+                        {
+                            path: "/dashboard/defense-calendar",
+                            element: <DefenseCalendar />,
+                        },
+                        {
+                            path: "/dashboard/proposedTopics",
+                            element: <ProposedTopics />,
+                        },
+
+
                     ],
                 },
             ],

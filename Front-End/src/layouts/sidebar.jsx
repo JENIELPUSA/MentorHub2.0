@@ -12,7 +12,6 @@ import { useAuth } from "../contexts/AuthContext";
 
 import PropTypes from "prop-types";
 
-
 export const Sidebar = forwardRef(({ collapsed, onLogout }, ref) => {
     const { logout, role } = useAuth();
     const navigate = useNavigate();
@@ -32,43 +31,38 @@ export const Sidebar = forwardRef(({ collapsed, onLogout }, ref) => {
             "/dashboard",
             "/dashboard/Add-User",
             "/dashboard/Add-Subject",
-            "/dashboard/propose-title",
             "/dashboard/archived",
-            "/dashboard/logs-audit"
+            "/dashboard/logs-audit", "/dashboard/my-researchGroups","/dashboard/proposedTopics", "/dashboard/defense-calendar","/dashboard/propose-title",
+            
         ],
         panelist: [
             "/dashboard",
-            "/dashboard/propose-title",
-            "/dashboard/archived"
+            "/dashboard/my-researchGroups",
+            "/dashboard/defense-calendar", "/dashboard/proposedTopics",
         ],
         subject_instructor: [
             "/dashboard",
             "/dashboard/Add-User",
             "/dashboard/Add-Subject",
-            "/dashboard/propose-title",
             "/dashboard/defense_schedule",
-            "/dashboard/archived"
+            "/dashboard/archived", "/dashboard/propose-title"
         ],
         student: [
             "/dashboard",
-            "/dashboard/propose-title",
+            "/dashboard/myproject",
+            "/dashboard/manuscript-upload"
         ],
         adviser: [
             "/dashboard",
-            "/dashboard/propose-title",
             "/dashboard/defense_schedule",
-            "/dashboard/archived"
+            "/dashboard/archived","/dashboard/propose-title"
+          
         ],
     };
 
-    // Get allowed paths for current role (fallback to empty array)
     const allowedPaths = rolePermissions[role] ?? [];
-
-    // Helper to check if a link path is allowed
     const isAllowed = (path) => allowedPaths.includes(path);
 
-    // - "/dashboard" → exact match lang (para hindi mag-active sa ibang routes)
-    // - ibang paths → exact match o prefix match (para active pa rin sa sub-routes)
     const isLinkActive = (path) => {
         if (path === "/dashboard") {
             return location.pathname === "/dashboard";
@@ -83,34 +77,121 @@ export const Sidebar = forwardRef(({ collapsed, onLogout }, ref) => {
         <aside
             ref={ref}
             className={cn(
-                "fixed z-[100] flex h-full w-[240px] flex-col overflow-x-hidden bg-white border-r border-slate-200 [transition:_width_300ms_cubic-bezier(0.4,_0,_0.2,_1),_left_300ms_cubic-bezier(0.4,_0,_0.2,_1)]",
+                // ⭐ BLUE THEME: dark blue gradient background
+                "fixed z-[100] flex h-full w-[240px] flex-col overflow-hidden",
+                "bg-gradient-to-b from-blue-900 via-blue-800 to-blue-900",
+                "border-r border-blue-700/50 shadow-xl",
+                "[transition:_width_300ms_cubic-bezier(0.4,_0,_0.2,_1),_left_300ms_cubic-bezier(0.4,_0,_0.2,_1)]",
                 collapsed ? "md:w-[70px] md:items-center" : "md:w-[240px]",
                 collapsed ? "max-md:-left-full" : "max-md:left-0"
             )}
         >
-            {/* Logo Section */}
-            <div className="flex gap-x-3 p-3 items-center">
+            {/* ═══════════════════════════════════════════════════ */}
+            {/* 🎬 CINEMATIC BACKGROUND — BIPSU LOGO (ghost)      */}
+            {/* ═══════════════════════════════════════════════════ */}
+            <div
+                aria-hidden="true"
+                className="absolute inset-0 pointer-events-none select-none z-0"
+            >
+                {/* Main ghost logo — malaki, nasa gitna, naka-rotate */}
                 <img
                     src={logoDark}
-                    alt="BiPSU Logo"
-                    className="h-8 w-auto"
+                    alt=""
+                    draggable="false"
+                    className="
+                        absolute
+                        left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2
+                        w-[280px] h-[280px]
+                        object-contain
+                        opacity-[0.07]
+                        mix-blend-screen
+                        rotate-[-12deg]
+                        blur-[0.5px]
+                    "
+                    style={{
+                        filter:
+                            'drop-shadow(0 0 60px rgba(255,255,255,0.35)) brightness(2.4) saturate(0.3)',
+                    }}
                 />
-                {!collapsed && (
-                    <p className="text-lg font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-700 to-amber-500">
+
+                {/* Secondary ghost — mas maliit, sa ibaba, mirrored */}
+                <img
+                    src={logoDark}
+                    alt=""
+                    draggable="false"
+                    className="
+                        absolute
+                        right-[-30%] bottom-[-10%]
+                        w-[220px] h-[220px]
+                        object-contain
+                        opacity-[0.05]
+                        mix-blend-screen
+                        rotate-[18deg]
+                        blur-[2px]
+                    "
+                    style={{
+                        filter: 'brightness(2.5) saturate(0.2)',
+                    }}
+                />
+
+                {/* Cinematic spotlight — top-center glow */}
+                <div
+                    className="absolute inset-0"
+                    style={{
+                        background:
+                            'radial-gradient(circle at 50% 15%, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.04) 30%, rgba(0,0,0,0) 60%)',
+                    }}
+                />
+
+                {/* Vignette — edge darkening */}
+                <div
+                    className="absolute inset-0"
+                    style={{
+                        background:
+                            'radial-gradient(ellipse at center, rgba(0,0,0,0) 40%, rgba(10,15,40,0.55) 100%)',
+                    }}
+                />
+
+                {/* Film grain */}
+                <svg
+                    className="absolute inset-0 w-full h-full opacity-[0.05] mix-blend-overlay"
+                    xmlns="http://www.w3.org/2000/svg"
+                >
+                    <filter id="sidebar-grain">
+                        <feTurbulence
+                            type="fractalNoise"
+                            baseFrequency="0.9"
+                            numOctaves="2"
+                            stitchTiles="stitch"
+                        />
+                        <feColorMatrix type="saturate" values="0" />
+                    </filter>
+                    <rect width="100%" height="100%" filter="url(#sidebar-grain)" />
+                </svg>
+            </div>
+
+            {/* ═══════════════════════════════════════════════════ */}
+            {/* ⭐ LOGO HEADER — TEXT ONLY, CENTERED                */}
+            {/* ═══════════════════════════════════════════════════ */}
+            <div className="relative z-10 flex items-center justify-center p-3 border-b border-blue-700/40">
+                {!collapsed ? (
+                    <p className="text-lg font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-white to-amber-300 whitespace-nowrap">
                         BiPSU MentorHUB
+                    </p>
+                ) : (
+                    <p className="text-base font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-white to-amber-300">
+                        M
                     </p>
                 )}
             </div>
 
             {/* Navigation Links */}
-            <div className="flex flex-1 w-full flex-col gap-y-4 overflow-y-auto overflow-x-hidden p-3 [scrollbar-width:_thin] scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
+            <div className="relative z-10 flex flex-1 w-full flex-col gap-y-4 overflow-y-auto overflow-x-hidden p-3 [scrollbar-width:_thin] scrollbar-thin scrollbar-thumb-blue-700 scrollbar-track-transparent">
                 {navbarLinks.map((navbarLink) => {
-                    // Filter links based on role permission
                     const visibleLinks = navbarLink.links.filter((link) =>
                         isAllowed(link.path)
                     );
 
-                    // Skip rendering the group if no links are visible
                     if (visibleLinks.length === 0) return null;
 
                     return (
@@ -120,7 +201,7 @@ export const Sidebar = forwardRef(({ collapsed, onLogout }, ref) => {
                         >
                             <p
                                 className={cn(
-                                    "text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2 px-1",
+                                    "text-[10px] font-bold uppercase tracking-wider text-blue-300 mb-2 px-1",
                                     collapsed && "md:w-[45px] md:text-center md:text-[8px]"
                                 )}
                             >
@@ -134,11 +215,10 @@ export const Sidebar = forwardRef(({ collapsed, onLogout }, ref) => {
                                         key={link.label}
                                         to={link.path}
                                         className={cn(
-                                            // Default text and hover state
-                                            "flex items-center gap-x-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition-all duration-200 hover:bg-amber-50 hover:text-amber-600",
-                                            // Active state (BiPSU Blue background with bright yellow text)
+                                            "flex items-center gap-x-3 rounded-lg px-3 py-2 text-sm font-medium text-blue-100 transition-all duration-200",
+                                            "hover:bg-blue-700/60 hover:text-white",
                                             active &&
-                                            "bg-blue-700 text-yellow-300 shadow-[0_4px_12px_rgba(29,78,216,0.25)] hover:bg-blue-800 hover:text-yellow-300",
+                                            "bg-amber-400 text-blue-900 shadow-[0_4px_12px_rgba(251,191,36,0.35)] hover:bg-amber-300 hover:text-blue-900",
                                             collapsed && "md:w-[45px] md:justify-center md:px-0"
                                         )}
                                     >
@@ -156,6 +236,19 @@ export const Sidebar = forwardRef(({ collapsed, onLogout }, ref) => {
                     );
                 })}
             </div>
+
+            {/* Logout button */}
+            {!collapsed && (
+                <div className="relative z-10 p-3 border-t border-blue-700/40">
+                    <button
+                        onClick={handleLogout}
+                        className="flex w-full items-center gap-x-3 rounded-lg px-3 py-2 text-sm font-medium text-blue-100 transition-all duration-200 hover:bg-red-500/80 hover:text-white"
+                    >
+                        <LogOut size={22} className="flex-shrink-0" />
+                        <p className="whitespace-nowrap">Logout</p>
+                    </button>
+                </div>
+            )}
         </aside>
     );
 });

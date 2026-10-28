@@ -7,14 +7,15 @@ import { AuthContext } from "../../contexts/AuthContext";
 import UserDashboard from "../../components/UserDashboard/UserDashboard";
 import AdCoAdviserDashboard from "../../components/ad_co_AdviserDashboard/AdCoAdviserDashboard";
 import Instructor_Dashboard from "../../components/Subject_InstructorDashboard/Instructor_Dashboard";
-import AdminDashboard from "../../components/AdminDashboard/AdminDashboard"
+import AdminDashboard from "../../components/AdminDashboard/AdminDashboard";
+import PanelistDashboard from "../../components/PanelistDashboard/panelistDashboard"
 import { useContext } from "react";
 
 const DashboardPage = () => {
     const { role } = useContext(AuthContext);
     const { theme } = useTheme();
 
-    console.log("role",role)
+    console.log("role", role)
 
     // If role is student, render UserDashboard
     if (role === 'student') {
@@ -26,10 +27,14 @@ const DashboardPage = () => {
     }
 
     // If role is adviser, panelist, or co-adviser, render AdCoAdviserDashboard
-    if (role === 'panelist' || role === 'adviser' || role === 'co-adviser') {
+    if (role === 'adviser' || role === 'co-adviser') {
         return <AdCoAdviserDashboard />;
     }
 
+    // If role is adviser, panelist, or co-adviser, render AdCoAdviserDashboard
+    if (role === 'panelist') {
+        return <PanelistDashboard />;
+    }
     // If role is student, render UserDashboard
     if (role === 'subject_instructor') {
         return <Instructor_Dashboard />;

@@ -1,20 +1,20 @@
-import { 
-  ChartColumn, 
-  Home, 
-  NotepadText, 
-  Package, 
-  PackagePlus, 
-  Settings, 
-  ShoppingBag, 
-  UserCheck, 
-  UserPlus, 
-  Users,
-  UserCog,
-  BookOpen,
-  FileText,
-  CalendarDays,
-  Archive,
-  ScrollText
+import {
+    ChartColumn,
+    Home,
+    NotepadText,
+    Package,
+    PackagePlus,
+    Settings,
+    ShoppingBag,
+    UserCheck,
+    UserPlus,
+    Users,
+    UserCog,
+    BookOpen,
+    FileText,
+    CalendarDays,
+    Archive,
+    ScrollText
 } from "lucide-react";
 
 import ProfileImage from "@/assets/profile-image.jpg";
@@ -40,7 +40,7 @@ export const navbarLinks = [
                 path: "/dashboard/Add-User",
             },
             {
-                label: "Manage Subject",
+                label: "Manage Course",
                 icon: BookOpen,
                 path: "/dashboard/Add-Subject",
             },
@@ -63,6 +63,31 @@ export const navbarLinks = [
                 label: "Audit Trail",
                 icon: ScrollText,
                 path: "/dashboard/logs-audit",
+            },
+            {
+                label: "My Project",
+                icon: ScrollText,
+                path: "/dashboard/myproject",
+            },
+            {
+                label: "Manuscript Upload",
+                icon: ScrollText,
+                path: "/dashboard/manuscript-upload"
+            },
+            {
+                label: "My Research Groups",
+                icon: ScrollText,
+                path: "/dashboard/my-researchGroups"
+            },
+            {
+                label: "Defense Calendar",
+                icon: ScrollText,
+                path: "/dashboard/defense-calendar"
+            },
+            {
+                label: "Proposed Topics",
+                icon: ScrollText,
+                path: "/dashboard/proposedTopics"
             },
         ],
     },
@@ -155,7 +180,7 @@ export const topProducts = [
         status: "In Stock",
         rating: 4.5,
     },
-    
+
     {
         number: 2,
         name: "Smartphone",

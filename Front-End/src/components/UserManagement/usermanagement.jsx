@@ -22,20 +22,20 @@ import { UserDisplayContext } from '../../contexts/UserManagementContext/UserMan
 import { StudentContext } from '../../contexts/StudentContext/StudentContext';
 
 export default function UserManagement() {
-    const { 
-        useraccount, 
+    const {
+        useraccount,
         isLoading: contextLoading,
         pagination,
         filters,
         userdata,
         fetchUsersWithLogin,
-        statistics 
+        statistics
     } = useContext(StudentContext);
     const { AddUser } = useContext(UserDisplayContext);
     const { departments } = useContext(DepartmentContext);
 
     console.log("useraccount", useraccount);
-    
+
     const [users, setUsers] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [roleFilter, setRoleFilter] = useState('All');
@@ -54,17 +54,16 @@ export default function UserManagement() {
     // ✅ FIXED: Map useraccount data to display format
     const mapUserAccountToDisplay = (account) => {
         if (!account) return null;
-        
+
         const departmentData = account.department || {};
-        
+
         const fullName = [
             account.first_name,
             account.middle_name,
             account.last_name,
             account.suffix
         ].filter(Boolean).join(' ');
-        
-        // ✅ Role mapping
+
         const roleMap = {
             'student': 'Student',
             'subject_instructor': 'Subject Instructor',
@@ -72,8 +71,7 @@ export default function UserManagement() {
             'adviser': 'Adviser',
             'admin': 'Admin'
         };
-        
-        // ✅ Status mapping
+
         const statusMap = {
             'approved': 'Active',
             'pending': 'Pending',
@@ -82,21 +80,18 @@ export default function UserManagement() {
             'Active': 'Active',
             'Inactive': 'Inactive'
         };
-        
-        // ✅ Get role directly from account
+
         const rawRole = account.role || 'student';
         const displayRole = roleMap[rawRole.toLowerCase()] || rawRole || 'Student';
-        
-        // ✅ Get status directly from account
+
         const rawStatus = account.status || account.statusAccount || 'Active';
         const displayStatus = statusMap[rawStatus] || 'Active';
-        
-        // ✅ Get username directly from account
+
         const username = account.username || account.login?.username || account.email || '';
-        
-        const avatarUrl = account.avatar?.url || 
-            `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName || 'User')}&background=0284c7&color=fff`;
-        
+
+        const avatarUrl = account.avatar?.url ||
+            `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName || 'User')}&background=1e3a8a&color=facc15`;
+
         return {
             id: account._id,
             firstName: account.first_name || '',
@@ -105,7 +100,7 @@ export default function UserManagement() {
             suffix: account.suffix || '',
             name: fullName || 'Unnamed User',
             email: account.email || '',
-            username: username, // ✅ USERNAME
+            username: username,
             phone: account.contactNumber || '',
             role: displayRole,
             department: departmentData.departmentName || 'No Department',
@@ -121,7 +116,6 @@ export default function UserManagement() {
         };
     };
 
-    // Process useraccount data when it changes
     useEffect(() => {
         setIsLocalLoading(true);
         if (useraccount && Array.isArray(useraccount)) {
@@ -129,8 +123,6 @@ export default function UserManagement() {
                 .map(account => mapUserAccountToDisplay(account))
                 .filter(Boolean);
             setUsers(mappedUsers);
-            
-            // ✅ Log para makita ang mapped data
             console.log('✅ Mapped users:', mappedUsers);
         } else {
             setUsers([]);
@@ -138,16 +130,13 @@ export default function UserManagement() {
         setIsLocalLoading(false);
     }, [useraccount]);
 
-    // Build filter params for backend
     const buildFilterParams = useCallback(() => {
         const params = {
             page: currentPage,
             limit: itemsPerPage,
         };
 
-        if (searchTerm) {
-            params.search = searchTerm;
-        }
+        if (searchTerm) params.search = searchTerm;
 
         const roleMapToBackend = {
             'Student': 'student',
@@ -163,25 +152,18 @@ export default function UserManagement() {
 
         if (departmentFilter !== 'All') {
             const selectedDept = departments.find(dept => dept.departmentName === departmentFilter);
-            if (selectedDept) {
-                params.departmentId = selectedDept._id;
-            }
+            if (selectedDept) params.departmentId = selectedDept._id;
         }
 
         if (statusFilter !== 'All') {
-            if (statusFilter === 'Active') {
-                params.statusAccount = 'approved';
-            } else if (statusFilter === 'Pending') {
-                params.statusAccount = 'pending';
-            } else if (statusFilter === 'Inactive') {
-                params.statusAccount = 'rejected';
-            }
+            if (statusFilter === 'Active') params.statusAccount = 'approved';
+            else if (statusFilter === 'Pending') params.statusAccount = 'pending';
+            else if (statusFilter === 'Inactive') params.statusAccount = 'rejected';
         }
 
         return params;
     }, [currentPage, itemsPerPage, searchTerm, roleFilter, departmentFilter, statusFilter, departments]);
 
-    // Fetch users from backend when filters change
     useEffect(() => {
         const params = buildFilterParams();
         fetchUsersWithLogin(params);
@@ -278,13 +260,12 @@ export default function UserManagement() {
     const handleDeleteUser = async (id) => {
         const userToDelete = users.find(u => u.id === id);
         console.log('🗑️ Deleting user:', userToDelete);
-        
+
         setUsers(users.filter(u => u.id !== id));
         if (viewUser && viewUser.id === id) setViewUser(null);
         showNotification(`Removed ${userToDelete?.name || 'user'}.`);
     };
 
-    // Form State for Adding New User
     const [formData, setFormData] = useState({
         firstName: '',
         middleName: '',
@@ -301,7 +282,7 @@ export default function UserManagement() {
     const totalPages = pagination?.totalPages || 1;
     const totalCount = pagination?.totalCount || 0;
 
-
+    /* Role badges — semantic colors kept */
     const getRoleBadge = (role) => {
         switch (role) {
             case 'Student':
@@ -315,7 +296,7 @@ export default function UserManagement() {
             case 'Admin':
                 return 'bg-red-100 text-red-800 border-red-200';
             default:
-                return 'bg-slate-100 text-slate-800 border-slate-200';
+                return 'bg-blue-50 text-blue-700 border-blue-200';
         }
     };
 
@@ -334,22 +315,22 @@ export default function UserManagement() {
     const isLoading = contextLoading || isLocalLoading;
 
     return (
-        <div className="min-h-screen bg-slate-50 text-slate-800 p-4 md:p-8 font-sans">
+        <div className="min-h-screen bg-gradient-to-b from-blue-100 via-blue-50 to-sky-50 text-blue-900 p-4 md:p-8 font-sans">
             <div className="max-w-7xl mx-auto space-y-6">
 
                 {/* Header Bar */}
-                <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm">
+                <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-blue-200 shadow-md shadow-blue-900/10">
                     <div>
                         <div className="flex items-center gap-3">
-                            <div className="p-2.5 bg-sky-50 text-sky-600 rounded-xl">
+                            <div className="p-2.5 bg-blue-900 text-yellow-300 rounded-xl shadow-sm">
                                 <Users className="w-6 h-6" />
                             </div>
                             <div>
-                                <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">User Directory</h1>
-                                <p className="text-xs text-slate-500 mt-0.5">
+                                <h1 className="text-2xl font-extrabold text-blue-950 tracking-tight">User Directory</h1>
+                                <p className="text-xs text-blue-600 mt-0.5">
                                     Manage academic user accounts, roles, and status
                                     {totalCount > 0 && (
-                                        <span className="ml-2 text-sky-600 font-medium">
+                                        <span className="ml-2 text-blue-900 font-semibold">
                                             ({totalCount} total users)
                                         </span>
                                     )}
@@ -360,7 +341,7 @@ export default function UserManagement() {
 
                     <button
                         onClick={() => setIsAddModalOpen(true)}
-                        className="flex items-center justify-center gap-2 px-5 py-2.5 bg-sky-600 hover:bg-sky-700 active:bg-sky-800 text-white font-semibold text-sm rounded-xl shadow-md transition-all hover:shadow-lg hover:-translate-y-0.5"
+                        className="flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-900 hover:bg-blue-950 active:bg-black text-white font-semibold text-sm rounded-xl shadow-md transition-all hover:shadow-lg hover:-translate-y-0.5"
                     >
                         <Plus className="w-4 h-4 stroke-[3]" />
                         <span>Add User</span>
@@ -369,18 +350,18 @@ export default function UserManagement() {
 
                 {/* Toast Notification */}
                 {toastMessage && (
-                    <div className={`fixed top-5 right-5 z-50 flex items-center gap-3 px-4 py-3 text-white text-xs font-medium rounded-xl shadow-2xl animate-bounce ${toastMessage.isError ? 'bg-red-600' : 'bg-slate-900'}`}>
-                        <CheckCircle2 className={`w-4 h-4 ${toastMessage.isError ? 'text-red-200' : 'text-emerald-400'}`} />
+                    <div className={`fixed top-5 right-5 z-50 flex items-center gap-3 px-4 py-3 text-white text-xs font-medium rounded-xl shadow-2xl animate-bounce ${toastMessage.isError ? 'bg-red-600' : 'bg-blue-900'}`}>
+                        <CheckCircle2 className={`w-4 h-4 ${toastMessage.isError ? 'text-red-200' : 'text-yellow-300'}`} />
                         <span>{toastMessage.msg}</span>
                     </div>
                 )}
 
                 {/* Search & Filter Bar */}
-                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
+                <div className="bg-white p-4 rounded-2xl border border-blue-200 shadow-md shadow-blue-900/10 space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
 
                         <div className="relative md:col-span-1">
-                            <Search className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
+                            <Search className="w-4 h-4 absolute left-3.5 top-3 text-blue-400" />
                             <input
                                 type="text"
                                 placeholder="Search name, email, username..."
@@ -389,7 +370,7 @@ export default function UserManagement() {
                                     setSearchTerm(e.target.value);
                                     setCurrentPage(1);
                                 }}
-                                className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-sky-500 focus:bg-white transition"
+                                className="w-full pl-10 pr-4 py-2 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-900 placeholder:text-blue-400 outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 focus:bg-white transition"
                             />
                         </div>
 
@@ -400,7 +381,7 @@ export default function UserManagement() {
                                     setRoleFilter(e.target.value);
                                     setCurrentPage(1);
                                 }}
-                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 outline-none focus:ring-2 focus:ring-sky-500"
+                                className="w-full px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-xs font-medium text-blue-900 outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400"
                             >
                                 <option value="All">All Roles</option>
                                 <option value="Student">Student</option>
@@ -418,7 +399,7 @@ export default function UserManagement() {
                                     setDepartmentFilter(e.target.value);
                                     setCurrentPage(1);
                                 }}
-                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 outline-none focus:ring-2 focus:ring-sky-500"
+                                className="w-full px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-xs font-medium text-blue-900 outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400"
                             >
                                 <option value="All">All Departments</option>
                                 {departments.map((dept) => (
@@ -436,7 +417,7 @@ export default function UserManagement() {
                                     setStatusFilter(e.target.value);
                                     setCurrentPage(1);
                                 }}
-                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 outline-none focus:ring-2 focus:ring-sky-500"
+                                className="w-full px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-xs font-medium text-blue-900 outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400"
                             >
                                 <option value="All">All Statuses</option>
                                 <option value="Active">Active</option>
@@ -449,12 +430,12 @@ export default function UserManagement() {
                 </div>
 
                 {/* Users Table */}
-                <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+                <div className="bg-white rounded-2xl border border-blue-200 shadow-md shadow-blue-900/10 overflow-hidden">
                     {isLoading ? (
                         <div className="flex items-center justify-center py-12">
                             <div className="flex flex-col items-center gap-3">
-                                <div className="w-8 h-8 border-3 border-sky-200 border-t-sky-600 rounded-full animate-spin"></div>
-                                <span className="text-sm text-slate-500">Loading users...</span>
+                                <div className="w-8 h-8 border-3 border-blue-200 border-t-blue-900 rounded-full animate-spin"></div>
+                                <span className="text-sm text-blue-600">Loading users...</span>
                             </div>
                         </div>
                     ) : (
@@ -462,9 +443,9 @@ export default function UserManagement() {
                             <div className="overflow-x-auto">
                                 <table className="w-full text-left border-collapse">
                                     <thead>
-                                        <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] uppercase tracking-wider text-slate-500 font-bold">
+                                        <tr className="bg-blue-100 border-b-2 border-yellow-400 text-[11px] uppercase tracking-wider text-blue-950 font-bold">
                                             <th className="py-3.5 px-4">User</th>
-                                            <th className="py-3.5 px-4">Username</th> {/* ✅ ADDED USERNAME COLUMN */}
+                                            <th className="py-3.5 px-4">Username</th>
                                             <th className="py-3.5 px-4">Role</th>
                                             <th className="py-3.5 px-4">Department</th>
                                             <th className="py-3.5 px-4">Status</th>
@@ -472,28 +453,28 @@ export default function UserManagement() {
                                             <th className="py-3.5 px-4 text-right">Actions</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-slate-100 text-xs">
+                                    <tbody className="divide-y divide-blue-100 text-xs">
                                         {users.length > 0 ? (
                                             users.map((user) => (
-                                                <tr key={user.id} className="hover:bg-slate-50/60 transition">
+                                                <tr key={user.id} className="odd:bg-white even:bg-blue-50/60 hover:bg-yellow-50 transition">
                                                     <td className="py-3.5 px-4">
                                                         <div className="flex items-center gap-3">
                                                             <img
                                                                 src={user.avatar}
                                                                 alt={user.name}
-                                                                className="w-9 h-9 rounded-full object-cover border border-slate-200"
+                                                                className="w-9 h-9 rounded-full object-cover border border-blue-200"
                                                                 onError={(e) => {
-                                                                    e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=0284c7&color=fff`;
+                                                                    e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=1e3a8a&color=facc15`;
                                                                 }}
                                                             />
                                                             <div>
-                                                                <div className="font-bold text-slate-900">{user.name}</div>
-                                                                <div className="text-[11px] text-slate-400">{user.email}</div>
+                                                                <div className="font-bold text-blue-950">{user.name}</div>
+                                                                <div className="text-[11px] text-blue-500">{user.email}</div>
                                                             </div>
                                                         </div>
                                                     </td>
                                                     <td className="py-3.5 px-4">
-                                                        <span className="font-mono text-xs text-slate-600 bg-slate-50 px-2 py-1 rounded">
+                                                        <span className="font-mono text-xs text-blue-800 bg-blue-50 border border-blue-200 px-2 py-1 rounded">
                                                             {user.username || 'N/A'}
                                                         </span>
                                                     </td>
@@ -502,42 +483,42 @@ export default function UserManagement() {
                                                             {user.role}
                                                         </span>
                                                     </td>
-                                                    <td className="py-3.5 px-4 font-medium text-slate-600">
+                                                    <td className="py-3.5 px-4 font-medium text-blue-800">
                                                         {user.department}
                                                     </td>
                                                     <td className="py-3.5 px-4">
                                                         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${
-                                                            user.status === 'Active' 
-                                                                ? 'bg-emerald-50 text-emerald-700' 
+                                                            user.status === 'Active'
+                                                                ? 'bg-emerald-50 text-emerald-700'
                                                                 : user.status === 'Pending'
                                                                 ? 'bg-amber-50 text-amber-700'
-                                                                : 'bg-slate-100 text-slate-500'
+                                                                : 'bg-blue-100 text-blue-500'
                                                         }`}>
                                                             <span className={`w-1.5 h-1.5 rounded-full ${
-                                                                user.status === 'Active' 
-                                                                    ? 'bg-emerald-500' 
+                                                                user.status === 'Active'
+                                                                    ? 'bg-emerald-500'
                                                                     : user.status === 'Pending'
                                                                     ? 'bg-amber-500'
-                                                                    : 'bg-slate-400'
+                                                                    : 'bg-blue-400'
                                                             }`}></span>
                                                             {user.status}
                                                         </span>
                                                     </td>
-                                                    <td className="py-3.5 px-4 text-slate-500">
+                                                    <td className="py-3.5 px-4 text-blue-600">
                                                         {user.dateAdded}
                                                     </td>
                                                     <td className="py-3.5 px-4 text-right">
                                                         <div className="flex items-center justify-end gap-1">
                                                             <button
                                                                 onClick={() => setViewUser(user)}
-                                                                className="p-1.5 text-slate-500 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition"
+                                                                className="p-1.5 text-blue-600 hover:text-blue-900 hover:bg-yellow-100 rounded-lg transition"
                                                                 title="View Details"
                                                             >
                                                                 <Eye className="w-4 h-4" />
                                                             </button>
                                                             <button
                                                                 onClick={() => handleDeleteUser(user.id)}
-                                                                className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                                                                className="p-1.5 text-blue-600 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
                                                                 title="Delete User"
                                                             >
                                                                 <Trash2 className="w-4 h-4" />
@@ -548,9 +529,9 @@ export default function UserManagement() {
                                             ))
                                         ) : (
                                             <tr>
-                                                <td colSpan="7" className="py-8 text-center text-slate-400">
-                                                    {searchTerm || roleFilter !== 'All' || departmentFilter !== 'All' || statusFilter !== 'All' 
-                                                        ? 'No users found matching your filters.' 
+                                                <td colSpan="7" className="py-8 text-center text-blue-500">
+                                                    {searchTerm || roleFilter !== 'All' || departmentFilter !== 'All' || statusFilter !== 'All'
+                                                        ? 'No users found matching your filters.'
                                                         : 'No users available.'}
                                                 </td>
                                             </tr>
@@ -560,22 +541,22 @@ export default function UserManagement() {
                             </div>
 
                             {/* Pagination Controls */}
-                            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 bg-slate-50/50 border-t border-slate-200 text-xs text-slate-500">
+                            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 bg-blue-50 border-t border-blue-100 text-xs text-blue-600">
                                 <div className="flex flex-wrap items-center gap-3">
                                     <div>
-                                        Showing <span className="font-bold text-slate-800">
+                                        Showing <span className="font-bold text-blue-950">
                                             {totalCount === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1}
-                                        </span> to <span className="font-bold text-slate-800">
+                                        </span> to <span className="font-bold text-blue-950">
                                             {Math.min(currentPage * itemsPerPage, totalCount)}
-                                        </span> of <span className="font-bold text-slate-800">{totalCount}</span> users
+                                        </span> of <span className="font-bold text-blue-950">{totalCount}</span> users
                                     </div>
-                                    
+
                                     <div className="flex items-center gap-2">
-                                        <label className="text-slate-500">Items per page:</label>
+                                        <label className="text-blue-600">Items per page:</label>
                                         <select
                                             value={itemsPerPage}
                                             onChange={handleItemsPerPageChange}
-                                            className="px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-medium outline-none focus:ring-2 focus:ring-sky-500"
+                                            className="px-2 py-1 bg-white border border-blue-200 rounded-lg text-xs font-medium text-blue-900 outline-none focus:ring-2 focus:ring-yellow-400"
                                         >
                                             <option value={5}>5</option>
                                             <option value={10}>10</option>
@@ -589,19 +570,19 @@ export default function UserManagement() {
                                     <button
                                         disabled={currentPage === 1 || isLoading}
                                         onClick={() => handlePageChange(currentPage - 1)}
-                                        className="p-2 bg-white border border-slate-200 rounded-lg hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                                        className="p-2 bg-white border border-blue-300 text-blue-900 rounded-lg hover:bg-yellow-100 hover:border-yellow-400 disabled:opacity-40 disabled:cursor-not-allowed transition"
                                     >
                                         <ChevronLeft className="w-4 h-4" />
                                     </button>
-                                    
-                                    <span className="font-semibold text-slate-700 px-2">
+
+                                    <span className="font-semibold text-blue-950 px-2">
                                         Page {currentPage} of {totalPages}
                                     </span>
-                                    
+
                                     <button
                                         disabled={currentPage === totalPages || totalPages === 0 || isLoading}
                                         onClick={() => handlePageChange(currentPage + 1)}
-                                        className="p-2 bg-white border border-slate-200 rounded-lg hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                                        className="p-2 bg-white border border-blue-300 text-blue-900 rounded-lg hover:bg-yellow-100 hover:border-yellow-400 disabled:opacity-40 disabled:cursor-not-allowed transition"
                                     >
                                         <ChevronRight className="w-4 h-4" />
                                     </button>
@@ -615,8 +596,8 @@ export default function UserManagement() {
 
             {/* Add User Modal */}
             {isAddModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fadeIn">
-                    <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 relative max-h-[90vh] overflow-y-auto">
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-blue-950/60 backdrop-blur-sm animate-fadeIn">
+                    <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-blue-200 relative max-h-[90vh] overflow-y-auto">
 
                         <button
                             onClick={() => {
@@ -634,18 +615,18 @@ export default function UserManagement() {
                                     confirmPassword: ''
                                 });
                             }}
-                            className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition"
+                            className="absolute top-4 right-4 p-2 text-blue-400 hover:text-blue-700 hover:bg-blue-50 rounded-xl transition"
                         >
                             <X className="w-5 h-5" />
                         </button>
 
-                        <div className="flex items-center gap-3 border-b border-slate-100 pb-3 mb-4">
-                            <span className="p-2 bg-sky-100 text-sky-600 rounded-xl">
+                        <div className="flex items-center gap-3 border-b-2 border-yellow-400 pb-3 mb-4">
+                            <span className="p-2 bg-blue-900 text-yellow-300 rounded-xl shadow-sm">
                                 <UserPlus className="w-5 h-5" />
                             </span>
                             <div>
-                                <h3 className="text-lg font-bold text-slate-900">Add New User</h3>
-                                <p className="text-xs text-slate-500">Fill in details to add a new account.</p>
+                                <h3 className="text-lg font-bold text-blue-950">Add New User</h3>
+                                <p className="text-xs text-blue-600">Fill in details to add a new account.</p>
                             </div>
                         </div>
 
@@ -653,48 +634,48 @@ export default function UserManagement() {
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div>
-                                    <label className="block font-semibold text-slate-700 mb-1">First Name *</label>
+                                    <label className="block font-semibold text-blue-800 mb-1">First Name *</label>
                                     <input
                                         type="text"
                                         required
                                         placeholder="e.g. Juan"
                                         value={formData.firstName}
                                         onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-sky-500"
+                                        className="w-full px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 placeholder:text-blue-400 outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 focus:bg-white"
                                     />
                                 </div>
 
                                 <div>
-                                    <label className="block font-semibold text-slate-700 mb-1">Middle Name</label>
+                                    <label className="block font-semibold text-blue-800 mb-1">Middle Name</label>
                                     <input
                                         type="text"
                                         placeholder="e.g. Santos"
                                         value={formData.middleName}
                                         onChange={(e) => setFormData({ ...formData, middleName: e.target.value })}
-                                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-sky-500"
+                                        className="w-full px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 placeholder:text-blue-400 outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 focus:bg-white"
                                     />
                                 </div>
                             </div>
 
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                 <div className="sm:col-span-2">
-                                    <label className="block font-semibold text-slate-700 mb-1">Last Name *</label>
+                                    <label className="block font-semibold text-blue-800 mb-1">Last Name *</label>
                                     <input
                                         type="text"
                                         required
                                         placeholder="e.g. dela Cruz"
                                         value={formData.lastName}
                                         onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-sky-500"
+                                        className="w-full px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 placeholder:text-blue-400 outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 focus:bg-white"
                                     />
                                 </div>
 
                                 <div>
-                                    <label className="block font-semibold text-slate-700 mb-1">Suffix</label>
+                                    <label className="block font-semibold text-blue-800 mb-1">Suffix</label>
                                     <select
                                         value={formData.suffix}
                                         onChange={(e) => setFormData({ ...formData, suffix: e.target.value })}
-                                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-sky-500"
+                                        className="w-full px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400"
                                     >
                                         <option value="">None</option>
                                         <option value="Jr.">Jr.</option>
@@ -707,48 +688,48 @@ export default function UserManagement() {
                             </div>
 
                             <div>
-                                <label className="block font-semibold text-slate-700 mb-1">Email Address *</label>
+                                <label className="block font-semibold text-blue-800 mb-1">Email Address *</label>
                                 <input
                                     type="email"
                                     required
                                     placeholder="juan@example.com"
                                     value={formData.email}
                                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-sky-500"
+                                    className="w-full px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 placeholder:text-blue-400 outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 focus:bg-white"
                                 />
                             </div>
 
                             <div>
-                                <label className="block font-semibold text-slate-700 mb-1">Password *</label>
+                                <label className="block font-semibold text-blue-800 mb-1">Password *</label>
                                 <input
                                     type="password"
                                     required
                                     placeholder="Minimum 8 characters"
                                     value={formData.password}
                                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-sky-500"
+                                    className="w-full px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 placeholder:text-blue-400 outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 focus:bg-white"
                                 />
                             </div>
 
                             <div>
-                                <label className="block font-semibold text-slate-700 mb-1">Confirm Password *</label>
+                                <label className="block font-semibold text-blue-800 mb-1">Confirm Password *</label>
                                 <input
                                     type="password"
                                     required
                                     placeholder="Re-enter password"
                                     value={formData.confirmPassword}
                                     onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-sky-500"
+                                    className="w-full px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 placeholder:text-blue-400 outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 focus:bg-white"
                                 />
                             </div>
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div>
-                                    <label className="block font-semibold text-slate-700 mb-1">Role *</label>
+                                    <label className="block font-semibold text-blue-800 mb-1">Role *</label>
                                     <select
                                         value={formData.role}
                                         onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-sky-500 font-medium text-slate-800"
+                                        className="w-full px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 font-medium text-blue-900"
                                     >
                                         <option value="Student">Student</option>
                                         <option value="Subject Instructor">Subject Instructor</option>
@@ -759,11 +740,11 @@ export default function UserManagement() {
                                 </div>
 
                                 <div>
-                                    <label className="block font-semibold text-slate-700 mb-1">Department *</label>
+                                    <label className="block font-semibold text-blue-800 mb-1">Department *</label>
                                     <select
                                         value={formData.department}
                                         onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-sky-500"
+                                        className="w-full px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400"
                                         required
                                     >
                                         <option value="">Select Department</option>
@@ -777,34 +758,34 @@ export default function UserManagement() {
                             </div>
 
                             <div>
-                                <label className="block font-semibold text-slate-700 mb-1">Account Status</label>
+                                <label className="block font-semibold text-blue-800 mb-1">Account Status</label>
                                 <div className="flex gap-4 pt-1">
-                                    <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
+                                    <label className="flex items-center gap-2 cursor-pointer font-medium text-blue-800">
                                         <input
                                             type="radio"
                                             name="status"
                                             value="Active"
                                             checked={formData.status === 'Active'}
                                             onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                                            className="text-sky-600 focus:ring-sky-500"
+                                            className="text-blue-900 focus:ring-yellow-400"
                                         />
                                         <span>Active</span>
                                     </label>
-                                    <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
+                                    <label className="flex items-center gap-2 cursor-pointer font-medium text-blue-800">
                                         <input
                                             type="radio"
                                             name="status"
                                             value="Inactive"
                                             checked={formData.status === 'Inactive'}
                                             onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                                            className="text-sky-600 focus:ring-sky-500"
+                                            className="text-blue-900 focus:ring-yellow-400"
                                         />
                                         <span>Inactive</span>
                                     </label>
                                 </div>
                             </div>
 
-                            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                            <div className="flex justify-end gap-2 pt-3 border-t border-blue-100">
                                 <button
                                     type="button"
                                     onClick={() => {
@@ -822,13 +803,13 @@ export default function UserManagement() {
                                             confirmPassword: ''
                                         });
                                     }}
-                                    className="px-4 py-2 font-medium text-slate-600 hover:bg-slate-100 rounded-xl transition"
+                                    className="px-4 py-2 font-medium text-blue-800 hover:bg-blue-100 rounded-xl transition"
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     type="submit"
-                                    className="px-5 py-2 font-semibold text-white bg-sky-600 hover:bg-sky-700 rounded-xl shadow-md transition"
+                                    className="px-5 py-2 font-semibold text-white bg-blue-900 hover:bg-blue-950 rounded-xl shadow-md transition"
                                 >
                                     Save User
                                 </button>
@@ -841,12 +822,12 @@ export default function UserManagement() {
 
             {/* View User Modal */}
             {viewUser && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-fadeIn">
-                    <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-slate-100 relative text-center">
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-blue-950/60 backdrop-blur-sm animate-fadeIn">
+                    <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-blue-200 relative text-center">
 
                         <button
                             onClick={() => setViewUser(null)}
-                            className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition"
+                            className="absolute top-4 right-4 p-2 text-blue-400 hover:text-blue-700 hover:bg-blue-50 rounded-xl transition"
                         >
                             <X className="w-5 h-5" />
                         </button>
@@ -854,59 +835,58 @@ export default function UserManagement() {
                         <img
                             src={viewUser.avatar}
                             alt={viewUser.name}
-                            className="w-20 h-20 rounded-full object-cover border-2 border-sky-500 mx-auto shadow-md mb-3"
+                            className="w-20 h-20 rounded-full object-cover border-2 border-yellow-400 mx-auto shadow-md mb-3"
                             onError={(e) => {
-                                e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(viewUser.name || 'User')}&background=0284c7&color=fff`;
+                                e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(viewUser.name || 'User')}&background=1e3a8a&color=facc15`;
                             }}
                         />
 
-                        <h3 className="text-base font-bold text-slate-900">{viewUser.name}</h3>
-                        <p className="text-xs text-slate-400">{viewUser.email}</p>
+                        <h3 className="text-base font-bold text-blue-950">{viewUser.name}</h3>
+                        <p className="text-xs text-blue-500">{viewUser.email}</p>
 
-                        <div className="mt-4 pt-4 border-t border-slate-100 space-y-2 text-left text-xs">
-                            {/* ✅ USERNAME DISPLAYED */}
+                        <div className="mt-4 pt-4 border-t border-blue-100 space-y-2 text-left text-xs">
                             <div className="flex justify-between py-1">
-                                <span className="text-slate-400 font-medium">Username:</span>
-                                <span className="font-semibold text-slate-700 font-mono">{viewUser.username || 'N/A'}</span>
+                                <span className="text-blue-500 font-medium">Username:</span>
+                                <span className="font-semibold text-blue-900 font-mono">{viewUser.username || 'N/A'}</span>
                             </div>
                             <div className="flex justify-between py-1">
-                                <span className="text-slate-400 font-medium">Role:</span>
+                                <span className="text-blue-500 font-medium">Role:</span>
                                 <span className={`px-2 py-0.5 rounded text-[11px] font-semibold border ${getRoleBadge(viewUser.role)}`}>
                                     {viewUser.role}
                                 </span>
                             </div>
                             <div className="flex justify-between py-1">
-                                <span className="text-slate-400 font-medium">Department:</span>
-                                <span className="font-semibold text-slate-700">{viewUser.department}</span>
+                                <span className="text-blue-500 font-medium">Department:</span>
+                                <span className="font-semibold text-blue-900">{viewUser.department}</span>
                             </div>
                             <div className="flex justify-between py-1">
-                                <span className="text-slate-400 font-medium">Phone:</span>
-                                <span className="font-semibold text-slate-700">{viewUser.phone || 'N/A'}</span>
+                                <span className="text-blue-500 font-medium">Phone:</span>
+                                <span className="font-semibold text-blue-900">{viewUser.phone || 'N/A'}</span>
                             </div>
                             <div className="flex justify-between py-1">
-                                <span className="text-slate-400 font-medium">Status:</span>
+                                <span className="text-blue-500 font-medium">Status:</span>
                                 <span className={`font-semibold ${
-                                    viewUser.status === 'Active' ? 'text-emerald-600' : 
-                                    viewUser.status === 'Pending' ? 'text-amber-600' : 'text-slate-500'
+                                    viewUser.status === 'Active' ? 'text-emerald-600' :
+                                    viewUser.status === 'Pending' ? 'text-amber-600' : 'text-blue-500'
                                 }`}>
                                     {viewUser.status}
                                 </span>
                             </div>
                             <div className="flex justify-between py-1">
-                                <span className="text-slate-400 font-medium">Verified:</span>
-                                <span className={`font-semibold ${viewUser.isVerified ? 'text-emerald-600' : 'text-slate-400'}`}>
+                                <span className="text-blue-500 font-medium">Verified:</span>
+                                <span className={`font-semibold ${viewUser.isVerified ? 'text-emerald-600' : 'text-blue-400'}`}>
                                     {viewUser.isVerified ? 'Yes' : 'No'}
                                 </span>
                             </div>
                             <div className="flex justify-between py-1">
-                                <span className="text-slate-400 font-medium">Date Added:</span>
-                                <span className="font-semibold text-slate-700">{viewUser.dateAdded}</span>
+                                <span className="text-blue-500 font-medium">Date Added:</span>
+                                <span className="font-semibold text-blue-900">{viewUser.dateAdded}</span>
                             </div>
                         </div>
 
                         <button
                             onClick={() => setViewUser(null)}
-                            className="mt-5 w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition"
+                            className="mt-5 w-full py-2 bg-blue-100 hover:bg-blue-200 text-blue-900 font-semibold rounded-xl text-xs transition"
                         >
                             Close
                         </button>

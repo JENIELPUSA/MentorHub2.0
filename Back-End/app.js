@@ -1,6 +1,5 @@
 const express = require("express");
 const cors = require("cors");
-
 const morgan = require("morgan");
 const path = require("path");
 const ErrorController = require("./Controller/errorController");
@@ -63,7 +62,6 @@ if (process.env.NODE_ENV === "development") {
   app.use(morgan("dev"));
 }
 
-//importante ito para pag view ng picture sa table .etcc..
 const uploadsDir = path.join(__dirname, "..", "uploads");
 app.use("/api/v1/announcement", Announcement);
 app.use("/api/v1/qms", Qms);

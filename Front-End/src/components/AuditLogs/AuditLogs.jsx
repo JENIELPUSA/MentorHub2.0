@@ -122,9 +122,6 @@ export default function AuditLogs() {
             const matchesModule = moduleFilter === "" || log.module === moduleFilter;
             const matchesSeverity = severityFilter === "" || log.severity === severityFilter;
 
-            // Note: Date filter is mostly conceptual in this mock, 
-            // but included to show structure.
-
             return matchesQuery && matchesModule && matchesSeverity;
         });
     }, [logs, searchQuery, moduleFilter, severityFilter]);
@@ -149,40 +146,41 @@ export default function AuditLogs() {
         setDateFilter("all");
     };
 
+    /* ⭐ severity badges — semantic colors kept */
     const getBadgeClasses = (severity) => {
         switch (severity) {
             case 'INFO':
-                return 'bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-900';
+                return 'bg-blue-100 text-blue-800 border border-blue-300';
             case 'WARNING':
-                return 'bg-amber-50 dark:bg-amber-950/50 text-amber-600 border border-amber-200 dark:border-amber-900';
+                return 'bg-amber-100 text-amber-800 border border-amber-300';
             case 'CRITICAL':
-                return 'bg-rose-50 dark:bg-rose-950/50 text-rose-600 border border-rose-200 dark:border-rose-900';
+                return 'bg-rose-100 text-rose-800 border border-rose-300';
             default:
-                return 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700';
+                return 'bg-blue-50 text-blue-700 border border-blue-200';
         }
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-sans antialiased flex flex-col">
+        <div className="min-h-screen bg-gradient-to-b from-blue-100 via-blue-50 to-sky-50 text-blue-900 font-sans antialiased flex flex-col">
             <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-6">
 
                 {/* Header Title & Action Buttons */}
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                     <div>
-                        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Activity Audit Trail</h1>
-                        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Monitor system events, user actions, and security logs across the Capstone MentorHub platform.</p>
+                        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-blue-950">Activity Audit Trail</h1>
+                        <p className="text-sm text-blue-600 mt-1">Monitor system events, user actions, and security logs across the Capstone MentorHub platform.</p>
                     </div>
                     <div className="flex items-center gap-3">
                         <button
                             onClick={handleExport}
-                            className="hidden sm:inline-flex items-center space-x-2 px-3.5 py-2 text-sm font-medium rounded-lg text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition shadow-sm"
+                            className="hidden sm:inline-flex items-center space-x-2 px-3.5 py-2 text-sm font-medium rounded-lg text-blue-900 bg-white border border-blue-200 hover:bg-blue-50 transition shadow-sm"
                         >
                             <Download className="w-4 h-4" />
                             <span>Export CSV</span>
                         </button>
                         <button
                             onClick={handleRefresh}
-                            className="inline-flex items-center space-x-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-xl shadow-sm transition active:scale-95"
+                            className="inline-flex items-center space-x-2 px-4 py-2 bg-blue-900 hover:bg-blue-950 text-white text-sm font-semibold rounded-xl shadow-md transition active:scale-95"
                         >
                             <RotateCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
                             <span>Refresh Feed</span>
@@ -191,11 +189,11 @@ export default function AuditLogs() {
                 </div>
 
                 {/* Filters Bar */}
-                <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm space-y-4">
+                <div className="bg-white rounded-2xl border border-blue-200 p-5 shadow-md shadow-blue-900/10 space-y-4">
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                         {/* Search Box */}
                         <div className="relative">
-                            <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                            <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-blue-400">
                                 <Search className="w-4 h-4" />
                             </span>
                             <input
@@ -203,7 +201,7 @@ export default function AuditLogs() {
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 placeholder="Search action, user, or IP..."
-                                className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                                className="w-full pl-10 pr-4 py-2.5 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-900 placeholder:text-blue-400 focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 transition"
                             />
                         </div>
 
@@ -212,7 +210,7 @@ export default function AuditLogs() {
                             <select
                                 value={moduleFilter}
                                 onChange={(e) => setModuleFilter(e.target.value)}
-                                className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                                className="w-full px-3 py-2.5 bg-blue-50 border border-blue-200 rounded-xl text-sm font-medium text-blue-900 focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 transition"
                             >
                                 <option value="">All Modules</option>
                                 <option value="Authentication">Authentication</option>
@@ -228,7 +226,7 @@ export default function AuditLogs() {
                             <select
                                 value={severityFilter}
                                 onChange={(e) => setSeverityFilter(e.target.value)}
-                                className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                                className="w-full px-3 py-2.5 bg-blue-50 border border-blue-200 rounded-xl text-sm font-medium text-blue-900 focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 transition"
                             >
                                 <option value="">All Severities</option>
                                 <option value="INFO">Info</option>
@@ -242,7 +240,7 @@ export default function AuditLogs() {
                             <select
                                 value={dateFilter}
                                 onChange={(e) => setDateFilter(e.target.value)}
-                                className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+                                className="w-full px-3 py-2.5 bg-blue-50 border border-blue-200 rounded-xl text-sm font-medium text-blue-900 focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 transition"
                             >
                                 <option value="all">All Time</option>
                                 <option value="today">Today</option>
@@ -253,12 +251,12 @@ export default function AuditLogs() {
                     </div>
 
                     {/* Active filter chips & Reset */}
-                    <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-700/50 text-xs text-slate-500">
+                    <div className="flex items-center justify-between pt-2 border-t border-blue-100 text-xs text-blue-600">
                         <div className="flex items-center space-x-2">
-                            <span>Showing <strong className="text-slate-800 dark:text-slate-200">{filteredLogs.length}</strong> of <strong className="text-slate-800 dark:text-slate-200">{logs.length}</strong> logs</span>
+                            <span>Showing <strong className="text-blue-950">{filteredLogs.length}</strong> of <strong className="text-blue-950">{logs.length}</strong> logs</span>
                         </div>
                         {(searchQuery || moduleFilter || severityFilter || dateFilter !== 'all') && (
-                            <button onClick={resetFilters} className="text-indigo-600 dark:text-indigo-400 font-medium hover:underline">
+                            <button onClick={resetFilters} className="text-blue-800 font-semibold hover:underline">
                                 Clear filters
                             </button>
                         )}
@@ -266,11 +264,11 @@ export default function AuditLogs() {
                 </div>
 
                 {/* Data Table Container */}
-                <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden flex flex-col">
+                <div className="bg-white rounded-2xl border border-blue-200 shadow-md shadow-blue-900/10 overflow-hidden flex flex-col">
                     <div className="overflow-x-auto">
                         <table className="w-full text-left border-collapse">
                             <thead>
-                                <tr className="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                                <tr className="bg-blue-100 border-b-2 border-yellow-400 text-xs font-bold text-blue-950 uppercase tracking-wider">
                                     <th className="py-3.5 px-4 sm:px-6">Timestamp</th>
                                     <th className="py-3.5 px-4">Severity</th>
                                     <th className="py-3.5 px-4">Action Description</th>
@@ -278,15 +276,15 @@ export default function AuditLogs() {
                                     <th className="py-3.5 px-4 sm:px-6 text-right">Actions</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-100 dark:divide-slate-700 text-sm">
+                            <tbody className="divide-y divide-blue-100 text-sm">
                                 {filteredLogs.length > 0 ? (
                                     filteredLogs.map(log => (
                                         <tr
                                             key={log.id}
                                             onClick={() => setSelectedLog(log)}
-                                            className="hover:bg-slate-50/80 dark:hover:bg-slate-700/30 transition cursor-pointer"
+                                            className="odd:bg-white even:bg-blue-50/60 hover:bg-yellow-50 transition cursor-pointer"
                                         >
-                                            <td className="py-3.5 px-4 sm:px-6 font-mono text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                                            <td className="py-3.5 px-4 sm:px-6 font-mono text-xs text-blue-600 whitespace-nowrap">
                                                 {log.timestamp}
                                             </td>
                                             <td className="py-3.5 px-4 whitespace-nowrap">
@@ -294,10 +292,10 @@ export default function AuditLogs() {
                                                     {log.severity}
                                                 </span>
                                             </td>
-                                            <td className="py-3.5 px-4 max-w-sm truncate text-slate-700 dark:text-slate-300" title={log.action}>
+                                            <td className="py-3.5 px-4 max-w-sm truncate text-blue-800" title={log.action}>
                                                 {log.action}
                                             </td>
-                                            <td className="py-3.5 px-4 font-mono text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                                            <td className="py-3.5 px-4 font-mono text-xs text-blue-600 whitespace-nowrap">
                                                 {log.ip}
                                             </td>
                                             <td className="py-3.5 px-4 sm:px-6 text-right whitespace-nowrap">
@@ -306,7 +304,7 @@ export default function AuditLogs() {
                                                         e.stopPropagation();
                                                         setSelectedLog(log);
                                                     }}
-                                                    className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg text-slate-500 transition"
+                                                    className="p-1.5 hover:bg-yellow-100 rounded-lg text-blue-700 hover:text-blue-900 transition"
                                                     title="View Details"
                                                 >
                                                     <Eye className="w-4 h-4" />
@@ -318,11 +316,11 @@ export default function AuditLogs() {
                                     <tr>
                                         <td colSpan="5" className="p-0 border-0">
                                             <div className="flex flex-col items-center justify-center p-12 text-center">
-                                                <div className="w-12 h-12 bg-slate-100 dark:bg-slate-700 text-slate-400 rounded-full flex items-center justify-center mb-3">
+                                                <div className="w-12 h-12 bg-blue-50 border border-blue-200 text-blue-300 rounded-full flex items-center justify-center mb-3">
                                                     <SearchX className="w-6 h-6" />
                                                 </div>
-                                                <p className="text-base font-semibold text-slate-700 dark:text-slate-300">No audit logs found</p>
-                                                <p className="text-xs text-slate-500 mt-1">Try adjusting your filter or search query to find what you are looking for.</p>
+                                                <p className="text-base font-semibold text-blue-900">No audit logs found</p>
+                                                <p className="text-xs text-blue-500 mt-1">Try adjusting your filter or search query to find what you are looking for.</p>
                                             </div>
                                         </td>
                                     </tr>
@@ -332,11 +330,11 @@ export default function AuditLogs() {
                     </div>
 
                     {/* Pagination Footer */}
-                    <div className="px-6 py-4 bg-slate-50 dark:bg-slate-900/30 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                        <span className="text-xs text-slate-500 dark:text-slate-400">Page 1 of 1</span>
+                    <div className="px-6 py-4 bg-blue-50 border-t border-blue-100 flex items-center justify-between">
+                        <span className="text-xs text-blue-600">Page 1 of 1</span>
                         <div className="flex items-center space-x-2">
-                            <button disabled className="px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-medium bg-white dark:bg-slate-800 opacity-50 cursor-not-allowed">Previous</button>
-                            <button disabled className="px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-medium bg-white dark:bg-slate-800 opacity-50 cursor-not-allowed">Next</button>
+                            <button disabled className="px-3 py-1.5 border border-blue-200 rounded-lg text-xs font-medium bg-white text-blue-400 opacity-60 cursor-not-allowed">Previous</button>
+                            <button disabled className="px-3 py-1.5 border border-blue-200 rounded-lg text-xs font-medium bg-white text-blue-400 opacity-60 cursor-not-allowed">Next</button>
                         </div>
                     </div>
                 </div>
@@ -344,18 +342,18 @@ export default function AuditLogs() {
 
             {/* Detail Modal */}
             {selectedLog && (
-                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-white dark:bg-slate-800 rounded-2xl max-w-xl w-full border border-slate-200 dark:border-slate-700 shadow-2xl overflow-hidden transform transition-all">
-                        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-700">
+                <div className="fixed inset-0 bg-blue-950/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl max-w-xl w-full border border-blue-200 shadow-2xl overflow-hidden transform transition-all">
+                        <div className="flex items-center justify-between px-6 py-4 border-b-2 border-yellow-400">
                             <div className="flex items-center space-x-2">
                                 <span className={`px-2.5 py-1 text-xs font-semibold rounded-full ${getBadgeClasses(selectedLog.severity)}`}>
                                     {selectedLog.severity}
                                 </span>
-                                <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">Log Entry: {selectedLog.id}</h3>
+                                <h3 className="text-base font-bold text-blue-950">Log Entry: {selectedLog.id}</h3>
                             </div>
                             <button
                                 onClick={() => setSelectedLog(null)}
-                                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg transition"
+                                className="text-blue-400 hover:text-blue-700 hover:bg-blue-50 p-1 rounded-lg transition"
                             >
                                 <X className="w-5 h-5" />
                             </button>
@@ -364,42 +362,42 @@ export default function AuditLogs() {
                         <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto text-sm">
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <span className="text-xs text-slate-400 uppercase tracking-wider block">Timestamp</span>
-                                    <p className="font-medium mt-0.5 text-slate-800 dark:text-slate-200">{selectedLog.timestamp}</p>
+                                    <span className="text-xs text-blue-500 uppercase tracking-wider block font-semibold">Timestamp</span>
+                                    <p className="font-medium mt-0.5 text-blue-900">{selectedLog.timestamp}</p>
                                 </div>
                                 <div>
-                                    <span className="text-xs text-slate-400 uppercase tracking-wider block">Module</span>
-                                    <p className="font-medium mt-0.5 text-slate-800 dark:text-slate-200">{selectedLog.module}</p>
+                                    <span className="text-xs text-blue-500 uppercase tracking-wider block font-semibold">Module</span>
+                                    <p className="font-medium mt-0.5 text-blue-900">{selectedLog.module}</p>
                                 </div>
                                 <div>
-                                    <span className="text-xs text-slate-400 uppercase tracking-wider block">User & Role</span>
-                                    <p className="font-medium mt-0.5 text-slate-800 dark:text-slate-200">{selectedLog.user} ({selectedLog.role})</p>
+                                    <span className="text-xs text-blue-500 uppercase tracking-wider block font-semibold">User & Role</span>
+                                    <p className="font-medium mt-0.5 text-blue-900">{selectedLog.user} ({selectedLog.role})</p>
                                 </div>
                                 <div>
-                                    <span className="text-xs text-slate-400 uppercase tracking-wider block">IP Address</span>
-                                    <p className="font-medium mt-0.5 font-mono text-xs text-slate-800 dark:text-slate-200">{selectedLog.ip}</p>
+                                    <span className="text-xs text-blue-500 uppercase tracking-wider block font-semibold">IP Address</span>
+                                    <p className="font-medium mt-0.5 font-mono text-xs text-blue-900">{selectedLog.ip}</p>
                                 </div>
                             </div>
 
                             <div>
-                                <span className="text-xs text-slate-400 uppercase tracking-wider block mb-1">Action Performed</span>
-                                <p className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl font-medium text-slate-800 dark:text-slate-200">
+                                <span className="text-xs text-blue-500 uppercase tracking-wider block mb-1 font-semibold">Action Performed</span>
+                                <p className="p-3 bg-blue-50 border border-blue-200 rounded-xl font-medium text-blue-900">
                                     {selectedLog.action}
                                 </p>
                             </div>
 
                             <div>
-                                <span className="text-xs text-slate-400 uppercase tracking-wider block mb-1">System Payload / Metadata (JSON)</span>
-                                <pre className="p-3.5 bg-slate-900 text-slate-200 rounded-xl text-xs font-mono overflow-x-auto whitespace-pre-wrap">
+                                <span className="text-xs text-blue-500 uppercase tracking-wider block mb-1 font-semibold">System Payload / Metadata (JSON)</span>
+                                <pre className="p-3.5 bg-blue-950 text-blue-100 rounded-xl text-xs font-mono overflow-x-auto whitespace-pre-wrap border border-blue-900">
                                     {selectedLog.payload}
                                 </pre>
                             </div>
                         </div>
 
-                        <div className="px-6 py-3 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-700 flex justify-end">
+                        <div className="px-6 py-3 bg-blue-50 border-t border-blue-100 flex justify-end">
                             <button
                                 onClick={() => setSelectedLog(null)}
-                                className="px-4 py-2 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-sm font-medium hover:bg-slate-300 dark:hover:bg-slate-600 transition"
+                                className="px-4 py-2 bg-blue-100 text-blue-900 rounded-xl text-sm font-semibold hover:bg-blue-200 transition"
                             >
                                 Close
                             </button>
@@ -410,8 +408,8 @@ export default function AuditLogs() {
 
             {/* Toast Notification */}
             {showToast && (
-                <div className="fixed bottom-5 right-5 bg-slate-900 dark:bg-slate-700 text-white px-4 py-3 rounded-xl shadow-lg text-xs z-50 flex items-center space-x-2 transition animate-bounce">
-                    <CheckCircle className="w-4 h-4 text-emerald-400" />
+                <div className="fixed bottom-5 right-5 bg-blue-900 text-white px-4 py-3 rounded-xl shadow-lg text-xs z-50 flex items-center space-x-2 transition animate-bounce">
+                    <CheckCircle className="w-4 h-4 text-yellow-300" />
                     <span>Audit logs CSV downloaded successfully!</span>
                 </div>
             )}

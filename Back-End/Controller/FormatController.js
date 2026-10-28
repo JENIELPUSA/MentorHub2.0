@@ -334,38 +334,55 @@ ${format.fileUrl}
         data: format,
     });
 });
-// ==========================================
-// DISPLAY ALL FORMATS (WITH PAGINATION + SEARCH)
-// ==========================================
 exports.DisplayFormats = AsyncErrorHandler(async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
 
     const userId = req.user?._id;
-    const role = req.user?.role;
+    const role = (req.user?.role || '').toLowerCase().trim();
+
+    console.log('[DisplayFormats] userId=', userId, '| role=', role);
+
+    // ✅ Guard — kung walang userId, huwag ituloy (avoids ObjectId(undefined) crash)
+    if (!userId) {
+        return res.status(401).json({
+            status: 'fail',
+            message: 'User ID not found in request. Please log in again.',
+        });
+    }
 
     const { search, type, uploadedBy } = req.query;
-
     const matchStage = {};
 
-    // ---------- ROLE-BASED FILTER ----------
-    if (role === "admin") {
-        // Admin: see all formats.
-        // But still allow explicit ?uploadedBy= filter if provided.
-        if (uploadedBy) {
-            matchStage.uploadedBy = new mongoose.Types.ObjectId(uploadedBy);
+    // ✅ Safe ObjectId cast helper
+    const safeObjectId = (val, label) => {
+        if (!val) return null;
+        const str = String(val).trim();
+        if (!/^[a-fA-F0-9]{24}$/.test(str)) {
+            console.warn(`[DisplayFormats] Invalid ObjectId for ${label}: "${str}"`);
+            return null;
         }
+        return new mongoose.Types.ObjectId(str);
+    };
+
+    // ---------- ROLE-BASED FILTER ----------
+    if (role === 'admin' || role === 'organizer') {
+        if (uploadedBy) {
+            const ubId = safeObjectId(uploadedBy, 'uploadedBy');
+            if (ubId) matchStage.uploadedBy = ubId;
+        }
+    } else if (role === 'subject_instructor') {
+        matchStage.uploadedBy = new mongoose.Types.ObjectId(userId);
     } else {
-        // Non-admin: only see their own uploads.
         matchStage.uploadedBy = new mongoose.Types.ObjectId(userId);
     }
 
     // ---------- SEARCH ----------
     if (search) {
         matchStage.$or = [
-            { titleFormat: { $regex: search.trim(), $options: "i" } },
-            { description: { $regex: search.trim(), $options: "i" } },
+            { titleFormat: { $regex: search.trim(), $options: 'i' } },
+            { description: { $regex: search.trim(), $options: 'i' } },
         ];
     }
 
@@ -373,6 +390,8 @@ exports.DisplayFormats = AsyncErrorHandler(async (req, res) => {
     if (type) {
         matchStage.type = type;
     }
+
+    console.log('[DisplayFormats] matchStage=', JSON.stringify(matchStage));
 
     const result = await FormatModel.aggregate([
         { $match: matchStage },
@@ -396,7 +415,7 @@ exports.DisplayFormats = AsyncErrorHandler(async (req, res) => {
                         },
                     },
                 ],
-                totalCount: [{ $count: "count" }],
+                totalCount: [{ $count: 'count' }],
             },
         },
     ]);
@@ -405,7 +424,7 @@ exports.DisplayFormats = AsyncErrorHandler(async (req, res) => {
     const totalCount = result[0].totalCount[0]?.count || 0;
 
     res.status(200).json({
-        status: "success",
+        status: 'success',
         currentPage: page,
         totalPages: Math.ceil(totalCount / limit),
         totalCount,
@@ -413,7 +432,6 @@ exports.DisplayFormats = AsyncErrorHandler(async (req, res) => {
         data: formats,
     });
 });
-
 // ==========================================
 // GET SINGLE FORMAT
 // ==========================================
