@@ -1,4 +1,5 @@
 // SubjectSections.jsx — Professional UI + Instant setSections Update
+// ✅ FIX: Idinagdag ang onGroupsViewChange call para i-hide ang header sa SubjectManagement
 import React, { useContext, useEffect, useState } from 'react';
 import {
     Search,
@@ -45,7 +46,8 @@ const SubjectSections = ({
     onSectionDeleted,
     onSectionClick,
     navigateToGroups,
-    onViewModeChange
+    onViewModeChange,
+    onGroupsViewChange, // ✅ FIX: Idinagdag sa destructured props
 }) => {
     const navigate = useNavigate();
 
@@ -76,7 +78,9 @@ const SubjectSections = ({
     // ==================== NOTIFY PARENT ====================
     useEffect(() => {
         if (onViewModeChange) onViewModeChange(viewMode);
-    }, [viewMode, onViewModeChange]);
+        // ✅ FIX: I-notify ang parent kapag nagbago ang viewMode (hide/show header)
+        if (onGroupsViewChange) onGroupsViewChange(viewMode === 'groups');
+    }, [viewMode, onViewModeChange, onGroupsViewChange]);
 
     // ==================== CLOSE MENU ON OUTSIDE CLICK ====================
     useEffect(() => {
@@ -102,11 +106,15 @@ const SubjectSections = ({
         if (editingId === section.id) return;
         setSelectedSectionForGroups(section);
         setViewMode('groups');
+        // ✅ FIX: I-hide agad ang header kapag pumasok sa Groups
+        if (onGroupsViewChange) onGroupsViewChange(true);
     };
 
     const handleBackToSections = () => {
         setViewMode('sections');
         setSelectedSectionForGroups(null);
+        // ✅ FIX: Ipakita ulit ang header kapag bumalik sa Sections
+        if (onGroupsViewChange) onGroupsViewChange(false);
     };
 
     // ==================== SECTION CLICK ====================
@@ -207,7 +215,6 @@ const SubjectSections = ({
             });
 
             if (result.success) {
-                // ✅ INSTANT REFLECT VIA setSections
                 const newSection = result.data || result.section || result.newSection;
                 if (newSection && setSections) {
                     setSections(prev => {
@@ -215,7 +222,6 @@ const SubjectSections = ({
                         return [newSection, ...existing];
                     });
                 } else {
-                    // fallback
                     await fetchSections({ subjectId });
                 }
 
@@ -253,7 +259,6 @@ const SubjectSections = ({
             const result = await updateSection(id, { name: editTitle.trim() });
 
             if (result.success) {
-                // ✅ INSTANT REFLECT VIA setSections
                 if (setSections) {
                     setSections(prev => {
                         const existing = Array.isArray(prev) ? prev : [];
@@ -303,7 +308,6 @@ const SubjectSections = ({
             const result = await deleteSection(id);
 
             if (result.success) {
-                // ✅ INSTANT REFLECT VIA setSections
                 if (setSections) {
                     setSections(prev => {
                         const existing = Array.isArray(prev) ? prev : [];
@@ -516,7 +520,6 @@ const SubjectSections = ({
                             >
                                 {/* COLORED BANNER */}
                                 <div className={`relative h-24 ${color.banner} p-4 flex flex-col justify-between`}>
-                                    {/* Decorative circles */}
                                     <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -mr-10 -mt-10" />
                                     <div className="absolute bottom-0 right-16 w-14 h-14 bg-white/[0.07] rounded-full -mb-6" />
 
@@ -668,7 +671,6 @@ const SubjectSections = ({
             {isAddModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out]">
                     <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-100 relative overflow-hidden animate-[slideUp_0.25s_ease-out]">
-                        {/* Header with gradient accent */}
                         <div className="relative bg-gradient-to-r from-indigo-50 via-white to-sky-50 px-6 py-4 border-b border-slate-100">
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-3">
@@ -690,7 +692,6 @@ const SubjectSections = ({
                             </div>
                         </div>
 
-                        {/* Form body */}
                         <form onSubmit={handleAddSection} className="p-6 space-y-4">
                             <div>
                                 <label className="block font-semibold text-xs text-slate-600 mb-1.5 uppercase tracking-wider">

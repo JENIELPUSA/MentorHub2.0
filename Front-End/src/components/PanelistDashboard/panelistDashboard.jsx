@@ -74,6 +74,15 @@ const buildName = (u, fallback = '') => {
   return name || fallback;
 };
 
+const formatRole = (role) => {
+  if (!role) return '';
+  return role
+    .toLowerCase()
+    .split(/[-_]/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+};
+
 const getStatusBadge = (variant) => {
   const styles = {
     success: 'bg-blue-100 text-blue-800',
@@ -272,7 +281,6 @@ const TopicsTable = ({ activeFilter, topics = [], onAction }) => {
                     </div>
                   </td>
 
-                  {/* ⭐ ACCEPTANCE — "Confirmed" kapag isYouPanelist === true */}
                   <td className="py-3 px-4 align-top">
                     <span
                       className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold ${
@@ -426,7 +434,6 @@ const ScheduleItem = ({
           {tLabel}
         </span>
         <div className="flex items-center gap-1">
-          {/* ⭐ Confirmed Panelist badge */}
           {isYouPanelist && (
             <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
               <Shield className="w-3 h-3" /> Confirmed
@@ -514,10 +521,9 @@ export default function AcademixPanelistDashboard() {
 
   const { schedules, confirmPanelist } = useContext(ScheduleContext);
 
-
-  console.log("schedules",schedules)
-
   const authCtx = useContext(AuthContext) || {};
+  const { role, first_name, last_name } = authCtx;
+
   const currentUser = authCtx.user || authCtx.currentUser || authCtx.authUser;
   const currentUserId =
     currentUser?._id || currentUser?.id || authCtx.userId || authCtx._id;
@@ -700,7 +706,6 @@ export default function AcademixPanelistDashboard() {
         safeStr(proposed?.groupStatus) || safeStr(group?.status) || 'Pending Acceptance';
       let acceptance = mapAcceptanceStatus(groupStatusRaw);
 
-      // ⭐ isYouPanelist === true → "Confirmed"
       const isYouPanelist = s.isYouPanelist === true;
       if (isYouPanelist) {
         acceptance = { label: 'Confirmed', variant: 'success' };
@@ -709,7 +714,6 @@ export default function AcademixPanelistDashboard() {
       const proposedStatusRaw = safeStr(proposed?.status) || 'Pending Review';
       const review = mapReviewStatus(proposedStatusRaw);
 
-      // Filter key
       let filterKey = 'all';
       const reviewLower = review.label.toLowerCase();
       const acceptLower = acceptance.label.toLowerCase();
@@ -732,7 +736,6 @@ export default function AcademixPanelistDashboard() {
         filterKey = 'pending';
       }
 
-      // Time label
       let timeLabel = 'Recently';
       let timeBadge = 'neutral';
       const rawDate = s.updatedAt || s.createdAt || proposed?.updatedAt || proposed?.createdAt;
@@ -774,7 +777,6 @@ export default function AcademixPanelistDashboard() {
     });
   }, [schedules]);
 
-  // Filter counts
   const filterCounts = useMemo(() => {
     const counts = { all: mappedTopics.length, action: 0, pending: 0, approved: 0 };
     mappedTopics.forEach((t) => {
@@ -817,6 +819,26 @@ export default function AcademixPanelistDashboard() {
     () => mappedSchedules.filter((x) => x.isMyPending).length,
     [mappedSchedules]
   );
+
+  // ⭐ Banner display data for UserDashboardBanner
+  const bannerDisplayData = useMemo(() => {
+    const roleLabel = formatRole(role) || 'Panelist';
+    return {
+      group: {
+        name: 'BiPSU Panelist Portal',
+        referralCode: 'N/A',
+        section: {
+          name: `${roleLabel} Access`,
+          subject: {
+            title: 'Panelist Dashboard',
+          },
+        },
+      },
+      referredUsers: [],
+      userCount: schedules?.length || 0,
+      status: 'success',
+    };
+  }, [role, schedules]);
 
   const statCards = useMemo(
     () => [
@@ -904,47 +926,13 @@ export default function AcademixPanelistDashboard() {
   return (
     <div className="min-h-screen bg-blue-50 font-sans text-blue-900 p-4 sm:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto flex flex-col gap-6">
-        {/* Welcome Banner */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-900 via-blue-800 to-blue-700 p-6 text-white shadow-lg">
-          <div className="absolute -right-16 -top-16 h-64 w-64 rounded-full bg-amber-400/20 blur-2xl pointer-events-none" />
-          <div className="absolute right-40 -bottom-20 h-56 w-56 rounded-full bg-yellow-300/10 blur-xl pointer-events-none" />
-          <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-            <div className="space-y-2 max-w-2xl">
-              <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-[10px] font-semibold backdrop-blur-md text-amber-200">
-                <GraduationCap className="w-3.5 h-3.5" />
-                Academic Year 2024–2025 • Term 2
-              </div>
-              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-                Welcome Back, Panelist!
-              </h1>
-              <p className="text-sm text-blue-100 leading-relaxed">
-                Monitor your assigned research groups, review research topics, track feedback, and
-                stay updated with upcoming academic schedules.
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={goToResearchGroups}
-                className="group flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-xs font-bold text-blue-900 shadow-md transition-all hover:bg-amber-400 hover:shadow-lg"
-              >
-                <ListChecks className="w-4 h-4 transition-transform group-hover:scale-110" />
-                Review Queue
-                <span className="rounded-full bg-blue-900 text-amber-400 px-2 py-0.5 text-[10px] font-bold">
-                  {pendingMineCount}
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate('/dashboard/schedules')}
-                className="flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2 text-xs font-bold text-white backdrop-blur-sm transition-all hover:bg-white/20"
-              >
-                <Calendar className="w-4 h-4" />
-                Defense Calendar
-              </button>
-            </div>
-          </div>
-        </div>
+        {/* ⭐ UserDashboardBanner replaces the hardcoded welcome banner */}
+        <UserDashboardBanner
+          first_name={first_name}
+          last_name={last_name}
+          role={role}
+          displayData={bannerDisplayData}
+        />
 
         {/* Stat Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">

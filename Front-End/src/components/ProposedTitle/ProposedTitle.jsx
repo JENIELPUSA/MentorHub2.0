@@ -1689,7 +1689,7 @@ export default function ProposedTitle() {
         showReject: false,
         showRevision: false,
         showReadyForDefense: canMarkReadyForDefense && (fullyApproved || isForSchedule) && !isReady && fullyProceeded,
-        showForSchedule: false,
+        showForSchedule: false, // ⭐ Subject Instructor should NOT see the Schedule Defense button
         isFullyApproved: fullyApproved,
         isReadyForDefense: isReady,
         isForSchedule,
@@ -2017,9 +2017,11 @@ export default function ProposedTitle() {
                           isFullyApprovedStatus || isReadyForDefense || isForSchedule ||
                           isDoneStatus || isRevisionStatus || item.isRevesion === true || thisMentorApproved;
 
+                        // ⭐ Hide "Schedule Defense" button for subject_instructor
                         const showForScheduleButton =
+                          normalizedRole !== 'subject_instructor' &&
                           item.status === 'Approved' && fullyProceeded &&
-                          (normalizedRole === 'adviser' || userIsAdviser || (normalizedRole === 'panelist' && userIsPanelistItem) || isSubjectInstructor);
+                          (normalizedRole === 'adviser' || userIsAdviser || (normalizedRole === 'panelist' && userIsPanelistItem));
 
                         const showActionBlock =
                           !isDone && !isReadyForDefense && !isForSchedule && !isRejectedStatus &&

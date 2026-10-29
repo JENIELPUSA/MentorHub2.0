@@ -1,4 +1,4 @@
-// GroupDashboard.jsx — My Class Advisory Design (Compact Header, No Hero Banner)
+// GroupDashboard.jsx — My Groups Design (Compact Header, No Hero Banner)
 import React, { useContext, useState, useEffect } from 'react';
 import {
     Users,
@@ -223,7 +223,7 @@ const GroupDashboard = ({
         e.preventDefault();
 
         if (!groupName.trim()) {
-            setError('Class name is required');
+            setError('Group name is required');
             return;
         }
 
@@ -246,7 +246,7 @@ const GroupDashboard = ({
             setGroupName('');
             setShowForm(false);
         } catch (err) {
-            setError(err.message || 'Failed to create class');
+            setError(err.message || 'Failed to create group');
         } finally {
             setIsLoading(false);
         }
@@ -340,7 +340,7 @@ const GroupDashboard = ({
 
     const handleSaveEdit = async () => {
         if (!editName.trim()) {
-            setError('Class name is required');
+            setError('Group name is required');
             return;
         }
 
@@ -352,7 +352,7 @@ const GroupDashboard = ({
             setIsEditing(false);
             setSelectedGroup({ ...selectedGroup, name: editName.trim() });
         } catch (err) {
-            setError(err.message || 'Failed to update class');
+            setError(err.message || 'Failed to update group');
         } finally {
             setIsSaving(false);
         }
@@ -648,7 +648,7 @@ const GroupDashboard = ({
                     <button
                         onClick={handleBackToSections}
                         className="p-1.5 hover:bg-gray-100 rounded-lg transition text-gray-600 hover:text-gray-900 shrink-0"
-                        title="Back to Classes"
+                        title="Back to Groups"
                     >
                         <ArrowLeft className="w-4 h-4" />
                     </button>
@@ -659,7 +659,7 @@ const GroupDashboard = ({
 
                     <div className="min-w-0 flex-1">
                         <h2 className="text-sm font-bold text-gray-900 truncate">
-                            My Class Advisory
+                            My Groups
                         </h2>
                         <p className="text-[11px] text-gray-500 truncate">
                             {section?.title || section?.name || 'Section'} • {filteredGroups.length} group{filteredGroups.length !== 1 ? 's' : ''}
@@ -716,7 +716,7 @@ const GroupDashboard = ({
                                             <button
                                                 onClick={() => setIsEditing(true)}
                                                 className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
-                                                title="Edit Class Name"
+                                                title="Edit Group Name"
                                             >
                                                 <Edit className="w-4 h-4" />
                                             </button>
@@ -916,7 +916,7 @@ const GroupDashboard = ({
                                 <div className="flex items-center gap-2 mb-4">
                                     <BarChart3 className="w-5 h-5 text-blue-600" />
                                     <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wider">
-                                        Class Statistics & Analytics
+                                        Group Statistics & Analytics
                                     </h4>
                                     <span className="ml-auto text-xs text-gray-400">
                                         Updated: {formatDateTime(new Date().toISOString())}
@@ -1311,7 +1311,7 @@ const GroupDashboard = ({
                                             {filteredMembers.length === 0 ? (
                                                 <tr>
                                                     <td colSpan="5" className="px-6 py-8 text-center text-gray-500">
-                                                        {memberSearchTerm ? 'No members match your search' : 'No members in this class yet'}
+                                                        {memberSearchTerm ? 'No members match your search' : 'No members in this group yet'}
                                                     </td>
                                                 </tr>
                                             ) : (
@@ -1359,7 +1359,7 @@ const GroupDashboard = ({
                         </div>
                     </div>
                 ) : (
-                    // ==================== CLASS LIST VIEW ====================
+                    // ==================== GROUP LIST VIEW ====================
                     <>
                         {/* Dashboard Controls */}
                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
@@ -1368,7 +1368,7 @@ const GroupDashboard = ({
                                     <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
                                     <input
                                         type="text"
-                                        placeholder="Search classes..."
+                                        placeholder="Search groups..."
                                         value={searchTerm}
                                         onChange={(e) => setSearchTerm(e.target.value)}
                                         className="pl-9 pr-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none w-48 md:w-64 text-sm"
@@ -1391,17 +1391,17 @@ const GroupDashboard = ({
                                 </div>
                             </div>
 
-                            {/* Create Class Button — Opens Popup Modal */}
+                            {/* Create Group Button — Opens Popup Modal */}
                             <button
                                 onClick={openCreateModal}
                                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl shadow-sm transition flex items-center gap-2"
                             >
                                 <Plus className="w-4 h-4" />
-                                Create Class
+                                Create Group
                             </button>
                         </div>
 
-                        {/* Classes Grid/List */}
+                        {/* Groups Grid/List */}
                         {contextLoading || isLoadingGroupsData ? (
                             <div className="flex items-center justify-center py-20">
                                 <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
@@ -1412,10 +1412,10 @@ const GroupDashboard = ({
                                     <Users className="w-10 h-10 text-gray-400" />
                                 </div>
                                 <h4 className="text-lg font-semibold text-gray-700">
-                                    {searchTerm ? 'No matching classes found' : 'No classes yet'}
+                                    {searchTerm ? 'No matching groups found' : 'No groups yet'}
                                 </h4>
                                 <p className="text-sm text-gray-500 mt-1">
-                                    {searchTerm ? 'Try adjusting your search terms' : 'Click "Create Class" to create your first class'}
+                                    {searchTerm ? 'Try adjusting your search terms' : 'Click "Create Group" to create your first group'}
                                 </p>
                                 {!searchTerm && (
                                     <button
@@ -1423,7 +1423,7 @@ const GroupDashboard = ({
                                         className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl shadow-sm transition flex items-center gap-2 mx-auto"
                                     >
                                         <Plus className="w-4 h-4" />
-                                        Create First Class
+                                        Create First Group
                                     </button>
                                 )}
                             </div>
@@ -1533,7 +1533,7 @@ const GroupDashboard = ({
                                 <table className="w-full">
                                     <thead className="bg-gray-50 border-b border-gray-200">
                                         <tr>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Class</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Group</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Adviser</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Co-Adviser</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Members</th>
@@ -1653,7 +1653,7 @@ const GroupDashboard = ({
                 )}
             </div>
 
-            {/* ==================== CREATE CLASS POPUP MODAL ==================== */}
+            {/* ==================== CREATE GROUP POPUP MODAL ==================== */}
             {showForm && (
                 <div
                     className="fixed inset-0 z-[1000] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn"
@@ -1669,8 +1669,8 @@ const GroupDashboard = ({
                                     <Plus className="w-5 h-5" />
                                 </div>
                                 <div>
-                                    <h3 className="text-lg font-bold text-gray-900">Create New Class</h3>
-                                    <p className="text-xs text-gray-500">Add a new class to this section</p>
+                                    <h3 className="text-lg font-bold text-gray-900">Create New Group</h3>
+                                    <p className="text-xs text-gray-500">Add a new group to this section</p>
                                 </div>
                             </div>
                             <button
@@ -1686,7 +1686,7 @@ const GroupDashboard = ({
                         <form onSubmit={handleSubmit} className="p-6 space-y-4">
                             <div>
                                 <label className="block text-sm font-semibold text-gray-700 mb-1.5">
-                                    Class Name *
+                                    Group Name *
                                 </label>
                                 <input
                                     type="text"
@@ -1695,13 +1695,13 @@ const GroupDashboard = ({
                                         setGroupName(e.target.value);
                                         setError('');
                                     }}
-                                    placeholder="e.g. Class A - Web Development"
+                                    placeholder="e.g. Group A - Web Development"
                                     className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:bg-white outline-none transition"
                                     autoFocus
                                     disabled={isLoading}
                                 />
                                 <p className="mt-1.5 text-[11px] text-gray-500">
-                                    Give your class a clear and descriptive name.
+                                    Give your group a clear and descriptive name.
                                 </p>
                             </div>
 
@@ -1736,7 +1736,7 @@ const GroupDashboard = ({
                                     ) : (
                                         <>
                                             <Check className="w-4 h-4" />
-                                            Create Class
+                                            Create Group
                                         </>
                                     )}
                                 </button>
@@ -1782,7 +1782,7 @@ const GroupDashboard = ({
 
                         <p className="text-sm text-gray-500 mb-4">
                             {adviserModalType === 'adviser'
-                                ? 'Select a main adviser to assign to this class. The request will need approval.'
+                                ? 'Select a main adviser to assign to this group. The request will need approval.'
                                 : 'Select a co-adviser to assist the main adviser. The request will need approval.'}
                         </p>
 

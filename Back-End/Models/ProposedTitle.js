@@ -186,8 +186,8 @@ const ProposedTitleSchema = new Schema(
 
     // ============================================================
     // NEW ADDITIONS — FRONTEND DISPLAY
+    // ❌ topicCode REMOVED (duplicate key source)
     // ============================================================
-    topicCode: { type: String, unique: true, sparse: true, trim: true, index: true },
     track: { type: String, enum: TRACK_ENUM, default: 'Computer Science & Data Systems', index: true },
     revisionNumber: { type: Number, default: 1, min: 1 },
     revisionRequestedAt: { type: Date, default: null },
@@ -214,51 +214,31 @@ const ProposedTitleSchema = new Schema(
     // ⭐SEQUENTIAL CHAPTER LOCK FIELDS
     // ============================================================
 
-    /**
-     * Current chapter na pwedeng i-submit/re-revise.
-     * Auto-computed from completedChapters[] + progression approvals.
-     * 
-     * Order: Preliminary Pages → Chapter 1 → ... → Chapter 5 → Appendices → Full Manuscript
-     */
     nextAllowedChapter: {
       type: String,
       enum: CHAPTERS,
-      default: 'Preliminary Pages', // Bagong default — Preliminary Pages muna
+      default: 'Preliminary Pages',
       index: true,
     },
 
-    /**
-     * Chapters na LOCKED — hindi pa pwedeng isumite.
-     * Default: lahat maliban sa Preliminary Pages
-     */
     lockedChapters: {
       type: [String],
       enum: CHAPTERS,
       default: ['Chapter 1', 'Chapter 2', 'Chapter 3', 'Chapter 4', 'Chapter 5', 'Appendices', 'Full Manuscript'],
     },
 
-    /**
-     * Subject Instructor approval per chapter.
-     * { "Preliminary Pages": true, "Chapter 1": false, ... }
-     */
     chapterProgressionApprovals: {
       type: Map,
       of: Boolean,
-      default: () => new Map([['Preliminary Pages', true]]), // Prelim auto-approved
+      default: () => new Map([['Preliminary Pages', true]]),
     },
 
-    /**
-     * Sino ang nag-approve per chapter.
-     */
     chapterProgressionApprovedBy: {
       type: Map,
       of: Schema.Types.ObjectId,
       default: () => new Map(),
     },
 
-    /**
-     * Kailan na-approve per chapter.
-     */
     chapterProgressionApprovedAt: {
       type: Map,
       of: Date,
@@ -289,9 +269,6 @@ ProposedTitleSchema.virtual('isFullyReviewed').get(function () {
   return total > 0 && done >= total;
 });
 
-/**
- * Current active chapter (kung ano pwedeng gawin ng student)
- */
 ProposedTitleSchema.virtual('currentActiveChapter').get(function () {
   const completed = new Set(this.completedChapters || []);
   const approvals = this.chapterProgressionApprovals instanceof Map
@@ -312,9 +289,6 @@ ProposedTitleSchema.virtual('currentActiveChapter').get(function () {
   return null;
 });
 
-/**
- * Sequential progress (Prelim → Full Manuscript)
- */
 ProposedTitleSchema.virtual('chapterProgress').get(function () {
   const completed = new Set(this.completedChapters || []);
   const done = SEQUENTIAL_CHAPTERS.filter((ch) => completed.has(ch)).length;
@@ -329,12 +303,12 @@ ProposedTitleSchema.virtual('chapterProgress').get(function () {
 
 // ============================================================
 // INDEXES
+// ❌ topicCode unique index REMOVED
 // ============================================================
 ProposedTitleSchema.index({ groupId: 1, status: 1 });
 ProposedTitleSchema.index({ 'titleUrlTracking.chapter': 1 });
 ProposedTitleSchema.index({ groupId: 1, completedChapters: 1 });
 ProposedTitleSchema.index({ groupId: 1, isRevesion: 1 });
-ProposedTitleSchema.index({ topicCode: 1 }, { unique: true, sparse: true });
 ProposedTitleSchema.index({ track: 1, status: 1 });
 ProposedTitleSchema.index({ groupStatus: 1 });
 ProposedTitleSchema.index({ scopeStatus: 1 });
@@ -348,28 +322,18 @@ ProposedTitleSchema.index({ lockedChapters: 1 });
 
 // ============================================================
 // STATICS
+// ❌ generateTopicCode REMOVED
 // ============================================================
 ProposedTitleSchema.statics.CHAPTERS = CHAPTERS;
 ProposedTitleSchema.statics.REQUIRED_CHAPTERS = REQUIRED_CHAPTERS;
-ProposedTitleSchema.statics.SEQUENTIAL_CHAPTERS = SEQUENTIAL_CHAPTERS; // NEW
-ProposedTitleSchema.statics.PROGRESSION_CHAPTERS = PROGRESSION_CHAPTERS; // NEW
+ProposedTitleSchema.statics.SEQUENTIAL_CHAPTERS = SEQUENTIAL_CHAPTERS;
+ProposedTitleSchema.statics.PROGRESSION_CHAPTERS = PROGRESSION_CHAPTERS;
 ProposedTitleSchema.statics.TRACK_ENUM = TRACK_ENUM;
 ProposedTitleSchema.statics.SCOPE_STATUS_ENUM = SCOPE_STATUS_ENUM;
 ProposedTitleSchema.statics.PANEL_DECISION_ENUM = PANEL_DECISION_ENUM;
 ProposedTitleSchema.statics.GROUP_STATUS_ENUM = GROUP_STATUS_ENUM;
 ProposedTitleSchema.statics.SDG_GOALS_ENUM = SDG_GOALS_ENUM;
 
-ProposedTitleSchema.statics.generateTopicCode = async function (year) {
-  const start = new Date(`${year}-01-01`);
-  const end = new Date(`${year + 1}-01-01`);
-  const count = await this.countDocuments({ createdAt: { $gte: start, $lt: end } });
-  return `TOP-${year}-${String(count + 1).padStart(2, '0')}`;
-};
-
-/**
- * STATIC: Compute chapter lock based on completed chapters + approvals
- * Sequence: Preliminary Pages → Chapter 1-5 → Appendices → Full Manuscript
- */
 ProposedTitleSchema.statics.computeChapterLock = function (
   completedChapters = [],
   chapterProgressionApprovals = {}
@@ -385,20 +349,17 @@ ProposedTitleSchema.statics.computeChapterLock = function (
   for (let i = 0; i < SEQUENTIAL_CHAPTERS.length; i++) {
     const ch = SEQUENTIAL_CHAPTERS[i];
 
-    if (completed.has(ch)) continue; // Tapos na, skip
+    if (completed.has(ch)) continue;
 
-    // First uncompleted chapter
     const isFirst = ch === 'Preliminary Pages';
     const isApproved = approvals.get(ch) === true;
 
     if (isFirst || isApproved) {
       nextAllowed = ch;
-      // Lock lahat ng succeeding
       for (let j = i + 1; j < SEQUENTIAL_CHAPTERS.length; j++) {
         locked.push(SEQUENTIAL_CHAPTERS[j]);
       }
     } else {
-      // Hindi pa approved → lock lahat simula dito
       for (let j = i; j < SEQUENTIAL_CHAPTERS.length; j++) {
         locked.push(SEQUENTIAL_CHAPTERS[j]);
       }
@@ -412,18 +373,13 @@ ProposedTitleSchema.statics.computeChapterLock = function (
   };
 };
 
-/**
- * STATIC: Check kung pwede bang i-submit ang specific chapter
- */
 ProposedTitleSchema.statics.canSubmitChapter = function (doc, chapter) {
-  // Non-sequential chapters — always allowed (Others)
   if (!SEQUENTIAL_CHAPTERS.includes(chapter)) {
     return { allowed: true };
   }
 
   const completed = new Set(doc.completedChapters || []);
 
-  // Kung tapos na ang chapter na ito → revision lang pwede
   if (completed.has(chapter)) {
     return {
       allowed: false,
@@ -432,12 +388,10 @@ ProposedTitleSchema.statics.canSubmitChapter = function (doc, chapter) {
     };
   }
 
-  // Preliminary Pages — always allowed (first)
   if (chapter === 'Preliminary Pages') {
     return { allowed: true };
   }
 
-  // Chapter 1 to Full Manuscript — check if previous chapters completed + approval
   const idx = SEQUENTIAL_CHAPTERS.indexOf(chapter);
   for (let i = 0; i < idx; i++) {
     const prev = SEQUENTIAL_CHAPTERS[i];
@@ -451,7 +405,6 @@ ProposedTitleSchema.statics.canSubmitChapter = function (doc, chapter) {
     }
   }
 
-  // Check instructor approval for this chapter
   const approvals = doc.chapterProgressionApprovals instanceof Map
     ? doc.chapterProgressionApprovals
     : new Map(Object.entries(doc.chapterProgressionApprovals || {}));
@@ -485,9 +438,6 @@ function syncCompletionFlags(doc) {
   doc.isAllChaptersCompleted = REQUIRED_CHAPTERS.every((ch) => completedSet.has(ch));
 }
 
-/**
- * Sync chapter lock fields based on current state
- */
 function syncChapterLock(doc) {
   const approvalsObj = {};
   if (doc.chapterProgressionApprovals instanceof Map) {
@@ -606,17 +556,10 @@ function computeRevisionNumber(doc) {
 
 // ============================================================
 // PRE-SAVE
+// ❌ topicCode auto-generation REMOVED
 // ============================================================
 ProposedTitleSchema.pre('save', async function (next) {
   try {
-    if (!this.topicCode) {
-      try {
-        this.topicCode = await this.constructor.generateTopicCode(new Date().getFullYear());
-      } catch (err) {
-        console.warn('topicCode generation failed:', err.message);
-      }
-    }
-
     syncAdviserFlags(this);
     computeRubricScores(this);
     computePriority(this);
@@ -783,7 +726,6 @@ ProposedTitleSchema.methods._syncCompletionAfterUpdate = function (set, hasTrack
       set.completedChapters = Array.from(completedSet);
       set.isAllChaptersCompleted = REQUIRED_CHAPTERS.every((ch) => completedSet.has(ch));
 
-      // Recompute chapter lock
       const approvalsSource =
         set.chapterProgressionApprovals !== undefined
           ? set.chapterProgressionApprovals
@@ -966,16 +908,11 @@ ProposedTitleSchema.methods.completeObjective = function (objectiveId) {
   return this.save();
 };
 
-/**
- * ⭐NEW: Proceed chapter to next (Subject Instructor only)
- * Sets approval flag, unlocks next chapter
- */
 ProposedTitleSchema.methods.proceedChapter = function (chapter, instructorId, feedback = '') {
   if (!SEQUENTIAL_CHAPTERS.includes(chapter)) {
     throw new Error(`Invalid chapter: ${chapter}. Must be one of: ${SEQUENTIAL_CHAPTERS.join(', ')}`);
   }
 
-  // 1. Mark chapter approval
   if (!(this.chapterProgressionApprovals instanceof Map)) {
     this.chapterProgressionApprovals = new Map(Object.entries(this.chapterProgressionApprovals || {}));
   }
@@ -991,14 +928,12 @@ ProposedTitleSchema.methods.proceedChapter = function (chapter, instructorId, fe
   }
   this.chapterProgressionApprovedAt.set(chapter, new Date());
 
-  // 2. Auto-unlock next chapter
   const idx = SEQUENTIAL_CHAPTERS.indexOf(chapter);
   if (idx >= 0 && idx + 1 < SEQUENTIAL_CHAPTERS.length) {
     const nextChapter = SEQUENTIAL_CHAPTERS[idx + 1];
     this.chapterProgressionApprovals.set(nextChapter, true);
   }
 
-  // 3. Recompute lock
   const approvalsObj = {};
   for (const [k, v] of this.chapterProgressionApprovals.entries()) {
     approvalsObj[k] = v;

@@ -1,6 +1,7 @@
 // SubjectManagement.jsx - Optimized with single back button (Solid Blue & Yellow per Card)
 // + Create Semester dropdown (Semester + Year From/To) => "SY-2026-2027 (1st Semester)"
 // + Read-only confirmation modal (title is NOT editable)
+// + Header card (My Course + Create Semester) shown ONLY in main course list (Manage Course)
 import React, { useState, useContext, useEffect, useCallback, useRef } from 'react';
 import {
     BookOpen,
@@ -108,6 +109,9 @@ export default function SubjectManagement() {
 
     // ==================== VIEW MODE STATE ====================
     const [viewMode, setViewMode] = useState('sections');
+
+    // ✅ NEW: State para malaman kung nasa Classes/Groups view na (para i-hide ang header)
+    const [isInGroupsView, setIsInGroupsView] = useState(false);
 
     // ==================== HELPERS ====================
     const getFullName = (user) => {
@@ -417,15 +421,26 @@ export default function SubjectManagement() {
         setSelectedSubject(subject);
         setSections(subject.sections || []);
         setViewMode('sections');
+        setIsInGroupsView(false); // ✅ Reset kapag bagong open
     };
 
     const goBackToList = () => {
         setSelectedSubject(null);
         setSections([]);
         setViewMode('sections');
+        setIsInGroupsView(false); // ✅ Reset pagbalik sa list
     };
 
-    const handleViewModeChange = (mode) => setViewMode(mode);
+    // ✅ UPDATED: Handle view mode change at i-hide ang header kapag Classes/Groups
+    const handleViewModeChange = (mode) => {
+        setViewMode(mode);
+        setIsInGroupsView(mode === 'groups' || mode === 'classes');
+    };
+
+    // ✅ NEW: Callback mula sa SubjectSections para sa groups/classes view changes
+    const handleGroupsViewChange = (inGroups) => {
+        setIsInGroupsView(inGroups);
+    };
 
     // ==================== FILTER HANDLERS ====================
     const handleSearchChange = (e) => {
@@ -505,51 +520,50 @@ export default function SubjectManagement() {
                         </div>
                     )}
 
-                    {/* Header */}
-                    <header className="bg-white rounded-2xl border border-blue-200 shadow-md shadow-blue-900/10 p-6">
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                            <div className="flex items-center gap-4">
-                                <button
-                                    onClick={goBackToList}
-                                    className="p-2 bg-blue-50 hover:bg-yellow-100 rounded-xl transition text-blue-700 hover:text-blue-900 border border-blue-200"
-                                    title="Back to Subjects List"
-                                >
-                                    <ArrowLeft className="w-5 h-5" />
-                                </button>
-                                <div className="p-3 bg-blue-900 text-yellow-300 rounded-xl shadow-sm">
-                                    <BookOpen className="w-7 h-7" />
+                    {/* ✅ Header — HINDI na ipapakita kahit sa Sections view. Nakikita lang ito sa Manage Course (main list) */}
+                    {false && (
+                        <header className="bg-white rounded-2xl border border-blue-200 shadow-md shadow-blue-900/10 p-6">
+                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                <div className="flex items-center gap-4">
+                                    <button
+                                        onClick={goBackToList}
+                                        className="p-2 bg-blue-50 hover:bg-yellow-100 rounded-xl transition text-blue-700 hover:text-blue-900 border border-blue-200"
+                                        title="Back to Subjects List"
+                                    >
+                                        <ArrowLeft className="w-5 h-5" />
+                                    </button>
+                                    <div className="p-3 bg-blue-900 text-yellow-300 rounded-xl shadow-sm">
+                                        <BookOpen className="w-7 h-7" />
+                                    </div>
+                                    <div>
+                                        <h1 className="text-2xl font-bold text-blue-950 tracking-tight">
+                                            {selectedSubject.title}
+                                        </h1>
+                                        <p className="text-sm text-blue-600">
+                                            Subject Details • Created {selectedSubject.formattedCreatedAt}
+                                        </p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <h1 className="text-2xl font-bold text-blue-950 tracking-tight">
-                                        {selectedSubject.title}
-                                    </h1>
-                                    <p className="text-sm text-blue-600">
-                                        {viewMode === 'groups' ? 'Managing Groups' : `Subject Details • Created ${selectedSubject.formattedCreatedAt}`}
-                                    </p>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => openEditModal(selectedSubject)}
+                                        className="flex items-center gap-2 px-4 py-2.5 bg-yellow-400 hover:bg-yellow-300 text-blue-950 font-semibold text-sm rounded-xl transition shadow-sm"
+                                    >
+                                        <Edit className="w-4 h-4" />
+                                        Edit Subject
+                                    </button>
+                                    <button
+                                        onClick={() => handleDeleteSubject(selectedSubject.id)}
+                                        className="flex items-center gap-2 px-4 py-2.5 bg-rose-100 hover:bg-rose-200 text-rose-700 font-semibold text-sm rounded-xl transition"
+                                    >
+                                        <Trash2 className="w-4 h-4" />
+                                        Delete
+                                    </button>
                                 </div>
                             </div>
-                            <div className="flex gap-2">
-                                {viewMode === 'sections' && (
-                                    <>
-                                        <button
-                                            onClick={() => openEditModal(selectedSubject)}
-                                            className="flex items-center gap-2 px-4 py-2.5 bg-yellow-400 hover:bg-yellow-300 text-blue-950 font-semibold text-sm rounded-xl transition shadow-sm"
-                                        >
-                                            <Edit className="w-4 h-4" />
-                                            Edit Subject
-                                        </button>
-                                        <button
-                                            onClick={() => handleDeleteSubject(selectedSubject.id)}
-                                            className="flex items-center gap-2 px-4 py-2.5 bg-rose-100 hover:bg-rose-200 text-rose-700 font-semibold text-sm rounded-xl transition"
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                            Delete
-                                        </button>
-                                    </>
-                                )}
-                            </div>
-                        </div>
-                    </header>
+                        </header>
+                    )}
+
                     <SubjectSections
                         sections={sections}
                         subjectId={selectedSubject.id}
@@ -561,6 +575,7 @@ export default function SubjectManagement() {
                         }}
                         onViewModeChange={handleViewModeChange}
                         viewMode={viewMode}
+                        onGroupsViewChange={handleGroupsViewChange}
                     />
                 </div>
 
@@ -620,7 +635,7 @@ export default function SubjectManagement() {
     }
 
     // ================================================================
-    // ==================== MAIN LIST VIEW ====================
+    // ==================== MAIN LIST VIEW (Manage Course) ====================
     // ================================================================
     return (
         <div className="min-h-screen bg-gradient-to-b from-blue-100 via-blue-50 to-sky-50 text-blue-900 p-4 md:p-8 font-sans">
@@ -634,7 +649,7 @@ export default function SubjectManagement() {
                     </div>
                 )}
 
-                {/* Header */}
+                {/* ✅ Header — IPAPAKITA LANG DITO SA MANAGE COURSE (main list) */}
                 <header className="bg-white rounded-2xl border border-blue-200 shadow-md shadow-blue-900/10 p-6">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div className="flex items-center gap-4">

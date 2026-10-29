@@ -42,7 +42,6 @@ export const Sidebar = forwardRef(({ collapsed, onLogout }, ref) => {
         ],
         subject_instructor: [
             "/dashboard",
-            "/dashboard/Add-User",
             "/dashboard/Add-Subject",
             "/dashboard/defense_schedule",
             "/dashboard/archived", "/dashboard/propose-title"

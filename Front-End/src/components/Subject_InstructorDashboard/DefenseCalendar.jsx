@@ -288,12 +288,12 @@ const ProgressChapter = ({ schedule }) => {
                             className={`flex items-center justify-between px-2 py-1.5 rounded-md border ${bgCls}`}
                             title={
                                 isCompleted
-                                    ? `${ch} — tapos na`
+                                    ? `${ch} — completed`
                                     : isApproved
-                                        ? `${ch} — na-approve ng instructor`
+                                        ? `${ch} — approved by instructor`
                                         : isActive
-                                            ? `${ch} — pwede nang i-submit`
-                                            : `${ch} — naka-lock`
+                                            ? `${ch} — ready for submission`
+                                            : `${ch} — locked`
                             }
                         >
                             <div className="flex items-center gap-1.5 min-w-0">
@@ -328,7 +328,7 @@ const ProgressChapter = ({ schedule }) => {
                 <div className="mt-3 p-2 bg-white rounded-md border border-amber-200 flex items-start gap-1.5">
                     <Info className="w-3 h-3 text-amber-600 mt-0.5 shrink-0" />
                     <span className="text-[10px] text-blue-700 leading-relaxed">
-                        Kasalukuyang pwedeng i-submit:{' '}
+                        Currently available for submission:{' '}
                         <strong className="text-amber-700">{nextAllowed}</strong>
                     </span>
                 </div>
@@ -338,7 +338,7 @@ const ProgressChapter = ({ schedule }) => {
                 <div className="mt-3 p-2 bg-emerald-50 rounded-md border border-emerald-200 flex items-start gap-1.5">
                     <CheckCircle2 className="w-3 h-3 text-emerald-600 mt-0.5 shrink-0" />
                     <span className="text-[10px] text-emerald-700 leading-relaxed font-bold">
-                        Lahat ng chapters ay completed na!
+                        All chapters are completed!
                     </span>
                 </div>
             )}
@@ -556,35 +556,6 @@ export default function DefenseCalendar() {
                             Interactive schedule of upcoming thesis defenses, title proposals, and panelist
                             mentoring sessions.
                         </p>
-                    </div>
-
-                    <div className="flex items-center gap-3 bg-white p-2 rounded-xl shadow-sm border border-blue-200">
-                        <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 rounded-lg">
-                            <div className="w-9 h-9 rounded-lg bg-blue-900 text-white flex items-center justify-center">
-                                <ListChecks className="w-4 h-4" />
-                            </div>
-                            <div>
-                                <div className="text-[10px] text-blue-500 uppercase font-semibold">
-                                    My Quorum Load
-                                </div>
-                                <div className="text-base font-bold text-blue-900 leading-tight">
-                                    {events.length} Scheduled
-                                </div>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 rounded-lg">
-                            <div className="w-9 h-9 rounded-lg bg-amber-500 text-white flex items-center justify-center">
-                                <Hourglass className="w-4 h-4" />
-                            </div>
-                            <div>
-                                <div className="text-[10px] text-blue-500 uppercase font-semibold">
-                                    Pending Reviews
-                                </div>
-                                <div className="text-base font-bold text-blue-900 leading-tight">
-                                    {events.filter((e) => e.raw?.status === 'pending').length} Groups
-                                </div>
-                            </div>
-                        </div>
                     </div>
                 </section>
 

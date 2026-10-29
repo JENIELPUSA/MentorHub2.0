@@ -24,15 +24,13 @@ export const Header = () => {
         firstName: "Juan",
         lastName: "Dela Cruz",
         email: "juan.delacruz@example.com",
-        // Pwedeng local asset o online URL
         image: "https://i.pravatar.cc/150?img=12",
     };
 
-    // Kung gusto mong gamitin ang auth data kapag available, fallback sa dummy
     const displayFirstName = first_name || dummyProfile.firstName;
     const displayLastName = last_name || dummyProfile.lastName;
     const displayEmail = email || dummyProfile.email;
-    const displayImage = dummyProfile.image; // pwede mong palitan ng profileImg kung meron ka
+    const displayImage = dummyProfile.image;
     // ============================================
 
     const {
@@ -44,14 +42,12 @@ export const Header = () => {
 
     console.log("notifications", notifications);
 
-    // Fetch unread notifications on mount
     useEffect(() => {
         if (displayNotifications) {
             displayNotifications({});
         }
     }, [displayNotifications]);
 
-    // Close profile dropdown when clicking outside
     useEffect(() => {
         const handleClickOutside = (event) => {
             if (profileRef.current && !profileRef.current.contains(event.target)) {
@@ -90,7 +86,6 @@ export const Header = () => {
     const handleSettings = () => {
         setIsProfileOpen(false);
         console.log("Navigate to Settings page");
-        // Example: navigate("/settings");
     };
 
     const handleLogout = () => {
@@ -145,7 +140,6 @@ export const Header = () => {
     return (
         <>
             <header className="relative z-10 flex h-[60px] items-center justify-end bg-white px-4 shadow-md transition-colors dark:bg-slate-900">
-                {/* RIGHT SIDE - Theme, Notifications, Profile */}
                 <div className="flex items-center gap-x-3">
                     {/* Theme Toggle */}
                     <button
@@ -178,9 +172,9 @@ export const Header = () => {
                             )}
                         </button>
 
-                        {/* Notification Dropdown */}
+                        {/* Notification Dropdown — raised to z-[999] */}
                         {isNotificationOpen && (
-                            <div className="absolute right-0 mt-2 w-96 max-h-[500px] overflow-hidden rounded-lg bg-white shadow-xl dark:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-all duration-200">
+                            <div className="absolute right-0 mt-2 z-[999] w-96 max-h-[500px] overflow-hidden rounded-lg bg-white shadow-xl dark:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-all duration-200">
                                 <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 px-4 py-3">
                                     <div className="flex items-center gap-2">
                                         <h3 className="font-semibold text-slate-900 dark:text-white">
@@ -289,7 +283,7 @@ export const Header = () => {
                         )}
                     </div>
 
-                    {/* Profile with Popup Modal */}
+                    {/* Profile */}
                     <div className="relative" ref={profileRef}>
                         <button
                             className="size-10 overflow-hidden rounded-full border-2 border-slate-200 dark:border-slate-700 hover:border-blue-500 dark:hover:border-blue-400 transition-colors"
@@ -303,10 +297,9 @@ export const Header = () => {
                             />
                         </button>
 
-                        {/* Profile Popup Modal */}
+                        {/* Profile Popup — z-[998] just under notifications */}
                         {isProfileOpen && (
-                            <div className="absolute right-0 mt-2 w-64 overflow-hidden rounded-lg bg-white shadow-xl dark:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-all duration-200">
-                                {/* User Info */}
+                            <div className="absolute right-0 mt-2 z-[998] w-64 overflow-hidden rounded-lg bg-white shadow-xl dark:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-all duration-200">
                                 <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-200 dark:border-slate-700">
                                     <img
                                         src={displayImage}
@@ -323,7 +316,6 @@ export const Header = () => {
                                     </div>
                                 </div>
 
-                                {/* Menu Items */}
                                 <div className="py-1">
                                     <button
                                         onClick={handleSettings}
@@ -333,7 +325,6 @@ export const Header = () => {
                                         <span>Settings</span>
                                     </button>
 
-                                    {/* Change Password */}
                                     <button
                                         onClick={handleChangePassword}
                                         className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
@@ -343,7 +334,6 @@ export const Header = () => {
                                     </button>
                                 </div>
 
-                                {/* Logout */}
                                 <div className="border-t border-slate-200 dark:border-slate-700 py-1">
                                     <button
                                         onClick={handleLogout}
@@ -359,7 +349,6 @@ export const Header = () => {
                 </div>
             </header>
 
-            {/* Change Password Modal */}
             <ChangePassword
                 isOpen={isChangePasswordOpen}
                 onClose={handleCloseChangePassword}

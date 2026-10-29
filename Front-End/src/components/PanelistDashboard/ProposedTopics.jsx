@@ -5,8 +5,6 @@ import {
     Clock,
     CheckCircle,
     Search,
-    Download,
-    Filter,
     ArrowDownUp,
     FileText,
     MessageSquare,
@@ -203,47 +201,6 @@ const PdfLoadingScreen = ({ message = 'Loading thesis document...' }) => (
         </div>
     </div>
 );
-
-// ============================
-// STAT CARD
-// ============================
-const StatCard = ({ label, value, suffix, icon: Icon, tone, progress, urgent }) => {
-    const toneMap = {
-        blue: { icon: 'text-blue-700', bg: 'bg-blue-900', border: 'border-blue-200' },
-        amber: { icon: 'text-amber-600', bg: 'bg-amber-500', border: 'border-amber-200' },
-        red: { icon: 'text-red-600', bg: 'bg-red-100', border: 'border-red-200' },
-        green: { icon: 'text-blue-800', bg: 'bg-blue-700', border: 'border-blue-200' },
-    };
-    const t = toneMap[tone] || toneMap.blue;
-
-    return (
-        <div className="bg-white rounded-xl p-4 shadow-sm border border-blue-200 flex flex-col justify-between relative overflow-hidden group hover:shadow-md transition-all">
-            <div className="absolute -right-4 -top-4 w-20 h-20 bg-blue-50 rounded-full opacity-60 group-hover:scale-110 transition-transform" />
-            <div className="flex items-center justify-between z-10">
-                <span className="text-[10px] text-blue-500 uppercase tracking-wider font-bold">{label}</span>
-                <div className={`w-8 h-8 rounded-lg ${t.bg} text-white flex items-center justify-center`}>
-                    <Icon className="w-4 h-4" />
-                </div>
-            </div>
-            <div className="mt-4 flex items-baseline justify-between z-10">
-                <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-extrabold text-blue-900">{value}</span>
-                    {urgent && (
-                        <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-[9px] font-bold uppercase tracking-wider">
-                            Urgent
-                        </span>
-                    )}
-                </div>
-                <span className="text-[10px] text-blue-500 font-medium">{suffix}</span>
-            </div>
-            {progress !== undefined && (
-                <div className="w-full bg-blue-100 h-1.5 rounded-full mt-3 overflow-hidden">
-                    <div className={`${t.bg} h-full rounded-full transition-all`} style={{ width: `${progress}%` }} />
-                </div>
-            )}
-        </div>
-    );
-};
 
 // ============================
 // TOPIC LIST ITEM
@@ -916,11 +873,6 @@ export default function ProposedTopics() {
         );
     }, [proposedTitles]);
 
-    const uniqueGroups = useMemo(() => {
-        if (!proposedTitles) return 0;
-        return new Set(proposedTitles.map((t) => t.groupInfo?.name || t.groupName).filter(Boolean)).size;
-    }, [proposedTitles]);
-
     const tabs = [
         { key: 'all', label: `All Topics (${counts.all || 0})` },
         { key: 'Pending', label: `Needs My Review (${counts.Pending || 0})`, count: counts.Pending },
@@ -1090,15 +1042,6 @@ export default function ProposedTopics() {
                 {/* === HEADER === */}
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                     <div className="flex flex-col max-w-3xl">
-                        <div className="flex items-center gap-2 mb-1 flex-wrap">
-                            <span className="text-[10px] uppercase tracking-wider text-amber-600 font-bold">
-                                Faculty Panel Governance
-                            </span>
-                            <span className="text-blue-300">•</span>
-                            <span className="text-[10px] text-blue-500 font-mono font-semibold">
-                                Role: {normalizedRole || 'unknown'}
-                            </span>
-                        </div>
                         <h1 className="text-2xl sm:text-3xl font-extrabold text-blue-900 tracking-tight">
                             Proposed Research Topics
                         </h1>
@@ -1107,20 +1050,6 @@ export default function ProposedTopics() {
                             academic scope approval for assigned candidate groups.
                         </p>
                     </div>
-
-                    <div className="flex items-center gap-2 shrink-0 flex-wrap">
-                        <button className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-white border border-blue-200 hover:bg-blue-50 text-blue-800 text-xs font-bold transition-all shadow-sm">
-                            <Download className="w-3.5 h-3.5 text-blue-700" />
-                            Export Topic Ledger
-                        </button>
-                        <button className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-900 text-white text-xs font-bold hover:bg-blue-800 shadow-sm transition-all">
-                            <Filter className="w-3.5 h-3.5" />
-                            Review Queue
-                            <span className="bg-amber-500 text-blue-900 px-1.5 py-0.5 rounded-full text-[10px] font-bold">
-                                {counts.Pending || 0} Awaiting
-                            </span>
-                        </button>
-                    </div>
                 </div>
 
                 {customError && (
@@ -1128,43 +1057,6 @@ export default function ProposedTopics() {
                         {customError}
                     </div>
                 )}
-
-                {/* === STAT CARDS === */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-                    <StatCard
-                        label="Total Proposed Topics"
-                        value={String(counts.all || 0)}
-                        suffix={`Across ${uniqueGroups || 0} Groups`}
-                        icon={BookOpen}
-                        tone="blue"
-                        progress={100}
-                    />
-                    <StatCard
-                        label="Awaiting Panelist Review"
-                        value={String(counts.Pending || 0)}
-                        suffix="Due within 48h"
-                        icon={Clock}
-                        tone="amber"
-                        urgent={(counts.Pending || 0) > 0}
-                        progress={counts.all ? Math.round(((counts.Pending || 0) / counts.all) * 100) : 0}
-                    />
-                    <StatCard
-                        label="Revisions Underway"
-                        value={String(counts.Revision || 0)}
-                        suffix="Round 1 & 2 Edits"
-                        icon={History}
-                        tone="red"
-                        progress={counts.all ? Math.round(((counts.Revision || 0) / counts.all) * 100) : 0}
-                    />
-                    <StatCard
-                        label="Scope Approved"
-                        value={String(counts.Approved || 0)}
-                        suffix="Cleared for Defense"
-                        icon={CheckCircle}
-                        tone="green"
-                        progress={counts.all ? Math.round(((counts.Approved || 0) / counts.all) * 100) : 0}
-                    />
-                </div>
 
                 {/* === FILTER TOOLBAR === */}
                 <div className="bg-white rounded-xl p-4 shadow-sm border border-blue-200 flex flex-col gap-4">
