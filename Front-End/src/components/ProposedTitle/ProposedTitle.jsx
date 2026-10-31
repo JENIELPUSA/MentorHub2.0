@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
+import ConfirmModal from './Modal/confirmModal';
 
 import { AuthContext } from '../../contexts/AuthContext';
 import { ProposedTitleContext } from '../../contexts/ProposedTitleContext/ProposedTitleContext';
@@ -18,25 +19,22 @@ import { CommentContext } from '../../contexts/CommentContext/CommentContext';
 import DetailsModal from './DetailsModal';
 import ProfessionalLoadingScreen from './ProfessionalLoadingScreen';
 import PdfViewer from '../ReusablePDFviewer/PDFViewer';
+import ChapterProgressionPanel from "../ProposedTitle/Modal/ChapterProgressionalPanel"
 
 // ============================================================
-// ⭐ SEQUENTIAL CHAPTER CONSTANTS
+// SEQUENTIAL CHAPTER CONSTANTS
 // ============================================================
 const SEQUENTIAL_CHAPTERS = [
-  'Preliminary Pages',
   'Chapter 1',
   'Chapter 2',
   'Chapter 3',
   'Chapter 4',
   'Chapter 5',
-  'Appendices',
   'Full Manuscript',
 ];
 
-const REQUIRED_CHAPTERS = ['Chapter 1', 'Chapter 2', 'Chapter 3', 'Chapter 4', 'Chapter 5'];
-
 // ============================================================
-// ⭐ DEFENSE GATE HELPERS
+// DEFENSE GATE HELPERS
 // ============================================================
 const getApprovalVal = (approvals, chapter) => {
   if (!approvals) return false;
@@ -170,48 +168,7 @@ const getLatestTrackingEntry = (submission) => {
   return [...tracking].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))[0];
 };
 
-const getChapterStatus = (chapter, item) => {
-  const tracking = (item?.titleUrlTracking || []).filter((t) => t.chapter === chapter);
-  const completedChapters = item?.completedChapters || [];
-  const approvals = item?.chapterProgressionApprovals || {};
-  const progressionApprovedAt = item?.chapterProgressionApprovedAt || {};
 
-  const isCompleted = completedChapters.includes(chapter) ||
-    tracking.some((t) => t.isCompleted === true);
-
-  const isProceeded = getApprovalVal(approvals, chapter);
-
-  const hasSubmissions = tracking.length > 0;
-  const latestEntry = tracking.length > 0
-    ? [...tracking].sort((a, b) => new Date(b.date) - new Date(a.date))[0]
-    : null;
-
-  const idx = SEQUENTIAL_CHAPTERS.indexOf(chapter);
-  const isUnlocked = (() => {
-    if (idx === 0) return true;
-    const prevChapter = SEQUENTIAL_CHAPTERS[idx - 1];
-    return getApprovalVal(approvals, prevChapter);
-  })();
-
-  let status = 'locked';
-  if (isProceeded) status = 'proceeded';
-  else if (isCompleted) status = 'completed';
-  else if (hasSubmissions) status = 'submitted';
-  else if (isUnlocked) status = 'unlocked';
-
-  return {
-    chapter,
-    status,
-    isCompleted,
-    isProceeded,
-    isUnlocked,
-    hasSubmissions,
-    latestEntry,
-    submissions: tracking.length,
-    approvals,
-    progressionApprovedAt,
-  };
-};
 
 const backendCommentToAnnotation = (comment) => {
   const pos = comment.position || {};
@@ -330,387 +287,6 @@ const StatusStepper = ({ status, compact = false }) => {
   );
 };
 
-// ============================================================
-// CONFIRM MODAL — ⭐ BLUE / YELLOW THEME
-// ============================================================
-const ConfirmModal = ({ isOpen, config, onConfirm, onCancel, isLoading }) => {
-  if (!isOpen || !config) return null;
-
-  const colorClasses = {
-    emerald: { bg: 'bg-blue-50', icon: 'text-blue-700', button: 'bg-blue-900 hover:bg-blue-950', border: 'border-blue-200' },
-    purple: { bg: 'bg-purple-50', icon: 'text-purple-600', button: 'bg-purple-600 hover:bg-purple-700', border: 'border-purple-200' },
-    rose: { bg: 'bg-rose-50', icon: 'text-rose-600', button: 'bg-rose-600 hover:bg-rose-700', border: 'border-rose-200' },
-    teal: { bg: 'bg-blue-50', icon: 'text-blue-700', button: 'bg-blue-900 hover:bg-blue-950', border: 'border-blue-200' },
-    cyan: { bg: 'bg-cyan-50', icon: 'text-cyan-600', button: 'bg-cyan-600 hover:bg-cyan-700', border: 'border-cyan-200' },
-    amber: { bg: 'bg-yellow-50', icon: 'text-yellow-700', button: 'bg-yellow-400 hover:bg-yellow-300 text-blue-950', border: 'border-yellow-300' },
-  };
-
-  const c = colorClasses[config.color] || colorClasses.emerald;
-  const IconComponent = config.icon || CheckCircle2;
-
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-blue-950/60 backdrop-blur-sm" onClick={isLoading ? undefined : onCancel} />
-      <div className="relative bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden border border-blue-200">
-        <div className={`${c.bg} px-6 py-5 border-b ${c.border}`}>
-          <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-full bg-white flex items-center justify-center ${c.icon}`}>
-              <IconComponent className="w-5 h-5" />
-            </div>
-            <h3 className="text-lg font-bold text-blue-950">{config.title}</h3>
-          </div>
-        </div>
-        <div className="p-6 space-y-3">
-          <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">{config.message}</p>
-          {config.itemTitle && (
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
-              <p className="text-[10px] uppercase font-bold text-blue-500 mb-1">Thesis / Capstone Title</p>
-              <p className="text-sm font-medium text-blue-950 line-clamp-2">{config.itemTitle}</p>
-            </div>
-          )}
-          {config.warning && (
-            <div className={`text-xs px-3 py-2 rounded-lg ${c.bg} ${c.icon} border ${c.border} font-medium`}>{config.warning}</div>
-          )}
-        </div>
-        <div className="flex items-center justify-end gap-2 px-6 py-4 bg-blue-50 border-t border-blue-100">
-          <button onClick={onCancel} disabled={isLoading} className="px-4 py-2 text-sm font-medium text-blue-900 bg-white border border-blue-200 rounded-lg hover:bg-blue-100 disabled:opacity-50 transition">Cancel</button>
-          <button onClick={onConfirm} disabled={isLoading} className={`px-4 py-2 text-sm font-medium text-white rounded-lg shadow-sm disabled:opacity-50 transition inline-flex items-center gap-2 ${c.button}`}>
-            {isLoading ? (<><Loader2 className="w-4 h-4 animate-spin" /> Processing...</>) : (config.confirmLabel || 'Confirm')}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// ============================================================
-// CHAPTER PROGRESSION PANEL — ⭐ BLUE/YELLOW THEME
-// ============================================================
-const ChapterProgressionPanel = ({ item, onProceed, onReject, isProcessing }) => {
-  const [expandedChapter, setExpandedChapter] = useState(null);
-  const [confirmChapter, setConfirmChapter] = useState(null);
-  const [actionType, setActionType] = useState(null);
-  const [feedbackText, setFeedbackText] = useState('');
-
-  const chapters = SEQUENTIAL_CHAPTERS.map((ch) => getChapterStatus(ch, item));
-  const proceededCount = chapters.filter((c) => c.isProceeded).length;
-  const totalCount = chapters.length;
-  const fullManuscriptProceeded = isFullyProceeded(item);
-  const remaining = getRemainingChaptersForDefense(item);
-
-  const handleProceedClick = (chapter) => {
-    setConfirmChapter(chapter);
-    setActionType('proceed');
-    setFeedbackText('');
-  };
-
-  const handleRejectClick = (chapter) => {
-    setConfirmChapter(chapter);
-    setActionType('reject');
-    setFeedbackText('');
-  };
-
-  const handleConfirm = async () => {
-    if (!confirmChapter) return;
-    if (actionType === 'proceed') {
-      await onProceed(item._id, confirmChapter, feedbackText);
-    } else if (actionType === 'reject') {
-      await onReject(item._id, confirmChapter, feedbackText);
-    }
-    setConfirmChapter(null);
-    setActionType(null);
-    setFeedbackText('');
-  };
-
-  const progressPercent = (proceededCount / totalCount) * 100;
-
-  return (
-    <div className="space-y-3">
-      {/* ⭐ BLUE → YELLOW PROGRESS HEADER */}
-      <div className="bg-gradient-to-r from-blue-900 via-blue-800 to-yellow-400 rounded-xl p-4 text-white shadow-md">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            {fullManuscriptProceeded ? (
-              <CheckCircle2 className="w-4 h-4 text-yellow-200" />
-            ) : (
-              <Award className="w-4 h-4 text-yellow-200" />
-            )}
-            <span className="text-xs font-bold uppercase tracking-wider text-white drop-shadow">
-              Chapter Progression
-            </span>
-          </div>
-          <span className="text-lg font-extrabold text-yellow-200 drop-shadow">
-            {proceededCount}/{totalCount}
-          </span>
-        </div>
-
-        <div className="h-2.5 bg-blue-950/40 rounded-full overflow-hidden shadow-inner border border-blue-300/30">
-          <div
-            className="h-full rounded-full transition-all duration-700 ease-out bg-gradient-to-r from-yellow-300 via-yellow-400 to-yellow-500 shadow-[0_0_12px_rgba(250,204,21,0.8)]"
-            style={{ width: `${progressPercent}%` }}
-          />
-        </div>
-
-        <p className="text-[10px] text-yellow-100 mt-1.5 font-medium drop-shadow">
-          {fullManuscriptProceeded
-            ? '✅ All chapters proceeded — Defense button available!'
-            : `${remaining} chapter${remaining !== 1 ? 's' : ''} remaining before Defense button unlocks`}
-        </p>
-      </div>
-
-      {/* Chapter List */}
-      <div className="space-y-1.5 max-h-80 overflow-y-auto">
-        {chapters.map((ch) => {
-          const isExpanded = expandedChapter === ch.chapter;
-
-          let badgeStyle = 'bg-blue-50 text-blue-400 border-blue-200';
-          let badgeLabel = 'Locked';
-          let badgeIcon = '🔒';
-
-          if (ch.status === 'proceeded') {
-            badgeStyle = 'bg-yellow-100 text-yellow-800 border-yellow-300';
-            badgeLabel = 'Proceeded';
-            badgeIcon = '✓';
-          } else if (ch.status === 'completed') {
-            badgeStyle = 'bg-blue-100 text-blue-800 border-blue-300';
-            badgeLabel = 'Ready to Proceed';
-            badgeIcon = '⚡';
-          } else if (ch.status === 'submitted') {
-            badgeStyle = 'bg-yellow-100 text-yellow-800 border-yellow-300';
-            badgeLabel = 'Pending Review';
-            badgeIcon = '⏳';
-          } else if (ch.status === 'unlocked') {
-            badgeStyle = 'bg-cyan-100 text-cyan-700 border-cyan-200';
-            badgeLabel = 'Unlocked';
-            badgeIcon = '🔓';
-          }
-
-          const canProceed = ch.status === 'completed' && !ch.isProceeded;
-          const canReject = ch.status === 'completed' && !ch.isProceeded;
-          const isFinalChapter = ch.chapter === 'Full Manuscript';
-
-          return (
-            <div
-              key={ch.chapter}
-              className={`rounded-lg border transition-all ${
-                ch.status === 'proceeded'
-                  ? 'bg-yellow-50 border-yellow-300'
-                  : ch.status === 'completed'
-                  ? 'bg-blue-50 border-blue-300'
-                  : isFinalChapter
-                  ? 'bg-yellow-50 border-yellow-300'
-                  : 'bg-white border-blue-100'
-              }`}
-            >
-              <button
-                type="button"
-                onClick={() => setExpandedChapter(isExpanded ? null : ch.chapter)}
-                className="w-full text-left px-3 py-2 flex items-center justify-between gap-2"
-              >
-                <div className="flex items-center gap-2 flex-1 min-w-0">
-                  <span className="text-base">{badgeIcon}</span>
-                  <div className="min-w-0">
-                    <div className="text-xs font-bold text-blue-950 truncate flex items-center gap-1">
-                      {ch.chapter}
-                      {isFinalChapter && (
-                        <span className="text-[9px] font-bold bg-yellow-400 text-blue-950 px-1.5 py-0.5 rounded">
-                          FINAL GATE
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-[10px] text-blue-500">
-                      {ch.submissions > 0
-                        ? `${ch.submissions} submission${ch.submissions > 1 ? 's' : ''}`
-                        : 'No submissions yet'}
-                    </div>
-                  </div>
-                </div>
-                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${badgeStyle} shrink-0`}>
-                  {badgeLabel}
-                </span>
-              </button>
-
-              {isExpanded && (
-                <div className="px-3 pb-3 pt-1 border-t border-blue-100 space-y-2">
-                  {ch.isProceeded && (
-                    <div className="bg-yellow-100 border border-yellow-300 rounded-md p-2 text-[10px]">
-                      <p className="font-bold text-yellow-800 flex items-center gap-1">
-                        <CheckCircle2 className="w-3 h-3" />
-                        Proceeded by Subject Instructor
-                      </p>
-                      {ch.progressionApprovedAt?.[ch.chapter] && (
-                        <p className="text-yellow-700 mt-0.5">
-                          {formatDate(ch.progressionApprovedAt[ch.chapter])}
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  {canProceed && (
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => handleProceedClick(ch.chapter)}
-                        disabled={isProcessing}
-                        className={`flex-1 px-2 py-1.5 text-white text-[10px] font-bold rounded-md disabled:opacity-50 transition flex items-center justify-center gap-1 ${
-                          isFinalChapter
-                            ? 'bg-yellow-400 hover:bg-yellow-300 text-blue-950'
-                            : 'bg-blue-900 hover:bg-blue-950'
-                        }`}
-                      >
-                        <CheckCircle2 className="w-3 h-3" />
-                        Proceed {ch.chapter}
-                        {isFinalChapter && ' → Unlock Defense'}
-                      </button>
-                      {canReject && (
-                        <button
-                          onClick={() => handleRejectClick(ch.chapter)}
-                          disabled={isProcessing}
-                          className="px-2 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-bold rounded-md disabled:opacity-50 transition flex items-center justify-center gap-1"
-                        >
-                          <XCircle className="w-3 h-3" />
-                          Reject
-                        </button>
-                      )}
-                    </div>
-                  )}
-
-                  {ch.status === 'completed' && !ch.isProceeded && (
-                    <p className="text-[10px] text-blue-700 italic flex items-center gap-1">
-                      <Info className="w-3 h-3" />
-                      Adviser marked this complete. Ready for you to proceed.
-                    </p>
-                  )}
-
-                  {ch.status === 'unlocked' && (
-                    <p className="text-[10px] text-cyan-700 italic flex items-center gap-1">
-                      <Unlock className="w-3 h-3" />
-                      Student can now upload this chapter.
-                    </p>
-                  )}
-
-                  {ch.status === 'locked' && (
-                    <p className="text-[10px] text-blue-500 italic flex items-center gap-1">
-                      <Lock className="w-3 h-3" />
-                      Previous chapter must be proceeded first.
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* ⭐ BLUE/YELLOW DEFENSE GATE BANNER */}
-      <div className={`rounded-lg p-3 border-2 ${
-        fullManuscriptProceeded
-          ? 'bg-yellow-50 border-yellow-400'
-          : 'bg-blue-50 border-blue-300'
-      }`}>
-        <div className="flex items-start gap-2">
-          {fullManuscriptProceeded ? (
-            <>
-              <Shield className="w-4 h-4 text-yellow-600 shrink-0 mt-0.5" />
-              <div>
-                <p className="text-[11px] font-bold text-yellow-800">✅ Defense Button UNLOCKED</p>
-                <p className="text-[10px] text-yellow-700 mt-0.5">
-                  All chapters proceeded. Schedule Defense and Mark Ready buttons are now available.
-                </p>
-              </div>
-            </>
-          ) : (
-            <>
-              <Lock className="w-4 h-4 text-blue-700 shrink-0 mt-0.5" />
-              <div>
-                <p className="text-[11px] font-bold text-blue-900">🔒 Defense Button LOCKED</p>
-                <p className="text-[10px] text-blue-700 mt-0.5">
-                  Complete and Proceed all {totalCount} chapters (up to Full Manuscript) to unlock defense scheduling.
-                </p>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Confirm Modal */}
-      {confirmChapter && actionType && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-blue-950/60 backdrop-blur-sm" onClick={isProcessing ? undefined : () => setConfirmChapter(null)} />
-          <div className="relative bg-white rounded-2xl shadow-xl max-w-md w-full p-6 border border-blue-200">
-            <div className="flex items-center gap-3 mb-4">
-              <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                actionType === 'proceed'
-                  ? confirmChapter === 'Full Manuscript'
-                    ? 'bg-yellow-100 text-yellow-700'
-                    : 'bg-blue-100 text-blue-700'
-                  : 'bg-rose-100 text-rose-600'
-              }`}>
-                {actionType === 'proceed' ? <CheckCircle2 className="w-6 h-6" /> : <XCircle className="w-6 h-6" />}
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-blue-950">
-                  {actionType === 'proceed' ? 'Proceed Chapter?' : 'Reject Chapter?'}
-                </h3>
-                <p className="text-xs text-blue-500">{confirmChapter}</p>
-              </div>
-            </div>
-
-            {confirmChapter === 'Full Manuscript' && actionType === 'proceed' && (
-              <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-3 mb-3">
-                <p className="text-[11px] font-bold text-yellow-800">🎓 FINAL GATE</p>
-                <p className="text-[10px] text-yellow-700 mt-0.5">
-                  Proceeding Full Manuscript will UNLOCK the Defense buttons for this thesis!
-                </p>
-              </div>
-            )}
-
-            <p className="text-sm text-slate-600 mb-3">
-              {actionType === 'proceed'
-                ? `This will unlock the next chapter for the student. Are you sure ${confirmChapter} is complete and ready?`
-                : `This will send ${confirmChapter} back for revision. Student must reupload.`}
-            </p>
-
-            <textarea
-              value={feedbackText}
-              onChange={(e) => setFeedbackText(e.target.value)}
-              rows={3}
-              placeholder={actionType === 'proceed' ? 'Optional: Feedback for the student...' : 'Required: Reason for rejection...'}
-              className="w-full px-3 py-2 text-xs rounded-lg bg-blue-50 border border-blue-200 focus:ring-2 focus:ring-blue-900 outline-none resize-none mb-3 text-slate-800 placeholder:text-blue-400"
-            />
-
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setConfirmChapter(null)} disabled={isProcessing} className="px-4 py-2 text-sm font-medium text-blue-900 bg-white border border-blue-200 rounded-lg hover:bg-blue-100 disabled:opacity-50">Cancel</button>
-              <button
-                onClick={handleConfirm}
-                disabled={isProcessing || (actionType === 'reject' && !feedbackText.trim())}
-                className={`px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-50 flex items-center gap-2 ${
-                  actionType === 'proceed'
-                    ? confirmChapter === 'Full Manuscript'
-                      ? 'bg-yellow-400 hover:bg-yellow-300 text-blue-950'
-                      : 'bg-blue-900 hover:bg-blue-950 text-white'
-                    : 'bg-rose-600 hover:bg-rose-700 text-white'
-                }`}
-              >
-                {isProcessing ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" /> Processing...</>
-                ) : (
-                  <>
-                    {actionType === 'proceed' ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
-                    {actionType === 'proceed'
-                      ? confirmChapter === 'Full Manuscript'
-                        ? 'Proceed & Unlock Defense'
-                        : 'Proceed'
-                      : 'Reject'}
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
 
 // ============================================================
 // MAIN COMPONENT
@@ -950,7 +526,7 @@ export default function ProposedTitle() {
         showNotification(
           isFinalChapter
             ? `🎓 Full Manuscript proceeded! Defense button UNLOCKED!`
-            : `✅ ${chapter} proceeded! ${result.nextChapter ? `${result.nextChapter} unlocked.` : 'All chapters complete!'}`
+            : ` ${chapter} proceeded! ${result.nextChapter ? `${result.nextChapter} unlocked.` : 'All chapters complete!'}`
         );
         await FetchProposedTitles(contextCurrentPage, rowsPerPage, search, dateFrom, dateTo, statusFilter, groupIdFilter);
         setProgressionModalItem(null);
@@ -975,7 +551,7 @@ export default function ProposedTitle() {
     try {
       const result = await RejectChapter(titleId, chapter, feedback);
       if (result.success) {
-        showNotification(`✅ ${chapter} sent back for revision`);
+        showNotification(` ${chapter} sent back for revision`);
         await FetchProposedTitles(contextCurrentPage, rowsPerPage, search, dateFrom, dateTo, statusFilter, groupIdFilter);
         setProgressionModalItem(null);
       } else {
@@ -1002,7 +578,7 @@ export default function ProposedTitle() {
 
     const nextChapter = getNextSequentialChapter(item);
     if (!nextChapter) {
-      showNotification('✅ All chapters already proceeded!', false);
+      showNotification(' All chapters already proceeded!', false);
       return;
     }
 
@@ -1021,7 +597,7 @@ export default function ProposedTitle() {
         showNotification(
           isFinal
             ? `🎓 Full Manuscript proceeded! Defense button UNLOCKED!`
-            : `✅ ${nextChapter} proceeded! ${result.nextChapter ? `${result.nextChapter} unlocked.` : 'All chapters complete!'}`
+            : ` ${nextChapter} proceeded! ${result.nextChapter ? `${result.nextChapter} unlocked.` : 'All chapters complete!'}`
         );
         await FetchProposedTitles(contextCurrentPage, rowsPerPage, search, dateFrom, dateTo, statusFilter, groupIdFilter);
       } else {
@@ -1102,7 +678,7 @@ export default function ProposedTitle() {
         title: 'Schedule Defense',
         message: 'Are you sure you want to move this proposal to DEFENSE SCHEDULING?',
         itemTitle: item?.title,
-        warning: '✅ All chapters proceeded. Panel will now review and schedule the defense.',
+        warning: ' All chapters proceeded. Panel will now review and schedule the defense.',
         confirmLabel: 'Yes, Schedule Defense',
         color: 'cyan', icon: CalendarDays,
       };
@@ -1169,15 +745,15 @@ export default function ProposedTitle() {
         let successMsg = '';
         if (newStatus === 'Approved') {
           const wasEverRevision = wasRevision || itemBefore?.isRevesion === true;
-          successMsg = wasEverRevision ? '✅ Revision re-approved! You can now view the updated documents.' : '✅ Proposal approved! You can now view the documents.';
+          successMsg = wasEverRevision ? ' Revision re-approved! You can now view the updated documents.' : ' Proposal approved! You can now view the documents.';
         } else if (newStatus === 'for_schedule') {
-          successMsg = '✅ Proposal moved to Defense Scheduling!';
+          successMsg = ' Proposal moved to Defense Scheduling!';
         } else if (newStatus === 'Revision') {
-          successMsg = wasApproved ? '✅ Post-approval revision requested. Approvals reset — student notified.' : '✅ Revision requested. Student will be notified.';
+          successMsg = wasApproved ? ' Post-approval revision requested. Approvals reset — student notified.' : ' Revision requested. Student will be notified.';
         } else if (newStatus === 'Rejected') {
-          successMsg = '✅ Proposal rejected.';
+          successMsg = ' Proposal rejected.';
         } else {
-          successMsg = `✅ Proposal ${newStatus} successfully!`;
+          successMsg = ` Proposal ${newStatus} successfully!`;
         }
         showNotification(successMsg);
         FetchProposedTitles(contextCurrentPage, rowsPerPage, search, dateFrom, dateTo, statusFilter, groupIdFilter);
@@ -1204,6 +780,13 @@ export default function ProposedTitle() {
     if (!allowedRoles.includes(normalizedRole)) { showNotification('❌ Not authorized to mark defense readiness', true); return; }
 
     const itemCheck = currentRows.find(r => String(r._id) === String(id));
+
+    // ⭐ Ready for Defense can only be set once the proposal is in Defense Scheduling
+    if (itemCheck && itemCheck.status !== 'for_schedule') {
+      showNotification('⚠️ Ready for Defense can only be set once the proposal is in Defense Scheduling', true);
+      return;
+    }
+
     if (itemCheck && !isFullyProceeded(itemCheck)) {
       const remaining = getRemainingChaptersForDefense(itemCheck);
       showNotification(
@@ -1293,7 +876,7 @@ export default function ProposedTitle() {
       if (!res?.success) { showNotification(`❌ Clear failed: ${res?.error || 'Unknown'}`, true); return; }
       setPdfAnnotations(prev => ({ ...prev, [`page_${annotationPageNum}`]: [] }));
       await refreshComments();
-      showNotification(`✅ Cleared ${res.deletedCount || annotations.length} annotation(s)`);
+      showNotification(` Cleared ${res.deletedCount || annotations.length} annotation(s)`);
     } catch (err) {
       showNotification(`❌ Failed: ${err.message}`, true);
     } finally {
@@ -1356,7 +939,7 @@ export default function ProposedTitle() {
         return next;
       });
       await refreshComments();
-      showNotification('✅ All global feedback removed');
+      showNotification(' All global feedback removed');
     } catch (err) {
       showNotification(`❌ Failed: ${err.message}`, true);
     } finally {
@@ -1380,7 +963,7 @@ export default function ProposedTitle() {
         return { ...prev, [key]: (prev[key] || []).filter(a => a.id !== target.id) };
       });
       await refreshComments();
-      showNotification('✅ Feedback deleted');
+      showNotification(' Feedback deleted');
     } catch (err) {
       showNotification(`❌ Failed: ${err.message}`, true);
     }
@@ -1598,7 +1181,7 @@ export default function ProposedTitle() {
         }
       }
 
-      showNotification(canAnnotate ? '✅ PDF generated with all annotations & downloaded!' : '✅ Annotated feedback PDF downloaded!');
+      showNotification(canAnnotate ? ' PDF generated with all annotations & downloaded!' : ' Annotated feedback PDF downloaded!');
     } catch (err) {
       console.error('❌ Generate annotated PDF error:', err);
       showNotification(`❌ Generate failed: ${err.message}`, true);
@@ -1619,6 +1202,8 @@ export default function ProposedTitle() {
 
   // ============================================================
   // AVAILABLE ACTIONS
+  // ⭐ "Ready for Defense" is only available when status === 'for_schedule'
+  //    (for subject_instructor / admin / organizer)
   // ============================================================
   const getAvailableActions = (item) => {
     const { status, adviser, coAdviser } = item;
@@ -1661,7 +1246,8 @@ export default function ProposedTitle() {
       const isPrivileged = ['admin', 'organizer'].includes(normalizedRole);
       return {
         showApprove: false, showReject: false, showRevision: false,
-        showReadyForDefense: canMarkReadyForDefense && !isReady && !isForSchedule && fullyProceeded,
+        // ⭐ Ready only when status === 'for_schedule'
+        showReadyForDefense: canMarkReadyForDefense && isForSchedule && !isReady && fullyProceeded,
         showForSchedule: (normalizedRole === 'adviser' || userIsAdviser) && !isForSchedule && fullyProceeded,
         isFullyApproved: bothApproved, isReadyForDefense: isReady, isForSchedule,
         canAct: canMarkReadyForDefense || isPrivileged, alreadyApproved: false, isRevision: true,
@@ -1684,16 +1270,18 @@ export default function ProposedTitle() {
     if (normalizedRole === 'student') return { showApprove: false, showReject: false, showRevision: false, showReadyForDefense: false, showForSchedule: false, isFullyApproved: fullyApproved, isReadyForDefense: isReady, isForSchedule, canAct: false, alreadyApproved: false, fullyProceeded };
 
     if (normalizedRole === 'subject_instructor') {
+      // ⭐ Ready button only when status === 'for_schedule'
+      const canShowReady = canMarkReadyForDefense && isForSchedule && !isReady && fullyProceeded;
       return {
         showApprove: false,
         showReject: false,
         showRevision: false,
-        showReadyForDefense: canMarkReadyForDefense && (fullyApproved || isForSchedule) && !isReady && fullyProceeded,
+        showReadyForDefense: canShowReady,
         showForSchedule: false, // ⭐ Subject Instructor should NOT see the Schedule Defense button
         isFullyApproved: fullyApproved,
         isReadyForDefense: isReady,
         isForSchedule,
-        canAct: canMarkReadyForDefense && (fullyApproved || isForSchedule) && !isReady && fullyProceeded,
+        canAct: canShowReady,
         alreadyApproved: false,
         fullyProceeded,
       };
@@ -1714,7 +1302,8 @@ export default function ProposedTitle() {
       const canActNow = canMarkReadyForDefense || normalizedRole === 'adviser' || userIsAdviser || userIsPanelist;
       return {
         showApprove: false, showReject: true, showRevision: true,
-        showReadyForDefense: canMarkReadyForDefense && !isReady && !isForSchedule && fullyProceeded,
+        // ⭐ Ready only when status === 'for_schedule'
+        showReadyForDefense: canMarkReadyForDefense && isForSchedule && !isReady && fullyProceeded,
         showForSchedule: (normalizedRole === 'adviser' || userIsAdviser) && !isForSchedule && !isReady && fullyProceeded,
         isFullyApproved: true, isReadyForDefense: isReady, isForSchedule,
         canAct: canActNow, alreadyApproved: false,
@@ -1724,7 +1313,8 @@ export default function ProposedTitle() {
 
     if (fullyApproved) return {
       showApprove: false, showReject: true, showRevision: true,
-      showReadyForDefense: canMarkReadyForDefense && !userIsAdviser && fullyProceeded,
+      // ⭐ Status is 'Approved' here (not for_schedule) → Ready is not available yet
+      showReadyForDefense: false,
       showForSchedule: (normalizedRole === 'adviser' || userIsAdviser) && fullyProceeded,
       isFullyApproved: true, isReadyForDefense: false, isForSchedule: false,
       canAct: canMarkReadyForDefense || normalizedRole === 'adviser' || userIsAdviser,
@@ -1745,7 +1335,8 @@ export default function ProposedTitle() {
       showApprove: status !== 'Approved' && status !== 'Rejected' && status !== 'Revision' && status !== 'Ready for Defense' && status !== 'for_schedule',
       showReject: status !== 'Rejected' && status !== 'Approved' && status !== 'Ready for Defense' && status !== 'for_schedule',
       showRevision: status !== 'Revision' && status !== 'Approved' && status !== 'Ready for Defense' && status !== 'for_schedule',
-      showReadyForDefense: canMarkReadyForDefense && status !== 'Ready for Defense' && status !== 'Rejected' && status !== 'Revision' && status !== 'for_schedule' && fullyProceeded,
+      // ⭐ Never reaches here with status === 'for_schedule' (handled above) → no Ready button
+      showReadyForDefense: false,
       showForSchedule: false, isFullyApproved: false, isReadyForDefense: false, isForSchedule: false,
       canAct: status !== 'Ready for Defense' && status !== 'Rejected' && status !== 'for_schedule',
       alreadyApproved: false,
@@ -2023,6 +1614,15 @@ export default function ProposedTitle() {
                           item.status === 'Approved' && fullyProceeded &&
                           (normalizedRole === 'adviser' || userIsAdviser || (normalizedRole === 'panelist' && userIsPanelistItem));
 
+                        // ⭐ READY BUTTON — subject_instructor / admin / organizer:
+                        //    only visible when status === 'for_schedule'
+                        const isReadyRole = ['subject_instructor', 'admin', 'organizer'].includes(normalizedRole);
+                        const readyStatusAllowed = isReadyRole
+                          ? item.status === 'for_schedule'
+                          : (isFullyApprovedStatus || isForSchedule);
+                        const showReadyButton =
+                          readyStatusAllowed && showReadyForDefense && canAct && !userIsAdviser;
+
                         const showActionBlock =
                           !isDone && !isReadyForDefense && !isForSchedule && !isRejectedStatus &&
                           normalizedRole !== 'subject_instructor' && normalizedRole !== 'student';
@@ -2039,6 +1639,57 @@ export default function ProposedTitle() {
                         const isNextFinal = nextSeqChapter === 'Full Manuscript';
                         const isRowLoading = rowProceedingId === item._id;
                         const mentorsBothApproved = item.adviser === true && item.coAdviser === true;
+
+                        // ⭐ Step badge (e.g. "2/6") so it's clear which chapter is next
+                        const chapterStepLabel = (() => {
+                          const approvals = item.chapterProgressionApprovals || {};
+                          const done = SEQUENTIAL_CHAPTERS.filter((ch) => getApprovalVal(approvals, ch)).length;
+                          return `${Math.min(done + 1, SEQUENTIAL_CHAPTERS.length)}/${SEQUENTIAL_CHAPTERS.length}`;
+                        })();
+
+                        // ⭐ PROCEED CHAPTER CONTROL — always rendered FIRST in the actions cell
+                        const proceedControl = !canProceedChapters ? null : !mentorsBothApproved ? (
+                          <span
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-blue-500 bg-blue-50 border border-blue-200 rounded-lg cursor-help"
+                            title="Waiting for adviser & co-adviser to approve this proposal before proceeding chapters"
+                          >
+                            <Lock className="w-3.5 h-3.5" /> Waiting Mentors
+                          </span>
+                        ) : !nextSeqChapter ? (
+                          <span
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-yellow-800 bg-yellow-50 border border-yellow-300 rounded-lg"
+                            title="All 6 sequential chapters have been proceeded — defense buttons are now unlocked"
+                          >
+                            <Unlock className="w-3.5 h-3.5" /> All Proceeded
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => handleSequentialProceed(item)}
+                            disabled={isRowLoading}
+                            title={
+                              isNextFinal
+                                ? 'Proceed FULL MANUSCRIPT — this will UNLOCK the Defense buttons'
+                                : `Proceed "${nextSeqChapter}" — unlock next chapter for the student`
+                            }
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg shadow-sm transition disabled:opacity-50 ${
+                              isNextFinal
+                                ? 'bg-yellow-400 hover:bg-yellow-300 text-blue-950 ring-2 ring-yellow-300'
+                                : 'bg-blue-900 hover:bg-blue-950 text-white'
+                            }`}
+                          >
+                            {isRowLoading ? (
+                              <>
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" /> Proceeding...
+                              </>
+                            ) : (
+                              <>
+                                <span className="px-1.5 py-0.5 rounded bg-white/20 text-[10px] font-bold">{chapterStepLabel}</span>
+                                <ArrowRight className="w-3.5 h-3.5" />
+                                {isNextFinal ? 'Proceed → Unlock Defense' : `Proceed ${nextSeqChapter}`}
+                              </>
+                            )}
+                          </button>
+                        );
 
                         return (
                           <tr key={item._id} className="odd:bg-white even:bg-blue-50/60 hover:bg-yellow-50 transition">
@@ -2069,10 +1720,10 @@ export default function ProposedTitle() {
                             <td className="py-3.5 px-4">
                               <div className="space-y-1">
                                 <div className={`flex items-center gap-1.5 text-xs font-medium ${item.adviser ? 'text-blue-800' : 'text-yellow-700'}`}>
-                                  <User className="w-3.5 h-3.5" /> Adviser: {item.adviser ? '✅ Approved' : '⏳ Pending'}
+                                  <User className="w-3.5 h-3.5" /> Adviser: {item.adviser ? ' Approved' : '⏳ Pending'}
                                 </div>
                                 <div className={`flex items-center gap-1.5 text-xs font-medium ${item.coAdviser ? 'text-blue-800' : 'text-yellow-700'}`}>
-                                  <UserCheck className="w-3.5 h-3.5" /> Co-Adviser: {item.coAdviser ? '✅ Approved' : '⏳ Pending'}
+                                  <UserCheck className="w-3.5 h-3.5" /> Co-Adviser: {item.coAdviser ? ' Approved' : '⏳ Pending'}
                                 </div>
                               </div>
                             </td>
@@ -2100,6 +1751,17 @@ export default function ProposedTitle() {
                             </td>
                             <td className="py-3.5 px-4">
                               <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                                {/* 1️⃣ PROCEED CHAPTER — always first */}
+                                {proceedControl}
+
+                                {/* 2️⃣ Progression (Subject Instructor) */}
+                                {isSubjectInstructor && (
+                                  <button onClick={() => handleOpenProgressionModal(item)} title="Manage chapter progression" className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-white bg-blue-900 hover:bg-blue-950 rounded-lg shadow-sm transition">
+                                    <Award className="w-3.5 h-3.5" /> Progression
+                                  </button>
+                                )}
+
+                                {/* 3️⃣ View */}
                                 <button onClick={() => canView && handleOpenModal(item)} disabled={!canView}
                                   title={canView ? 'View thesis document and mentor feedback' : 'Waiting for mentor approval before documents can be viewed'}
                                   className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg transition ${
@@ -2112,65 +1774,7 @@ export default function ProposedTitle() {
                                   <Eye className="w-3.5 h-3.5" /> View
                                 </button>
 
-                                {isSubjectInstructor && (
-                                  <button onClick={() => handleOpenProgressionModal(item)} title="Manage chapter progression" className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-white bg-blue-900 hover:bg-blue-950 rounded-lg shadow-sm transition">
-                                    <Award className="w-3.5 h-3.5" /> Progression
-                                  </button>
-                                )}
-
-                                {canProceedChapters && (() => {
-                                  if (!mentorsBothApproved) {
-                                    return (
-                                      <span
-                                        className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-blue-500 bg-blue-50 border border-blue-200 rounded-lg cursor-help"
-                                        title="Waiting for adviser & co-adviser to approve this proposal before proceeding chapters"
-                                      >
-                                        <Lock className="w-3.5 h-3.5" /> Waiting Mentors
-                                      </span>
-                                    );
-                                  }
-                                  if (!nextSeqChapter) {
-                                    return (
-                                      <span
-                                        className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-yellow-800 bg-yellow-50 border border-yellow-300 rounded-lg"
-                                        title="All 8 sequential chapters have been proceeded — defense buttons are now unlocked"
-                                      >
-                                        <Unlock className="w-3.5 h-3.5" /> All Proceeded
-                                      </span>
-                                    );
-                                  }
-                                  return (
-                                    <button
-                                      onClick={() => handleSequentialProceed(item)}
-                                      disabled={isRowLoading}
-                                      title={
-                                        isNextFinal
-                                          ? `Proceed FULL MANUSCRIPT — this will UNLOCK the Defense buttons`
-                                          : `Proceed "${nextSeqChapter}" — unlock next chapter for the student`
-                                      }
-                                      className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg shadow-sm transition disabled:opacity-50 ${
-                                        isNextFinal
-                                          ? 'bg-yellow-400 hover:bg-yellow-300 text-blue-950 ring-2 ring-yellow-300'
-                                          : 'bg-blue-900 hover:bg-blue-950 text-white'
-                                      }`}
-                                    >
-                                      {isRowLoading ? (
-                                        <>
-                                          <Loader2 className="w-3.5 h-3.5 animate-spin" /> Proceeding...
-                                        </>
-                                      ) : isNextFinal ? (
-                                        <>
-                                          <ArrowRight className="w-3.5 h-3.5" /> Proceed → Unlock Defense
-                                        </>
-                                      ) : (
-                                        <>
-                                          <ArrowRight className="w-3.5 h-3.5" /> Proceed {nextSeqChapter}
-                                        </>
-                                      )}
-                                    </button>
-                                  );
-                                })()}
-
+                                {/* 4️⃣ Approve / Reject / Revision */}
                                 {showActionBlock && (
                                   <>
                                     {showApprove && canAct && (
@@ -2194,13 +1798,15 @@ export default function ProposedTitle() {
                                   </>
                                 )}
 
+                                {/* 5️⃣ Schedule / Ready / status chips */}
                                 {showForScheduleButton && (
                                   <button onClick={() => handleStatusChange(item._id, 'for_schedule')} className="px-2.5 py-1 text-xs font-medium text-white bg-cyan-600 hover:bg-cyan-700 rounded-lg shadow-sm transition inline-flex items-center gap-1">
                                     <CalendarDays className="w-3.5 h-3.5" /> Schedule Defense
                                   </button>
                                 )}
 
-                                {(isFullyApprovedStatus || isForSchedule) && showReadyForDefense && canAct && !userIsAdviser && (
+                                {/* ⭐ READY — subject_instructor / admin / organizer see it only when status === 'for_schedule' */}
+                                {showReadyButton && (
                                   <button onClick={() => handleReadyForDefense(item._id)} className="px-2.5 py-1 text-xs font-medium text-blue-950 bg-yellow-400 hover:bg-yellow-300 rounded-lg shadow-sm transition inline-flex items-center gap-1">
                                     <Shield className="w-3.5 h-3.5" /> Ready
                                   </button>

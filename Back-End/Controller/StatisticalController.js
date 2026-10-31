@@ -574,8 +574,6 @@ exports.getDashboardStatistics = AsyncErrorHandler(async (req, res) => {
     });
 });
 
-
-
 exports.getAdminStatistics = AsyncErrorHandler(async (req, res) => {
   const [
     totalUsers,

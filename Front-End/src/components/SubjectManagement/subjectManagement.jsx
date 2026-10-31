@@ -1,7 +1,3 @@
-// SubjectManagement.jsx - Optimized with single back button (Solid Blue & Yellow per Card)
-// + Create Semester dropdown (Semester + Year From/To) => "SY-2026-2027 (1st Semester)"
-// + Read-only confirmation modal (title is NOT editable)
-// + Header card (My Course + Create Semester) shown ONLY in main course list (Manage Course)
 import React, { useState, useContext, useEffect, useCallback, useRef } from 'react';
 import {
     BookOpen,
@@ -72,7 +68,7 @@ export default function SubjectManagement() {
 
     const { formats } = useContext(FormatContext)
 
-    console.log("formats", formats)
+    console.log("subjectsData", subjectsData)
 
     // ==================== LOCAL STATE ====================
     const [searchTerm, setSearchTerm] = useState('');

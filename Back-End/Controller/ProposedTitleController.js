@@ -371,7 +371,40 @@ exports.GetProposedTitleStatistics = AsyncErrorHandler(async (req, res) => {
   const userObjectId = new mongoose.Types.ObjectId(req.user._id);
 
   const matchStage = {};
-  if (role === "student") matchStage.uploadedBy = userObjectId;
+
+  // ⭐ STUDENT LOGIC
+  // Step 1: Get student's user doc to find referredBy
+  // Step 2: Match referredBy against Group.referralCode
+  // Step 3: Use matched group's _id to filter proposed titles
+  if (role === "student") {
+    const studentUser = await UserLoginSchema.findById(userObjectId)
+      .select("referredBy")
+      .lean();
+
+    let studentGroupId = null;
+
+    if (studentUser && studentUser.referredBy) {
+      const studentGroup = await Group.findOne({
+        referralCode: studentUser.referredBy,
+      })
+        .select("_id")
+        .lean();
+
+      if (studentGroup) {
+        studentGroupId = studentGroup._id;
+      }
+    }
+
+    if (studentGroupId) {
+      matchStage.groupId = studentGroupId;
+    } else {
+      // No matched group -> return empty result
+      matchStage.groupId = new mongoose.Types.ObjectId();
+      // If you prefer fallback to uploadedBy, uncomment below and remove above line:
+      // matchStage.uploadedBy = userObjectId;
+    }
+  }
+
   if (groupId) matchStage.groupId = new mongoose.Types.ObjectId(groupId);
   if (dateFrom || dateTo) {
     matchStage.createdAt = {};
@@ -1380,9 +1413,43 @@ exports.DisplayProposedTitles = AsyncErrorHandler(async (req, res) => {
   const userId = req.user._id;
   const userObjectId = new mongoose.Types.ObjectId(userId);
 
+  console.log("userId", userId);
+
   const matchStage = {};
 
-  if (role === "student") matchStage.uploadedBy = userObjectId;
+  // ⭐ STUDENT LOGIC
+  // Step 1: Get student's user doc to find referredBy
+  // Step 2: Match referredBy against Group.referralCode
+  // Step 3: Use matched group's _id to filter proposed titles
+  if (role === "student") {
+    const studentUser = await UserLoginSchema.findById(userObjectId)
+      .select("referredBy")
+      .lean();
+
+    let studentGroupId = null;
+
+    if (studentUser && studentUser.referredBy) {
+      const studentGroup = await Group.findOne({
+        referralCode: studentUser.referredBy,
+      })
+        .select("_id")
+        .lean();
+
+      if (studentGroup) {
+        studentGroupId = studentGroup._id;
+      }
+    }
+
+    if (studentGroupId) {
+      matchStage.groupId = studentGroupId;
+    } else {
+      // No matched group -> return empty result
+      matchStage.groupId = new mongoose.Types.ObjectId();
+      // If you prefer fallback to uploadedBy, uncomment below and remove above line:
+      // matchStage.uploadedBy = userObjectId;
+    }
+  }
+
   if (groupId) matchStage.groupId = new mongoose.Types.ObjectId(groupId);
 
   if (search) {

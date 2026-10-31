@@ -292,6 +292,7 @@ exports.DisplayGroups = AsyncErrorHandler(async (req, res) => {
 exports.getSingleGroup = AsyncErrorHandler(async (req, res) => {
     try {
         const { referredBy } = req.params;
+
         // ==========================================
         // 1. GET ALL USERS WITH SAME referredBy
         // ==========================================
@@ -310,8 +311,6 @@ exports.getSingleGroup = AsyncErrorHandler(async (req, res) => {
         // ==========================================
         // 2. GET THE referralCode FROM USER
         // ==========================================
-        // Since all students have the same referredBy,
-        // we only need to get it from one user.
         const referralCode = users[0].referredBy;
 
         // ==========================================
@@ -322,18 +321,50 @@ exports.getSingleGroup = AsyncErrorHandler(async (req, res) => {
         }).lean();
 
         // ==========================================
-        // 4. GET GROUP ID
+        // 4. GET GROUP ID + LOOKUP ADVISER & CO-ADVISER
         // ==========================================
         const groupId = group?._id || null;
 
         let proposedTitles = [];
 
         if (groupId) {
-            proposedTitles = await ProposedTitle.find({
-                groupId: groupId
-            }).lean();
+            proposedTitles = await ProposedTitle.find({ groupId })
+                .populate({
+                    path: 'adviserId',
+                    model: 'UserLoginSchema',
+                    select: 'first_name last_name middle_name suffix username email role'
+                })
+                .populate({
+                    path: 'coAdviserId',
+                    model: 'UserLoginSchema',
+                    select: 'first_name last_name middle_name suffix username email role'
+                })
+                .populate({
+                    path: 'uploadedBy',
+                    model: 'UserLoginSchema',
+                    select: 'first_name last_name middle_name suffix username email role'
+                })
+                .lean();
         }
 
+        // ==========================================
+        // 5. CONVERT MAP FIELDS → PLAIN OBJECTS
+        //    (para makita lahat ng fields sa JSON)
+        // ==========================================
+        const mapToPlainObject = (val) => {
+            if (!val) return {};
+            if (val instanceof Map) return Object.fromEntries(val);
+            if (typeof val === 'object' && !Array.isArray(val)) return val;
+            return {};
+        };
+
+        proposedTitles = proposedTitles.map((t) => ({
+            ...t,
+            // Map fields → plain objects (para lumabas sa JSON)
+            chapterProgressionApprovals: mapToPlainObject(t.chapterProgressionApprovals),
+            chapterProgressionApprovedAt: mapToPlainObject(t.chapterProgressionApprovedAt),
+            chapterProgressionApprovedBy: mapToPlainObject(t.chapterProgressionApprovedBy),
+        }));
 
         // ==========================================
         // 6. FORMAT USERS
@@ -353,32 +384,19 @@ exports.getSingleGroup = AsyncErrorHandler(async (req, res) => {
             updatedAt: user.updatedAt
         }));
 
-
-        console.log("formattedUsers",formattedUsers)
+        console.log("formattedUsers", formattedUsers);
+        console.log("proposedTitles count:", proposedTitles.length);
+        console.log("proposedTitles:", proposedTitles);
 
         // ==========================================
         // 7. RESPONSE
         // ==========================================
         return res.status(200).json({
             status: "success",
-
             message: `${users.length} user(s) found with referral code: ${referralCode}`,
-
             count: users.length,
-
-            // ======================================
-            // ORIGINAL USER DATA
-            // ======================================
             data: formattedUsers,
-
-            // ======================================
-            // GROUP INFORMATION
-            // ======================================
             group: group || null,
-
-            // ======================================
-            // PROPOSED TITLE OF THE GROUP
-            // ======================================
             proposedTitles: proposedTitles
         });
 

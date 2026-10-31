@@ -239,10 +239,11 @@ const ProposedTitleSchema = new Schema(
       default: () => new Map(),
     },
 
+    // ⭐ FIX: Preliminary Pages is auto-approved by default, so it needs a date too
     chapterProgressionApprovedAt: {
       type: Map,
       of: Date,
-      default: () => new Map(),
+      default: () => new Map([['Preliminary Pages', new Date()]]),
     },
   },
   {
@@ -419,6 +420,37 @@ ProposedTitleSchema.statics.canSubmitChapter = function (doc, chapter) {
   }
 
   return { allowed: true };
+};
+
+// ⭐ ONE-TIME MIGRATION: lagyan ng date ang mga chapter na approved pero walang date.
+// Gamitin: await ProposedTitle.backfillApprovalDates();
+// Note: estimate lang ang date (updatedAt/createdAt), hindi ang tunay na oras ng approval.
+ProposedTitleSchema.statics.backfillApprovalDates = async function () {
+  const docs = await this.find({});
+  let updated = 0;
+
+  for (const d of docs) {
+    if (!(d.chapterProgressionApprovals instanceof Map)) continue;
+    if (!(d.chapterProgressionApprovedAt instanceof Map)) {
+      d.chapterProgressionApprovedAt = new Map(Object.entries(d.chapterProgressionApprovedAt || {}));
+    }
+
+    let changed = false;
+    for (const [ch, ok] of d.chapterProgressionApprovals.entries()) {
+      if (ok === true && !d.chapterProgressionApprovedAt.has(ch)) {
+        d.chapterProgressionApprovedAt.set(ch, d.updatedAt || d.createdAt || new Date());
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      d._skipStatusResolve = true;
+      await d.save();
+      updated++;
+    }
+  }
+
+  return { scanned: docs.length, updated };
 };
 
 // ============================================================
@@ -908,6 +940,8 @@ ProposedTitleSchema.methods.completeObjective = function (objectiveId) {
   return this.save();
 };
 
+// ⭐ FIXED: every approved chapter (including the auto-unlocked next one) now gets
+//    its own "approved by" and "approved at" entry.
 ProposedTitleSchema.methods.proceedChapter = function (chapter, instructorId, feedback = '') {
   if (!SEQUENTIAL_CHAPTERS.includes(chapter)) {
     throw new Error(`Invalid chapter: ${chapter}. Must be one of: ${SEQUENTIAL_CHAPTERS.join(', ')}`);
@@ -916,22 +950,30 @@ ProposedTitleSchema.methods.proceedChapter = function (chapter, instructorId, fe
   if (!(this.chapterProgressionApprovals instanceof Map)) {
     this.chapterProgressionApprovals = new Map(Object.entries(this.chapterProgressionApprovals || {}));
   }
-  this.chapterProgressionApprovals.set(chapter, true);
-
   if (!(this.chapterProgressionApprovedBy instanceof Map)) {
     this.chapterProgressionApprovedBy = new Map(Object.entries(this.chapterProgressionApprovedBy || {}));
   }
-  this.chapterProgressionApprovedBy.set(chapter, instructorId);
-
   if (!(this.chapterProgressionApprovedAt instanceof Map)) {
     this.chapterProgressionApprovedAt = new Map(Object.entries(this.chapterProgressionApprovedAt || {}));
   }
-  this.chapterProgressionApprovedAt.set(chapter, new Date());
+
+  const now = new Date();
+
+  // overwrite = true  → explicit proceed, always stamp by/at
+  // overwrite = false → auto-unlock, stamp only if wala pang date
+  const markApproved = (ch, { overwrite = true } = {}) => {
+    this.chapterProgressionApprovals.set(ch, true);
+    if (overwrite || !this.chapterProgressionApprovedAt.has(ch)) {
+      this.chapterProgressionApprovedBy.set(ch, instructorId);
+      this.chapterProgressionApprovedAt.set(ch, now);
+    }
+  };
+
+  markApproved(chapter);
 
   const idx = SEQUENTIAL_CHAPTERS.indexOf(chapter);
   if (idx >= 0 && idx + 1 < SEQUENTIAL_CHAPTERS.length) {
-    const nextChapter = SEQUENTIAL_CHAPTERS[idx + 1];
-    this.chapterProgressionApprovals.set(nextChapter, true);
+    markApproved(SEQUENTIAL_CHAPTERS[idx + 1], { overwrite: false });
   }
 
   const approvalsObj = {};

@@ -76,7 +76,7 @@ export default function App() {
   const isFullyApproved = useMemo(() => Boolean(approvedTitle), [approvedTitle]);
 
   // ============================================================
-  // 🔑 MAY LAMAN BA ANG titleUrlTracking?
+  // 🔑 DOES titleUrlTracking HAVE DATA?
   // ============================================================
   const hasTracking = useMemo(() => {
     if (isLoading) return null;
@@ -165,7 +165,7 @@ export default function App() {
   };
 
   // ============================================================
-  // 🎯 HANDLERS — ipapasa sa ProposedTitleSection
+  // 🎯 HANDLERS — passed to ProposedTitleSection
   // ============================================================
 
   // ============================================================
@@ -192,7 +192,7 @@ export default function App() {
       formData.append("file", payload.file);
       formData.append("action", payload.action || "create");
 
-      // ✅ Kung revision, ipasa ang titleId
+      // ✅ If revision, pass titleId
       if (payload.titleId) {
         formData.append("titleId", payload.titleId);
       }
@@ -239,7 +239,7 @@ export default function App() {
       }
 
       // ============================================================
-      // Debug — tingnan kung tama ang laman ng FormData
+      // Debug — check FormData contents
       // ============================================================
       console.log("=== CreateProposedTitle FormData ===");
       for (const [key, value] of formData.entries()) {
@@ -435,39 +435,8 @@ export default function App() {
                       Submit your thesis title proposal for adviser review
                     </p>
                   </div>
-                  <p className="text-xs text-white/80 mt-0.5">
-                    Proposal window closes May 24, 2025 • 11:59 PM PST
-                  </p>
                 </div>
               </div>
-              <div className="flex items-center gap-1 self-start sm:self-auto shrink-0">
-                <button
-                  type="button"
-                  className="px-4 py-1.5 rounded-lg bg-white text-blue-900 text-[13px] font-semibold hover:bg-slate-100 transition-colors shadow-sm"
-                >
-                  View Guidelines
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Header */}
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-xs text-blue-600 font-semibold uppercase tracking-wider">
-                  Academic Year 2024-2025
-                </span>
-                <span className="w-1 h-1 rounded-full bg-slate-300"></span>
-                <span className="text-xs text-slate-500">CPST-8902-D</span>
-              </div>
-              <h1 className="text-3xl text-slate-900 tracking-tight font-bold">
-                Thesis Title Proposals
-              </h1>
-              <p className="text-base text-slate-500 mt-1 max-w-3xl">
-                Submit, track, and manage your proposed thesis titles. Your
-                adviser and co-adviser will review and approve each proposal.
-              </p>
             </div>
           </div>
 
@@ -477,17 +446,6 @@ export default function App() {
               <Loader2 className="w-4 h-4 animate-spin shrink-0" />
               <span>
                 Loading your group details... Please wait before submitting.
-              </span>
-            </div>
-          )}
-
-          {/* ✅ Both mentors confirmed banner */}
-          {isFullyApproved && (
-            <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-700">
-              <CheckCircle2 className="w-4 h-4 shrink-0" />
-              <span>
-                Both mentors have confirmed your proposal. You can now{" "}
-                <b>schedule for interview</b>.
               </span>
             </div>
           )}

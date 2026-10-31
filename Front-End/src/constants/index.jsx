@@ -1,25 +1,34 @@
 import {
-    ChartColumn,
+    // Core
     Home,
-    NotepadText,
-    Package,
-    PackagePlus,
     Settings,
-    ShoppingBag,
-    UserCheck,
-    UserPlus,
-    Users,
+
+    // Management
     UserCog,
     BookOpen,
     FileText,
+
+    // Scheduling
     CalendarDays,
+    CalendarCheck,
+
+    // Student Portal
+    FolderOpen,
+    Upload,
+    Users,
+    Lightbulb,
+
+    // Records
     Archive,
-    ScrollText
+    ScrollText,
 } from "lucide-react";
 
 import ProfileImage from "@/assets/profile-image.jpg";
 import ProductImage from "@/assets/product-image.jpg";
 
+/* ============================================================
+   SIDEBAR NAVIGATION
+   ============================================================ */
 export const navbarLinks = [
     {
         title: "Dashboard",
@@ -40,7 +49,7 @@ export const navbarLinks = [
                 path: "/dashboard/Add-User",
             },
             {
-                label: "Manage Course",
+                label: "Manage Semester",
                 icon: BookOpen,
                 path: "/dashboard/Add-Subject",
             },
@@ -49,11 +58,51 @@ export const navbarLinks = [
                 icon: FileText,
                 path: "/dashboard/propose-title",
             },
+        ],
+    },
+    {
+        title: "Scheduling",
+        links: [
             {
                 label: "Defense Schedule",
                 icon: CalendarDays,
                 path: "/dashboard/defense_schedule",
             },
+            {
+                label: "Defense Calendar",
+                icon: CalendarCheck,
+                path: "/dashboard/defense-calendar",
+            },
+        ],
+    },
+    {
+        title: "Student Portal",
+        links: [
+            {
+                label: "My Project",
+                icon: FolderOpen,
+                path: "/dashboard/myproject",
+            },
+            {
+                label: "Manuscript Upload",
+                icon: Upload,
+                path: "/dashboard/manuscript-upload",
+            },
+            {
+                label: "My Research Groups",
+                icon: Users,
+                path: "/dashboard/my-researchGroups",
+            },
+            {
+                label: "Proposed Topics",
+                icon: Lightbulb,
+                path: "/dashboard/proposedTopics",
+            },
+        ],
+    },
+    {
+        title: "Records",
+        links: [
             {
                 label: "Archived",
                 icon: Archive,
@@ -63,31 +112,6 @@ export const navbarLinks = [
                 label: "Audit Trail",
                 icon: ScrollText,
                 path: "/dashboard/logs-audit",
-            },
-            {
-                label: "My Project",
-                icon: ScrollText,
-                path: "/dashboard/myproject",
-            },
-            {
-                label: "Manuscript Upload",
-                icon: ScrollText,
-                path: "/dashboard/manuscript-upload"
-            },
-            {
-                label: "My Research Groups",
-                icon: ScrollText,
-                path: "/dashboard/my-researchGroups"
-            },
-            {
-                label: "Defense Calendar",
-                icon: ScrollText,
-                path: "/dashboard/defense-calendar"
-            },
-            {
-                label: "Proposed Topics",
-                icon: ScrollText,
-                path: "/dashboard/proposedTopics"
             },
         ],
     },
@@ -100,166 +124,5 @@ export const navbarLinks = [
                 path: "/settings",
             },
         ],
-    },
-];
-
-export const overviewData = [
-    { name: "Jan", total: 1500 },
-    { name: "Feb", total: 2000 },
-    { name: "Mar", total: 1000 },
-    { name: "Apr", total: 5000 },
-    { name: "May", total: 2000 },
-    { name: "Jun", total: 5900 },
-    { name: "Jul", total: 2000 },
-    { name: "Aug", total: 5500 },
-    { name: "Sep", total: 2000 },
-    { name: "Oct", total: 4000 },
-    { name: "Nov", total: 1500 },
-    { name: "Dec", total: 2500 },
-];
-
-export const recentSalesData = [
-    {
-        id: 1,
-        name: "Olivia Martin",
-        email: "olivia.martin@email.com",
-        image: ProfileImage,
-        total: 1500,
-    },
-    {
-        id: 2,
-        name: "James Smith",
-        email: "james.smith@email.com",
-        image: ProfileImage,
-        total: 2000,
-    },
-    {
-        id: 3,
-        name: "Sophia Brown",
-        email: "sophia.brown@email.com",
-        image: ProfileImage,
-        total: 4000,
-    },
-    {
-        id: 4,
-        name: "Noah Wilson",
-        email: "noah.wilson@email.com",
-        image: ProfileImage,
-        total: 3000,
-    },
-    {
-        id: 5,
-        name: "Emma Jones",
-        email: "emma.jones@email.com",
-        image: ProfileImage,
-        total: 2500,
-    },
-    {
-        id: 6,
-        name: "William Taylor",
-        email: "william.taylor@email.com",
-        image: ProfileImage,
-        total: 4500,
-    },
-    {
-        id: 7,
-        name: "Isabella Johnson",
-        email: "isabella.johnson@email.com",
-        image: ProfileImage,
-        total: 5300,
-    },
-];
-
-export const topProducts = [
-    {
-        number: 1,
-        name: "Wireless Headphones",
-        image: ProductImage,
-        description: "High-quality noise-canceling wireless headphones.",
-        price: 99.99,
-        status: "In Stock",
-        rating: 4.5,
-    },
-
-    {
-        number: 2,
-        name: "Smartphone",
-        image: ProductImage,
-        description: "Latest 5G smartphone with excellent camera features.",
-        price: 799.99,
-        status: "In Stock",
-        rating: 4.7,
-    },
-    {
-        number: 3,
-        name: "Gaming Laptop",
-        image: ProductImage,
-        description: "Powerful gaming laptop with high-end graphics.",
-        price: 1299.99,
-        status: "In Stock",
-        rating: 4.8,
-    },
-    {
-        number: 4,
-        name: "Smartwatch",
-        image: ProductImage,
-        description: "Stylish smartwatch with fitness tracking features.",
-        price: 199.99,
-        status: "Out of Stock",
-        rating: 4.4,
-    },
-    {
-        number: 5,
-        name: "Bluetooth Speaker",
-        image: ProductImage,
-        description: "Portable Bluetooth speaker with deep bass sound.",
-        price: 59.99,
-        status: "In Stock",
-        rating: 4.3,
-    },
-    {
-        number: 6,
-        name: "4K Monitor",
-        image: ProductImage,
-        description: "Ultra HD 4K monitor with stunning color accuracy.",
-        price: 399.99,
-        status: "In Stock",
-        rating: 4.6,
-    },
-    {
-        number: 7,
-        name: "Mechanical Keyboard",
-        image: ProductImage,
-        description: "Mechanical keyboard with customizable RGB lighting.",
-        price: 89.99,
-        status: "In Stock",
-        rating: 4.7,
-    },
-    {
-        number: 8,
-        name: "Wireless Mouse",
-        image: ProductImage,
-        description: "Ergonomic wireless mouse with precision tracking.",
-        price: 49.99,
-        status: "In Stock",
-        rating: 4.5,
-    },
-    {
-        number: 9,
-        name: "Action Camera",
-        image: ProductImage,
-        description: "Waterproof action camera with 4K video recording.",
-        price: 249.99,
-        status: "In Stock",
-        rating: 4.8,
-    },
-    {
-        number: 10,
-        name: "External Hard Drive",
-        image: ProductImage,
-        description: "Portable 2TB external hard drive for data storage.",
-        price: 79.99,
-        status: "Out of Stock",
-        rating: 4.5,
     },
 ];
