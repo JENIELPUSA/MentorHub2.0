@@ -5,9 +5,6 @@ import { AuthContext } from "../AuthContext";
 export const SubjectContext = createContext();
 
 export const SubjectProvider = ({ children }) => {
-  // ==========================================
-  // STATE DECLARATIONS
-  // ==========================================
   const [customError, setCustomError] = useState("");
   const { authToken } = useContext(AuthContext);
   const [loading, setLoading] = useState(true);

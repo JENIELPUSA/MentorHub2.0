@@ -1,5 +1,6 @@
 // SubjectSections.jsx — Professional UI + Instant setSections Update
-// ✅ FIX: Idinagdag ang onGroupsViewChange call para i-hide ang header sa SubjectManagement
+// ✅ FIX: Context (sectionsData) ang priority para instant ang update pagkatapos ng create
+// ✅ NEW: Professional "No Data" empty state
 import React, { useContext, useEffect, useState } from 'react';
 import {
     Search,
@@ -17,6 +18,8 @@ import {
     Edit2,
     AlertCircle,
     Sparkles,
+    FileText,
+    FolderOpen,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -47,7 +50,7 @@ const SubjectSections = ({
     onSectionClick,
     navigateToGroups,
     onViewModeChange,
-    onGroupsViewChange, // ✅ FIX: Idinagdag sa destructured props
+    onGroupsViewChange,
 }) => {
     const navigate = useNavigate();
 
@@ -78,7 +81,6 @@ const SubjectSections = ({
     // ==================== NOTIFY PARENT ====================
     useEffect(() => {
         if (onViewModeChange) onViewModeChange(viewMode);
-        // ✅ FIX: I-notify ang parent kapag nagbago ang viewMode (hide/show header)
         if (onGroupsViewChange) onGroupsViewChange(viewMode === 'groups');
     }, [viewMode, onViewModeChange, onGroupsViewChange]);
 
@@ -106,14 +108,12 @@ const SubjectSections = ({
         if (editingId === section.id) return;
         setSelectedSectionForGroups(section);
         setViewMode('groups');
-        // ✅ FIX: I-hide agad ang header kapag pumasok sa Groups
         if (onGroupsViewChange) onGroupsViewChange(true);
     };
 
     const handleBackToSections = () => {
         setViewMode('sections');
         setSelectedSectionForGroups(null);
-        // ✅ FIX: Ipakita ulit ang header kapag bumalik sa Sections
         if (onGroupsViewChange) onGroupsViewChange(false);
     };
 
@@ -165,10 +165,10 @@ const SubjectSections = ({
     };
 
     let displaySections = [];
-    if (sections && sections.length > 0) {
-        displaySections = sections;
-    } else if (sectionsData && Array.isArray(sectionsData) && sectionsData.length > 0) {
+    if (sectionsData && Array.isArray(sectionsData) && sectionsData.length > 0) {
         displaySections = mapSectionsToDisplay(sectionsData);
+    } else if (sections && sections.length > 0) {
+        displaySections = sections;
     }
 
     const filteredSections = displaySections.filter(section => {
@@ -192,7 +192,7 @@ const SubjectSections = ({
         setError('');
     };
 
-    // ==================== ADD SECTION — INSTANT setSections ====================
+    // ==================== ADD SECTION ====================
     const handleAddSection = async (e) => {
         if (e) e.preventDefault();
 
@@ -216,9 +216,25 @@ const SubjectSections = ({
 
             if (result.success) {
                 const newSection = result.data || result.section || result.newSection;
+
                 if (newSection && setSections) {
+                    const normalized = {
+                        id: newSection._id || newSection.id,
+                        title: newSection.name || newSection.title || 'Untitled Class',
+                        name: newSection.name || newSection.title,
+                        subjectId: newSection.subjectId?._id || newSection.subjectId || '',
+                        subjectName: newSection.subjectId?.title || newSection.subjectId?.name || '',
+                        createdAt: newSection.createdAt || new Date().toISOString(),
+                        updatedAt: newSection.updatedAt || new Date().toISOString(),
+                        rawData: newSection
+                    };
+
                     setSections(prev => {
                         const existing = Array.isArray(prev) ? prev : [];
+                        const alreadyExists = existing.some(
+                            s => (s._id || s.id) === normalized.id
+                        );
+                        if (alreadyExists) return existing;
                         return [newSection, ...existing];
                     });
                 } else {
@@ -240,7 +256,7 @@ const SubjectSections = ({
         }
     };
 
-    // ==================== UPDATE SECTION — INSTANT setSections ====================
+    // ==================== UPDATE SECTION ====================
     const handleEditClick = (section) => {
         setEditingId(section.id);
         setEditTitle(section.title || section.name || '');
@@ -295,7 +311,7 @@ const SubjectSections = ({
         setError('');
     };
 
-    // ==================== DELETE SECTION — INSTANT setSections ====================
+    // ==================== DELETE SECTION ====================
     const handleDeleteSection = async (id) => {
         const sectionToDelete = displaySections.find(s => s.id === id);
         const sectionName = sectionToDelete?.title || sectionToDelete?.name || 'this class';
@@ -452,29 +468,54 @@ const SubjectSections = ({
                 </div>
             )}
 
-            {/* ==================== EMPTY STATE ==================== */}
+            {/* ==================== ✅ PROFESSIONAL NO DATA EMPTY STATE ==================== */}
             {displaySections.length === 0 && !searchTerm && !loading && (
-                <div className="relative text-center py-20 px-4 border border-slate-200 rounded-2xl bg-gradient-to-br from-slate-50 to-white overflow-hidden">
-                    <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-100/40 rounded-full -mr-24 -mt-24 blur-2xl" />
-                    <div className="absolute bottom-0 left-0 w-48 h-48 bg-sky-100/40 rounded-full -ml-24 -mb-24 blur-2xl" />
-                    <div className="relative">
-                        <div className="w-16 h-16 bg-white border border-slate-200 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm">
-                            <BookOpen className="w-8 h-8 text-indigo-500" />
+                <div className="relative text-center py-20 px-6 border-2 border-dashed border-blue-200 rounded-2xl bg-gradient-to-br from-blue-50 via-white to-sky-50 overflow-hidden">
+                    {/* Decorative blur circles */}
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-blue-100/50 rounded-full -mr-32 -mt-32 blur-3xl" />
+                    <div className="absolute bottom-0 left-0 w-64 h-64 bg-sky-100/50 rounded-full -ml-32 -mb-32 blur-3xl" />
+
+                    <div className="relative flex flex-col items-center">
+                        {/* Icon */}
+                        <div className="relative mb-5">
+                            <div className="absolute inset-0 bg-blue-400 blur-xl opacity-20 rounded-full" />
+                            <div className="relative w-20 h-20 bg-white border-2 border-blue-200 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-900/10">
+                                <FolderOpen className="w-10 h-10 text-blue-400" strokeWidth={1.5} />
+                            </div>
                         </div>
-                        <h4 className="text-base font-bold text-slate-800">No classes yet</h4>
-                        <p className="text-sm text-slate-500 mt-1.5 max-w-sm mx-auto leading-relaxed">
-                            Create your first class to organize student submissions, modules, or research assignments.
+
+                        {/* Title */}
+                        <h3 className="text-xl font-bold text-blue-950 tracking-tight">
+                            No Data Available
+                        </h3>
+
+                        {/* Subtitle */}
+                        <p className="text-sm text-blue-500 mt-2 max-w-md mx-auto leading-relaxed">
+                            This subject has no classes yet. Classes organize your manuscript
+                            into structured parts like{' '}
+                            <span className="font-semibold text-blue-700">Chapter 1</span>,{' '}
+                            <span className="font-semibold text-blue-700">Methodology</span>, etc.
                         </p>
+
+                        {/* Hint pill */}
+                        <div className="mt-6 inline-flex items-center gap-2 px-4 py-2 bg-white border border-blue-200 rounded-xl shadow-sm">
+                            <Sparkles className="w-3.5 h-3.5 text-yellow-500" />
+                            <span className="text-xs font-semibold text-blue-800">
+                                Click "Create Class" to get started
+                            </span>
+                        </div>
+
+                        {/* CTA Button */}
                         <button
                             onClick={openAddModal}
                             disabled={!subjectId || isSubmitting}
-                            className={`mt-6 inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-xl transition ${
+                            className={`mt-6 inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-xl transition-all ${
                                 !subjectId || isSubmitting
                                     ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                                    : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/25'
+                                    : 'bg-gradient-to-br from-blue-900 to-blue-950 hover:from-blue-950 hover:to-black text-white shadow-lg shadow-blue-900/25 active:scale-[0.98]'
                             }`}
                         >
-                            <Plus className="w-4 h-4" />
+                            <Plus className="w-4 h-4 stroke-[3]" />
                             Create Class
                         </button>
                     </div>

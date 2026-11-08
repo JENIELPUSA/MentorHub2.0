@@ -7,7 +7,6 @@ import {
   Clock,
   TrendingUp,
   ArrowRight,
-  MessageSquare,
   MapPin,
   Video,
   Shield,
@@ -327,50 +326,6 @@ const TopicsTable = ({ activeFilter, topics = [], onAction }) => {
           )}
         </tbody>
       </table>
-    </div>
-  );
-};
-
-// ============================
-// FEEDBACK ITEM
-// ============================
-const FeedbackItem = ({
-  initials, name, role, timeAgo, message,
-  accent = 'primary', primaryAction, primaryVariant = 'primary',
-}) => {
-  const accentBg = accent === 'primary' ? 'bg-blue-900 text-white' : 'bg-amber-500 text-white';
-  return (
-    <div className="flex flex-col justify-between rounded-lg bg-blue-50 border border-blue-100 p-4">
-      <div>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className={`flex h-7 w-7 items-center justify-center rounded-full font-bold text-xs ${accentBg}`}>
-              {safeStr(initials, '?')}
-            </div>
-            <div>
-              <span className="text-xs font-bold text-blue-900 block">{safeStr(name, 'Unknown')}</span>
-              <span className="text-[10px] text-blue-500">{safeStr(role)}</span>
-            </div>
-          </div>
-          <span className="text-[10px] text-blue-400">{safeStr(timeAgo)}</span>
-        </div>
-        <p className="mt-2 text-xs text-blue-800 line-clamp-3 italic">"{safeStr(message)}"</p>
-      </div>
-      <div className="mt-2 flex items-center justify-end gap-1">
-        <button className="rounded px-2 py-0.5 text-[11px] text-blue-700 hover:bg-blue-100 font-semibold" type="button">
-          Reply
-        </button>
-        <button
-          className={`rounded px-3 py-1 text-[11px] font-semibold ${
-            primaryVariant === 'primary'
-              ? 'bg-blue-900 text-white hover:bg-blue-800'
-              : 'bg-amber-500 text-white hover:bg-amber-600'
-          }`}
-          type="button"
-        >
-          {safeStr(primaryAction, 'View')}
-        </button>
-      </div>
     </div>
   );
 };
@@ -754,7 +709,7 @@ export default function AcademixPanelistDashboard() {
       let actionLabel = 'View';
       let actionVariant = 'secondary';
       if (filterKey === 'action') {
-        actionLabel = 'Evaluate';
+        actionLabel = 'View All';
         actionVariant = 'primary';
       }
 
@@ -943,7 +898,7 @@ export default function AcademixPanelistDashboard() {
 
         {/* Two-Column Bento */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* LEFT: Topics Table + Feedback */}
+          {/* LEFT: Topics Table */}
           <div className="lg:col-span-7 flex flex-col gap-6">
             <div className="rounded-xl bg-white border border-blue-200 shadow-sm flex flex-col">
               <div className="p-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between bg-amber-50 border-b border-amber-200 rounded-t-xl">
@@ -980,43 +935,6 @@ export default function AcademixPanelistDashboard() {
                   View All Research Groups
                   <ChevronRight className="w-3.5 h-3.5" />
                 </button>
-              </div>
-            </div>
-
-            {/* Feedback Widget */}
-            <div className="rounded-xl bg-white border border-blue-200 p-5 shadow-sm">
-              <div className="flex items-center justify-between pb-3">
-                <div className="flex items-center gap-2">
-                  <MessageSquare className="w-5 h-5 text-amber-600" />
-                  <h3 className="text-base font-bold text-blue-900">
-                    Recent Feedback &amp; Discussion
-                  </h3>
-                </div>
-                <button type="button" className="text-[11px] text-blue-800 font-bold hover:underline">
-                  Open Feedback Drawer
-                </button>
-              </div>
-              <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-                <FeedbackItem
-                  initials="JB"
-                  name="Dr. Jonathan Bell"
-                  role="Adviser • RG-2024-03"
-                  timeAgo="1h ago"
-                  message="The group incorporated your methodology remarks regarding sample size augmentation. Updated Chapter 3 document re-submitted for your sign-off."
-                  accent="primary"
-                  primaryAction="Review Revisions"
-                  primaryVariant="primary"
-                />
-                <FeedbackItem
-                  initials="ER"
-                  name="Prof. Elena Rostova"
-                  role="Lead Adviser • RG-2024-01"
-                  timeAgo="Yesterday"
-                  message="Defense slide deck uploaded for tomorrow's 9:00 AM session. Let us know if you require any specialized physical demo equipment prepared in Room 402."
-                  accent="secondary"
-                  primaryAction="View Defense Pack"
-                  primaryVariant="secondary"
-                />
               </div>
             </div>
           </div>

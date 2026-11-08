@@ -1,9 +1,10 @@
-const mongoose = require("mongoose"); // ✅ FIXED: missing import
+const mongoose = require("mongoose");
 const AsyncErrorHandler = require("../Utils/AsyncErrorHandler");
 const DefenseAssignmentModel = require("../Models/Schedule");
 const GroupModel = require("../Models/GroupName");
 const UserModel = require("../Models/LogInSchema");
 const ProposedTitle = require("../Models/ProposedTitle")
+const NotificationSchema = require("../Models/NotificationSchema")
 
 // ============================================================
 // HELPERS
@@ -70,7 +71,23 @@ const conflictPayload = (conflict) => ({
 });
 
 exports.createDefenseAssignment = AsyncErrorHandler(async (req, res, next) => {
-    const { date, location, startTime, endTime, groupIds, panelistIds } = req.body;
+    const {
+        date,
+        location,
+        startTime,
+        endTime,
+        groupIds,
+        panelistIds,
+        activityType,
+    } = req.body;
+
+    // ---- Allowed activity types (must match schema enum) ----
+    const ALLOWED_ACTIVITY_TYPES = [
+        'Pre-Oral Defense',
+        'Final Defense',
+        'Revision Review',
+        'Mentoring Session',
+    ];
 
     // ---- Validate required fields ----
     if (!date) {
@@ -110,6 +127,20 @@ exports.createDefenseAssignment = AsyncErrorHandler(async (req, res, next) => {
             .json({ success: false, message: "At least one panelist is required" });
     }
 
+    // ---- Validate activityType ----
+    if (!activityType || typeof activityType !== 'string' || activityType.trim().length === 0) {
+        return res
+            .status(400)
+            .json({ success: false, message: "Activity type is required" });
+    }
+    const normalizedActivityType = activityType.trim();
+    if (!ALLOWED_ACTIVITY_TYPES.includes(normalizedActivityType)) {
+        return res.status(400).json({
+            success: false,
+            message: `Invalid activity type. Allowed values: ${ALLOWED_ACTIVITY_TYPES.join(', ')}`,
+        });
+    }
+
     // ---- Auth check (createdBy is required in schema) ----
     if (!req.user?._id) {
         return res.status(401).json({ success: false, message: "Unauthorized" });
@@ -128,16 +159,17 @@ exports.createDefenseAssignment = AsyncErrorHandler(async (req, res, next) => {
     }
 
     // ---- Check existence ----
-    const existingGroups = await GroupModel.find({ _id: { $in: groupIds } }).select("_id");
+    const existingGroups = await GroupModel.find({ _id: { $in: groupIds } })
+        .select("_id name referralCode");
     if (existingGroups.length !== groupIds.length) {
         return res
             .status(404)
             .json({ success: false, message: "One or more groups not found" });
     }
 
-    const existingPanelists = await UserModel.find({ _id: { $in: panelistIds } }).select(
-        "_id role"
-    );
+    // ✅ UserModel (LogInSchema) — parehong schema, standard name
+    const existingPanelists = await UserModel.find({ _id: { $in: panelistIds } })
+        .select("_id role");
     if (existingPanelists.length !== panelistIds.length) {
         return res
             .status(404)
@@ -169,10 +201,179 @@ exports.createDefenseAssignment = AsyncErrorHandler(async (req, res, next) => {
         timeRange: { start: startTime, end: endTime },
         groupIds,
         panelistIds,
+        activityType: normalizedActivityType,
         createdBy: req.user._id,
     });
 
     await assignment.populate(ASSIGNMENT_POPULATE);
+
+    // =========================================================
+    // ✅ NOTIFY — SPECIFIC RECIPIENTS ONLY
+    //    - panelistIds (via UserModel)
+    //    - students via UserModel (role: "student", referredBy = group.referralCode)
+    // =========================================================
+    try {
+        const io = req.app.get("io");
+
+        // -------------------------------------------------------
+        // 1) COLLECT RECIPIENTS — Panelists + Students
+        // -------------------------------------------------------
+        const recipientIds = new Set();
+
+        // (a) PANELISTS — specific IDs lang
+        panelistIds.forEach((id) => {
+            const strId = String(id);
+            if (mongoose.Types.ObjectId.isValid(strId)) {
+                recipientIds.add(strId);
+            } else {
+                console.warn(`⚠️  Invalid panelist ID skipped: ${strId}`);
+            }
+        });
+        console.log("────────────────────────────────────────");
+        console.log(`🧑‍⚖️ Panelists added: ${panelistIds.length}`);
+        console.log(`🧑‍⚖️ Recipient set after panelists: ${recipientIds.size}`);
+        console.log(`🧑‍⚖️ Current recipient IDs:`, [...recipientIds]);
+
+        // (b) STUDENTS — via referralCode ng bawat group
+        const referralCodes = existingGroups
+            .map((g) => (g.referralCode || "").trim())
+            .filter((code) => code !== "");
+
+        console.log("🔍 [DEBUG] referralCodes (trimmed):", referralCodes);
+
+        if (referralCodes.length > 0) {
+            const codeRegexes = referralCodes.map(
+                (code) => new RegExp(`^\\s*${code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, "i")
+            );
+
+            // ✅ UserModel (LogInSchema)
+            const students = await UserModel.find({
+                referredBy: { $in: codeRegexes },
+                role: "student",
+                status: { $regex: /^active$/i },
+            }).select("_id username first_name last_name referredBy");
+
+            console.log(`🎓 Students matched: ${students.length}`);
+            students.forEach((u, i) => {
+                console.log(
+                    `   ${i + 1}. ${u._id} | ${u.username} | ${u.first_name} ${u.last_name} | referredBy="${u.referredBy}"`
+                );
+                recipientIds.add(String(u._id));
+            });
+        } else {
+            console.log("⚠️  Walang referralCode sa groups — walang students");
+        }
+        // -------------------------------------------------------
+        // 2) INSERT + EMIT (per specific user)
+        // -------------------------------------------------------
+        if (recipientIds.size > 0) {
+            const notifTitle = "New Defense Assignment";
+            const notifMessage = `${normalizedActivityType} scheduled on ${date} (${startTime} - ${endTime}) at ${location.trim()}.`;
+            const notifType = "DefenseAssignmentCreated";
+            const notifPriority = "High";
+            const notifActionUrl = `/defense-assignments/${assignment._id}`;
+
+            const notifications = [...recipientIds].map((rid) => ({
+                groupId: groupIds[0] || null,
+                recipient: [new mongoose.Types.ObjectId(rid)],
+                uploadedBy: [req.user._id],
+                type: notifType,
+                title: notifTitle,
+                message: notifMessage,
+                referenceId: assignment._id,
+                referenceModel: "DefenseAssignment",
+                actionUrl: notifActionUrl,
+                priority: notifPriority,
+                metadata: {
+                    assignmentId: assignment._id,
+                    groupIds,
+                    panelistIds,
+                    date,
+                    startTime,
+                    endTime,
+                    location: location.trim(),
+                    activityType: normalizedActivityType,
+                    createdBy: req.user._id,
+                },
+                isRead: false,
+            }));
+
+            console.log("🔍 [DEBUG] Notifications to insert:", notifications.length);
+
+            let saved;
+            try {
+                saved = await NotificationSchema.insertMany(notifications);
+                console.log(`✅ [NOTIFY] Inserted ${saved.length} notifications`);
+                console.log("🔍 [DEBUG] Saved recipients:");
+                saved.forEach((n, i) => {
+                    console.log(
+                        `   ${i + 1}. _id=${n._id} | recipient=${JSON.stringify(n.recipient)} | type=${n.type}`
+                    );
+                });
+            } catch (insertErr) {
+                console.error("❌ [NOTIFY] insertMany error:", insertErr.message);
+                console.error("❌ [NOTIFY] Full error:", insertErr);
+                console.error(
+                    "❌ [NOTIFY] Failed notifications:",
+                    JSON.stringify(notifications, null, 2)
+                );
+                saved = [];
+            }
+
+            // -----------------------------------------------------
+            // SOCKET — specific user room lang
+            // -----------------------------------------------------
+            try {
+                if (io && saved.length > 0) {
+                    saved.forEach((notif) => {
+                        const targetRoom = `user:${notif.recipient[0]}`;
+                        io.to(targetRoom).emit("notification:new", {
+                            data: notif,
+                            title: notifTitle,
+                            message: notifMessage,
+                            type: notifType,
+                            priority: notifPriority,
+                            actionUrl: notifActionUrl,
+                            referenceId: assignment._id,
+                            referenceModel: "DefenseAssignment",
+                            assignmentId: assignment._id,
+                            groupIds,
+                            panelistIds,
+                            date,
+                            startTime,
+                            endTime,
+                            location: location.trim(),
+                            activityType: normalizedActivityType,
+                            createdBy: {
+                                userId: req.user?._id,
+                                role: req.user?.role,
+                                username: req.user?.username,
+                            },
+                            timestamp: new Date(),
+                        });
+                        console.log(
+                            `📡 [SOCKET] Emitted → ${targetRoom} | "${notifMessage}"`
+                        );
+                    });
+                } else if (!io) {
+                    console.warn("⚠️  Walang io instance — skip socket emit");
+                } else {
+                    console.warn("⚠️  Walang saved notifications — skip socket emit");
+                }
+            } catch (socketErr) {
+                console.error(
+                    "[SOCKET] defense assignment emit error:",
+                    socketErr.message
+                );
+            }
+        } else {
+            console.log("⚠️  Walang recipients — walang notification na na-save");
+        }
+
+        console.log("════════════════════════════════════════\n");
+    } catch (notifyErr) {
+        console.error("[NOTIFY] createDefenseAssignment error:", notifyErr);
+    }
 
     return res.status(201).json({
         status: "Success",
@@ -180,7 +381,6 @@ exports.createDefenseAssignment = AsyncErrorHandler(async (req, res, next) => {
         data: assignment,
     });
 });
-
 
 exports.getAllDefenseAssignments = AsyncErrorHandler(async (req, res, next) => {
     const userId = req.user._id;
@@ -677,8 +877,6 @@ exports.getAllDefenseAssignments = AsyncErrorHandler(async (req, res, next) => {
     const data = payload.data || [];
     const totalCount = payload.totalCount || 0;
     const totalPages = Math.ceil(totalCount / limitNum) || 1;
-
-    console.log("assignments", JSON.stringify(data, null, 2));
 
     return res.status(200).json({
         status: "Success",

@@ -5,6 +5,9 @@ const UserLoginSchema = require("../Models/LogInSchema")
 
 const ProposedTitle = require("../Models/ProposedTitle");
 
+const NotificationSchema = require("../Models/NotificationSchema");
+
+
 
 const Group = require("../Models/GroupName");
 
@@ -384,10 +387,6 @@ exports.getSingleGroup = AsyncErrorHandler(async (req, res) => {
             updatedAt: user.updatedAt
         }));
 
-        console.log("formattedUsers", formattedUsers);
-        console.log("proposedTitles count:", proposedTitles.length);
-        console.log("proposedTitles:", proposedTitles);
-
         // ==========================================
         // 7. RESPONSE
         // ==========================================
@@ -601,6 +600,8 @@ exports.getgroupdetails = AsyncErrorHandler(async (req, res) => {
     });
 });
 
+
+
 // ==========================================
 // UPDATE GROUP
 // ==========================================
@@ -734,198 +735,628 @@ exports.updateGroup = AsyncErrorHandler(async (req, res) => {
 
 
 exports.Approved_and_Reject = AsyncErrorHandler(async (req, res) => {
-    try {
-        const { referralCode } = req.params;
-        const { status } = req.body;
-        const userId = req.user?._id;
+  try {
+    const { referralCode } = req.params;
+    const { status } = req.body;
+    const userId = req.user?._id;
 
-        // Validate userId
-        if (!userId) {
-            return res.status(400).json({
-                status: "fail",
-                message: "userId is required.",
-            });
-        }
-
-        // Validate status
-        if (!status) {
-            return res.status(400).json({
-                status: "fail",
-                message: "Status is required.",
-            });
-        }
-
-        if (!["confirm", "rejected"].includes(status)) {
-            return res.status(400).json({
-                status: "fail",
-                message: "Status must be either confirm or rejected.",
-            });
-        }
-
-        // Validate referralCode
-        if (!referralCode || !referralCode.trim()) {
-            return res.status(400).json({
-                status: "fail",
-                message: "Referral code is required.",
-            });
-        }
-
-        // Find group
-        const existingGroup = await GroupModel.findOne({
-            referralCode: referralCode.toUpperCase().trim(),
-        });
-
-        if (!existingGroup) {
-            return res.status(404).json({
-                status: "fail",
-                message: "Group not found.",
-            });
-        }
-
-        // Adviser
-        if (
-            existingGroup.adviserId &&
-            existingGroup.adviserId.toString() === userId.toString()
-        ) {
-            existingGroup.adviserStatus = status;
-
-            await existingGroup.save();
-
-            return res.status(200).json({
-                status: "success",
-                message: `Adviser status successfully updated to ${status}.`,
-                data: {
-                    groupId: existingGroup._id,
-                    referralCode: existingGroup.referralCode,
-                    userId,
-                    role: "adviser",
-                    adviserStatus: existingGroup.adviserStatus,
-                    coadviserStatus: existingGroup.coadviserStatus,
-                },
-            });
-        }
-
-        // Co-adviser
-        if (
-            existingGroup.coadviserId &&
-            existingGroup.coadviserId.toString() === userId.toString()
-        ) {
-            existingGroup.coadviserStatus = status;
-
-            await existingGroup.save();
-
-            return res.status(200).json({
-                status: "success",
-                message: `Co-adviser status successfully updated to ${status}.`,
-                data: {
-                    groupId: existingGroup._id,
-                    referralCode: existingGroup.referralCode,
-                    userId,
-                    role: "co-adviser",
-                    adviserStatus: existingGroup.adviserStatus,
-                    coadviserStatus: existingGroup.coadviserStatus,
-                },
-            });
-        }
-
-        // User is neither adviser nor co-adviser
-        return res.status(403).json({
-            status: "fail",
-            message:
-                "The provided userId is not the adviser or co-adviser of this group.",
-        });
-    } catch (error) {
-        console.error("Error in Approved_and_Reject:", error);
-
-        return res.status(500).json({
-            status: "error",
-            message: "An error occurred while updating the group status.",
-            error: error.message,
-        });
+    // =========================================================
+    // VALIDATIONS
+    // =========================================================
+    if (!userId) {
+      return res.status(400).json({
+        status: "fail",
+        message: "userId is required.",
+      });
     }
+
+    if (!status) {
+      return res.status(400).json({
+        status: "fail",
+        message: "Status is required.",
+      });
+    }
+
+    if (!["confirm", "rejected"].includes(status)) {
+      return res.status(400).json({
+        status: "fail",
+        message: "Status must be either confirm or rejected.",
+      });
+    }
+
+    if (!referralCode || !referralCode.trim()) {
+      return res.status(400).json({
+        status: "fail",
+        message: "Referral code is required.",
+      });
+    }
+
+    // =========================================================
+    // FIND GROUP
+    // =========================================================
+    const existingGroup = await GroupModel.findOne({
+      referralCode: referralCode.toUpperCase().trim(),
+    });
+
+    if (!existingGroup) {
+      return res.status(404).json({
+        status: "fail",
+        message: "Group not found.",
+      });
+    }
+
+    // =========================================================
+    // DETERMINE ACTOR + UPDATE STATUS
+    // =========================================================
+    let actorRole = null;
+
+    if (
+      existingGroup.adviserId &&
+      existingGroup.adviserId.toString() === userId.toString()
+    ) {
+      existingGroup.adviserStatus = status;
+      actorRole = "adviser";
+    } else if (
+      existingGroup.coadviserId &&
+      existingGroup.coadviserId.toString() === userId.toString()
+    ) {
+      existingGroup.coadviserStatus = status;
+      actorRole = "co-adviser";
+    } else {
+      return res.status(403).json({
+        status: "fail",
+        message:
+          "The provided userId is not the adviser or co-adviser of this group.",
+      });
+    }
+
+    await existingGroup.save();
+
+    // =========================================================
+    // ✅ NOTIFY — SAME LOGIC AS createProposedTitle
+    //    Recipients: role === "subject_instructor" + role === "student"
+    //    via UserLoginSchema (referredBy = group.referralCode)
+    // =========================================================
+    try {
+      const io = req.app.get("io");
+
+      console.log("════════════════════════════════════════");
+      console.log("📬 [NOTIFY] APPROVED/REJECT DEBUG");
+      console.log("────────────────────────────────────────");
+      console.log("🆔 groupId:", existingGroup._id);
+      console.log("📛 groupName:", existingGroup.name || "(not found)");
+      console.log("🔑 referralCode:", existingGroup.referralCode);
+      console.log("🎭 actorRole:", actorRole);
+      console.log("📊 status:", status);
+
+      const referralCodeValue = existingGroup.referralCode || null;
+
+      // -------------------------------------------------------
+      // 1) COLLECT RECIPIENTS — Student + Subject Instructor ONLY
+      // -------------------------------------------------------
+      const recipientIds = new Set();
+
+      if (referralCodeValue) {
+        // (a) subject_instructor(s) attached sa referralCode
+        const subjectInstructors = await UserLoginSchema.find({
+          referredBy: referralCodeValue,
+          role: "subject_instructor",
+          status: "Active",
+        }).select("_id username first_name last_name");
+
+        console.log("────────────────────────────────────────");
+        console.log(
+          `👨‍🏫 Subject Instructors matched: ${subjectInstructors.length}`
+        );
+        subjectInstructors.forEach((u, i) => {
+          console.log(
+            `   ${i + 1}. ${u._id} | ${u.username} | ${u.first_name} ${u.last_name}`
+          );
+          recipientIds.add(u._id.toString());
+        });
+
+        // (b) student(s) attached sa referralCode
+        const students = await UserLoginSchema.find({
+          referredBy: referralCodeValue,
+          role: "student",
+          status: "Active",
+        }).select("_id username first_name last_name");
+
+        console.log("────────────────────────────────────────");
+        console.log(`🎓 Students matched: ${students.length}`);
+        students.forEach((u, i) => {
+          console.log(
+            `   ${i + 1}. ${u._id} | ${u.username} | ${u.first_name} ${u.last_name}`
+          );
+          recipientIds.add(u._id.toString());
+        });
+      } else {
+        console.log("⚠️  Walang referralCode — walang recipients");
+      }
+
+      console.log("────────────────────────────────────────");
+      console.log(`🎯 TOTAL SPECIFIC RECIPIENTS: ${recipientIds.size}`);
+      console.log("📋 Final IDs:", [...recipientIds]);
+
+      // -------------------------------------------------------
+      // 2) INSERT + EMIT (per specific user)
+      // -------------------------------------------------------
+      if (recipientIds.size > 0) {
+        const isConfirm = status === "confirm";
+
+        const notifTitle = isConfirm
+          ? "Group Adviser Confirmed"
+          : "Group Adviser Rejected";
+
+        const notifMessage = isConfirm
+          ? `${actorRole === "adviser" ? "Adviser" : "Co-adviser"} confirmed for group "${existingGroup.name || existingGroup.referralCode}".`
+          : `${actorRole === "adviser" ? "Adviser" : "Co-adviser"} rejected for group "${existingGroup.name || existingGroup.referralCode}".`;
+
+        const notifType = isConfirm ? "GroupConfirmed" : "GroupRejected";
+        const notifPriority = isConfirm ? "Normal" : "High";
+        const notifActionUrl = `/groups/${existingGroup._id}`;
+
+        const notifications = [...recipientIds].map((rid) => ({
+          groupId: existingGroup._id,
+          recipient: [rid],
+          uploadedBy: [userId],
+          type: notifType,
+          title: notifTitle,        // ✅ pareho sa socket
+          message: notifMessage,    // ✅ pareho sa socket
+          referenceId: existingGroup._id,
+          referenceModel: "Group",
+          actionUrl: notifActionUrl,
+          priority: notifPriority,
+          metadata: {
+            groupId: existingGroup._id,
+            referralCode: existingGroup.referralCode,
+            actorRole,
+            actorId: userId,
+            status, // "confirm" | "rejected"
+          },
+          isRead: false,
+        }));
+
+        const saved = await NotificationSchema.insertMany(notifications);
+        console.log(`✅ [NOTIFY] Inserted ${saved.length} notifications`);
+
+        // -----------------------------------------------------
+        // SOCKET — parehong message, specific user room
+        // -----------------------------------------------------
+        try {
+          if (io) {
+            saved.forEach((notif) => {
+              const targetRoom = `user:${notif.recipient[0]}`;
+              io.to(targetRoom).emit("notification:new", {
+                data: notif,
+                // ✅ Pareho sa DB
+                title: notifTitle,
+                message: notifMessage,
+                type: notifType,
+                priority: notifPriority,
+                actionUrl: notifActionUrl,
+                referenceId: existingGroup._id,
+                referenceModel: "Group",
+                // Extra context
+                groupId: existingGroup._id,
+                referralCode: existingGroup.referralCode,
+                actorRole,
+                status,
+                createdBy: {
+                  userId: req.user?._id,
+                  role: req.user?.role,
+                  username: req.user?.username,
+                },
+                timestamp: new Date(),
+              });
+              console.log(
+                `📡 [SOCKET] Emitted → ${targetRoom} | "${notifMessage}"`
+              );
+            });
+          } else {
+            console.warn("⚠️  Walang io instance — skip socket emit");
+          }
+        } catch (socketErr) {
+          console.error(
+            "[SOCKET] Approved_and_Reject emit error:",
+            socketErr.message
+          );
+        }
+      } else {
+        console.log("⚠️  Walang recipients — walang notification na na-save");
+      }
+
+      console.log("════════════════════════════════════════\n");
+    } catch (notifyErr) {
+      console.error("[NOTIFY] Approved_and_Reject error:", notifyErr);
+    }
+
+    // =========================================================
+    // RESPONSE
+    // =========================================================
+    return res.status(200).json({
+      status: "success",
+      message: `${
+        actorRole === "adviser" ? "Adviser" : "Co-adviser"
+      } status successfully updated to ${status}.`,
+      data: {
+        groupId: existingGroup._id,
+        referralCode: existingGroup.referralCode,
+        userId,
+        role: actorRole,
+        adviserStatus: existingGroup.adviserStatus,
+        coadviserStatus: existingGroup.coadviserStatus,
+      },
+    });
+  } catch (error) {
+    console.error("Error in Approved_and_Reject:", error);
+
+    return res.status(500).json({
+      status: "error",
+      message: "An error occurred while updating the group status.",
+      error: error.message,
+    });
+  }
 });
 
+
 exports.AssignAdviserandCoAdviser = AsyncErrorHandler(async (req, res) => {
+    const requestId = `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const { adviserId, coadviserId } = req.body;
     const groupId = req.params.id;
 
-    console.log("🔍 [AssignAdviserandCoAdviser] Triggered!");
-    console.log("📌 groupId from params:", groupId);
-    console.log("📌 adviserId from body:", adviserId);
-    console.log("📌 coadviserId from body:", coadviserId);
+    console.log(`\n🚀 [${requestId}] AssignAdviserandCoAdviser START`);
+    console.log(`📥 [${requestId}] Body:`, { adviserId, coadviserId, groupId });
 
-    // ✅ Check if groupId is provided
+    // ==========================================
+    // 1. VALIDATE groupId
+    // ==========================================
     if (!groupId) {
-        console.log("❌ groupId is missing!");
+        console.log(`❌ [${requestId}] groupId is missing!`);
         return res.status(400).json({
             status: "fail",
             message: "Group ID is required",
         });
     }
 
-    // ✅ Find the group first
+    // ==========================================
+    // 2. BLOCK: same user as adviser & co-adviser
+    // ==========================================
+    if (
+        adviserId && coadviserId &&
+        adviserId !== 'null' && coadviserId !== 'null' &&
+        adviserId.toString() === coadviserId.toString()
+    ) {
+        console.log(`❌ [${requestId}] Same user cannot be both Adviser and Co-Adviser`);
+        return res.status(400).json({
+            status: "fail",
+            message: "The same user cannot be both Adviser and Co-Adviser.",
+        });
+    }
+
+    // ==========================================
+    // 3. FIND GROUP
+    // ==========================================
     const group = await GroupModel.findById(groupId);
     if (!group) {
-        console.log(`❌ Group not found with ID: ${groupId}`);
+        console.log(`❌ [${requestId}] Group not found: ${groupId}`);
         return res.status(404).json({
             status: "fail",
             message: "Group not found",
         });
     }
 
-    console.log(`✅ Group found: ${group.name} (${group._id})`);
+    // ==========================================
+    // 4. TRACK CHANGES
+    // ==========================================
+    const previousAdviserId = group.adviserId ? group.adviserId.toString() : null;
+    const previousCoAdviserId = group.coadviserId ? group.coadviserId.toString() : null;
 
-    // ✅ Validate adviserId if provided (only check if user exists)
+    let adviserAssigned = null;
+    let coAdviserAssigned = null;
+    let adviserRemoved = false;
+    let coAdviserRemoved = false;
+
+    // ==========================================
+    // 5. VALIDATE & SET ADVISER
+    // ==========================================
     if (adviserId) {
-        console.log(`🔍 Checking adviser: ${adviserId}`);
+        console.log(`🔍 [${requestId}] Checking adviser: ${adviserId}`);
         const adviserExists = await UserLoginSchema.findById(adviserId);
         if (!adviserExists) {
-            console.log(`❌ Adviser not found: ${adviserId}`);
+            console.log(`❌ [${requestId}] Adviser not found: ${adviserId}`);
             return res.status(404).json({
                 status: "fail",
                 message: "Adviser not found",
             });
         }
-        console.log(`✅ Adviser exists: ${adviserExists.first_name} ${adviserExists.last_name}`);
+        console.log(`✅ [${requestId}] Adviser exists: ${adviserExists.first_name} ${adviserExists.last_name}`);
 
-        // Set the adviserId
         group.adviserId = adviserId;
+        adviserAssigned = adviserExists;
+
     } else if (adviserId === null || adviserId === 'null') {
-        // Remove adviser if null is passed
         group.adviserId = null;
+        adviserRemoved = !!previousAdviserId;
     }
 
-    // ✅ Validate coadviserId if provided (only check if user exists)
+    // ==========================================
+    // 6. VALIDATE & SET CO-ADVISER
+    // ==========================================
     if (coadviserId) {
-        console.log(`🔍 Checking co-adviser: ${coadviserId}`);
+        console.log(`🔍 [${requestId}] Checking co-adviser: ${coadviserId}`);
         const coadviserExists = await UserLoginSchema.findById(coadviserId);
         if (!coadviserExists) {
-            console.log(`❌ Co-adviser not found: ${coadviserId}`);
+            console.log(`❌ [${requestId}] Co-adviser not found: ${coadviserId}`);
             return res.status(404).json({
                 status: "fail",
                 message: "Co-adviser not found",
             });
         }
-        console.log(`✅ Co-adviser exists: ${coadviserExists.first_name} ${coadviserExists.last_name}`);
+        console.log(`✅ [${requestId}] Co-adviser exists: ${coadviserExists.first_name} ${coadviserExists.last_name}`);
 
-        // Set the coadviserId
         group.coadviserId = coadviserId;
+        coAdviserAssigned = coadviserExists;
+
     } else if (coadviserId === null || coadviserId === 'null') {
-        // Remove co-adviser if null is passed
         group.coadviserId = null;
+        coAdviserRemoved = !!previousCoAdviserId;
     }
 
-    console.log("📝 Updated group data:", {
+    console.log(`📝 [${requestId}] Updated group data:`, {
         adviserId: group.adviserId,
-        coadviserId: group.coadviserId
+        coadviserId: group.coadviserId,
     });
 
-    // ✅ Save the group (this will trigger pre('save') middleware)
+    // ==========================================
+    // 7. SAVE GROUP
+    // ==========================================
     await group.save();
+    console.log(`✅ [${requestId}] Group updated successfully: ${group.name}`);
 
-    console.log(`✅ Group updated successfully: ${group.name}`);
+    // ==========================================
+    // 8. BUILD NOTIFICATIONS
+    // ==========================================
+    const notificationsToCreate = [];
+    const uploaderId = req.user?._id || req.userId;
+    const uploaderIdStr = uploaderId ? uploaderId.toString() : null;
+    const groupName = group.name || "the group";
 
-    // ✅ Populate the updated group with adviser and co-adviser details
+    if (!uploaderId) {
+        console.warn(`⚠️ [${requestId}] uploaderId is missing — notifications may fail validation.`);
+    }
+
+    // 🔥 HELPER: check kung subject_instructor ang role ng isang user doc
+    const isSubjectInstructor = (userDoc) => {
+        if (!userDoc) return false;
+        const role = (userDoc.role || "").toString().trim().toLowerCase();
+        return role === "subject_instructor" || role === "subject instructor";
+    };
+
+    // 🔥 HELPER: fetch role ng isang user by ID (para sa previous adviser/co-adviser)
+    const getRoleById = async (userId) => {
+        try {
+            const user = await UserLoginSchema.findById(userId).select("role");
+            return user?.role || null;
+        } catch (e) {
+            console.warn(`⚠️ [${requestId}] Could not fetch role for ${userId}:`, e.message);
+            return null;
+        }
+    };
+
+    // 🔥 HELPER: check kung subject_instructor ang role string
+    const isSubjectInstructorRole = (roleStr) => {
+        const role = (roleStr || "").toString().trim().toLowerCase();
+        return role === "subject_instructor" || role === "subject instructor";
+    };
+
+    // --- Bagong Adviser na na-assign ---
+    if (adviserAssigned) {
+        if (isSubjectInstructor(adviserAssigned)) {
+            console.log(`ℹ️ [${requestId}] Skipping adviser notification — user is subject_instructor.`);
+        } else {
+            const isReassignment =
+                previousAdviserId && previousAdviserId !== adviserAssigned._id.toString();
+
+            notificationsToCreate.push({
+                groupId: group._id,
+                recipient: [adviserAssigned._id],  // ✅ SPECIFIC ADVISER LANG
+                uploadedBy: [uploaderId],
+                type: isReassignment ? "Reminder" : "Information",
+                title: isReassignment
+                    ? "You have been reassigned as Adviser"
+                    : "You have been assigned as Adviser",
+                message: `You are now the ${isReassignment ? "new " : ""}adviser of "${groupName}".`,
+                referenceId: group._id,
+                referenceModel: "Group",
+                actionUrl: `/groups/${group._id}`,
+                priority: "High",
+                metadata: {
+                    role: "Adviser",
+                    previousAdviserId: previousAdviserId || null,
+                    groupName,
+                    requestId,
+                },
+            });
+        }
+    }
+
+    // --- Bagong Co-Adviser na na-assign ---
+    if (coAdviserAssigned) {
+        if (isSubjectInstructor(coAdviserAssigned)) {
+            console.log(`ℹ️ [${requestId}] Skipping co-adviser notification — user is subject_instructor.`);
+        } else {
+            const isReassignment =
+                previousCoAdviserId && previousCoAdviserId !== coAdviserAssigned._id.toString();
+
+            notificationsToCreate.push({
+                groupId: group._id,
+                recipient: [coAdviserAssigned._id],  // ✅ SPECIFIC CO-ADVISER LANG
+                uploadedBy: [uploaderId],
+                type: isReassignment ? "Reminder" : "Information",
+                title: isReassignment
+                    ? "You have been reassigned as Co-Adviser"
+                    : "You have been assigned as Co-Adviser",
+                message: `You are now the ${isReassignment ? "new " : ""}co-adviser of "${groupName}".`,
+                referenceId: group._id,
+                referenceModel: "Group",
+                actionUrl: `/groups/${group._id}`,
+                priority: "High",
+                metadata: {
+                    role: "Co-Adviser",
+                    previousCoAdviserId: previousCoAdviserId || null,
+                    groupName,
+                    requestId,
+                },
+            });
+        }
+    }
+
+    // --- Previous Adviser removed/replaced ---
+    if (
+        previousAdviserId &&
+        previousAdviserId !== (adviserAssigned?._id?.toString() || null)
+    ) {
+        const prevAdviserRole = await getRoleById(previousAdviserId);
+
+        if (isSubjectInstructorRole(prevAdviserRole)) {
+            console.log(`ℹ️ [${requestId}] Skipping removal notif — previous adviser is subject_instructor (${previousAdviserId}).`);
+        } else {
+            notificationsToCreate.push({
+                groupId: group._id,
+                recipient: [previousAdviserId],  // ✅ SPECIFIC PREVIOUS ADVISER LANG
+                uploadedBy: [uploaderId],
+                type: "Reminder",
+                title: adviserRemoved
+                    ? "You have been removed as Adviser"
+                    : "You have been replaced as Adviser",
+                message: adviserRemoved
+                    ? `You are no longer the adviser of "${groupName}".`
+                    : `Another adviser has been assigned to "${groupName}".`,
+                referenceId: group._id,
+                referenceModel: "Group",
+                actionUrl: `/groups/${group._id}`,
+                priority: "Normal",
+                metadata: { role: "Adviser", action: "removed", groupName, requestId },
+            });
+        }
+    }
+
+    // --- Previous Co-Adviser removed/replaced ---
+    if (
+        previousCoAdviserId &&
+        previousCoAdviserId !== (coAdviserAssigned?._id?.toString() || null)
+    ) {
+        const prevCoAdviserRole = await getRoleById(previousCoAdviserId);
+
+        if (isSubjectInstructorRole(prevCoAdviserRole)) {
+            console.log(`ℹ️ [${requestId}] Skipping removal notif — previous co-adviser is subject_instructor (${previousCoAdviserId}).`);
+        } else {
+            notificationsToCreate.push({
+                groupId: group._id,
+                recipient: [previousCoAdviserId],  // ✅ SPECIFIC PREVIOUS CO-ADVISER LANG
+                uploadedBy: [uploaderId],
+                type: "Reminder",
+                title: coAdviserRemoved
+                    ? "You have been removed as Co-Adviser"
+                    : "You have been replaced as Co-Adviser",
+                message: coAdviserRemoved
+                    ? `You are no longer the co-adviser of "${groupName}".`
+                    : `Another co-adviser has been assigned to "${groupName}".`,
+                referenceId: group._id,
+                referenceModel: "Group",
+                actionUrl: `/groups/${group._id}`,
+                priority: "Normal",
+                metadata: { role: "Co-Adviser", action: "removed", groupName, requestId },
+            });
+        }
+    }
+
+    // ==========================================
+    // 9. DEDUPE
+    // ==========================================
+    const seen = new Set();
+    const dedupedNotifications = notificationsToCreate.filter((n) => {
+        const key = `${n.recipient[0]}-${n.title}-${n.referenceId}`;
+        if (seen.has(key)) {
+            console.log(`⚠️ [${requestId}] Duplicate notification skipped: ${key}`);
+            return false;
+        }
+        seen.add(key);
+        return true;
+    });
+
+    // ==========================================
+    // 9.5 SELF-NOTIFICATION FILTER
+    // ==========================================
+    const finalNotifications = dedupedNotifications.filter((n) => {
+        const recipientIdStr = n.recipient?.[0]?.toString();
+        if (recipientIdStr && uploaderIdStr && recipientIdStr === uploaderIdStr) {
+            console.log(`ℹ️ [${requestId}] Skipping self-notification to uploader: ${recipientIdStr} (title="${n.title}")`);
+            return false;
+        }
+        return true;
+    });
+
+    console.log(`🔔 [${requestId}] Notifications to create: ${finalNotifications.length} (after dedupe+self-filter)`);
+    finalNotifications.forEach((n, i) => {
+        console.log(`   [${i}] recipient=${n.recipient[0]} type=${n.type} title="${n.title}"`);
+    });
+
+    // ==========================================
+    // 10. INSERT NOTIFICATIONS + SOCKET.IO EMIT
+    // ==========================================
+    if (finalNotifications.length > 0) {
+        try {
+            const inserted = await NotificationSchema.insertMany(finalNotifications);
+            console.log(`✅ [${requestId}] Inserted ${inserted.length} notification(s).`);
+
+            // 🔥 SOCKET.IO — specific recipient lang, walang broadcast
+            try {
+                const io = req.app.get("io");
+
+                if (io) {
+                    inserted.forEach((notif) => {
+                        const targetRoom = `user:${notif.recipient[0]}`;
+                        io.to(targetRoom).emit("notification:new", {
+                            data: notif,
+                            // ✅ Top-level — pareho sa DB
+                            title: notif.title,
+                            message: notif.message,
+                            type: notif.type,
+                            priority: notif.priority,
+                            actionUrl: notif.actionUrl,
+                            referenceId: notif.referenceId,
+                            referenceModel: notif.referenceModel,
+                            // Extra context
+                            groupId: notif.groupId,
+                            createdBy: {
+                                userId: req.user?._id,
+                                role: req.user?.role,
+                                username: req.user?.username,
+                            },
+                            timestamp: new Date(),
+                        });
+                        console.log(`📡 [${requestId}] [SOCKET] Emitted → ${targetRoom} | "${notif.title}"`);
+                    });
+                } else {
+                    console.warn(`⚠️ [${requestId}] Walang io instance — skip socket emit`);
+                }
+            } catch (socketErr) {
+                console.error(`❌ [${requestId}] [SOCKET] emit error:`, socketErr.message);
+            }
+        } catch (notifErr) {
+            console.error(`❌ [${requestId}] Failed to create notifications:`, notifErr.message);
+            console.error(notifErr.errors || notifErr);
+            // Hindi ibabalik ang 500 — successful pa rin ang assignment.
+        }
+    } else {
+        console.log(`ℹ️ [${requestId}] No notifications to create.`);
+    }
+
+    // ==========================================
+    // 11. POPULATE RESULT
+    // ==========================================
     const populatedResult = await GroupModel.aggregate([
         { $match: { _id: group._id } },
         {
@@ -933,48 +1364,48 @@ exports.AssignAdviserandCoAdviser = AsyncErrorHandler(async (req, res) => {
                 from: "userloginschemas",
                 localField: "adviserId",
                 foreignField: "_id",
-                as: "adviserDetails"
-            }
+                as: "adviserDetails",
+            },
         },
         {
             $lookup: {
                 from: "userloginschemas",
                 localField: "coadviserId",
                 foreignField: "_id",
-                as: "coadviserDetails"
-            }
+                as: "coadviserDetails",
+            },
         },
         {
             $lookup: {
                 from: "sections",
                 localField: "sectionId",
                 foreignField: "_id",
-                as: "sectionDetails"
-            }
+                as: "sectionDetails",
+            },
         },
         {
             $lookup: {
                 from: "userloginschemas",
                 localField: "members",
                 foreignField: "_id",
-                as: "membersDetails"
-            }
+                as: "membersDetails",
+            },
         },
         {
             $lookup: {
                 from: "userloginschemas",
                 localField: "assignedMentor",
                 foreignField: "_id",
-                as: "mentorDetails"
-            }
+                as: "mentorDetails",
+            },
         },
         {
             $lookup: {
                 from: "proposedtitles",
                 localField: "approvedTitleId",
                 foreignField: "_id",
-                as: "approvedTitleDetails"
-            }
+                as: "approvedTitleDetails",
+            },
         },
         {
             $addFields: {
@@ -983,8 +1414,8 @@ exports.AssignAdviserandCoAdviser = AsyncErrorHandler(async (req, res) => {
                 sectionId: { $arrayElemAt: ["$sectionDetails", 0] },
                 members: "$membersDetails",
                 assignedMentor: "$mentorDetails",
-                approvedTitleId: { $arrayElemAt: ["$approvedTitleDetails", 0] }
-            }
+                approvedTitleId: { $arrayElemAt: ["$approvedTitleDetails", 0] },
+            },
         },
         {
             $project: {
@@ -1017,18 +1448,23 @@ exports.AssignAdviserandCoAdviser = AsyncErrorHandler(async (req, res) => {
                 "mentor.passwordResetToken": 0,
                 "mentor.passwordResetTokenExpires": 0,
                 "mentor.__v": 0,
-                "mentor.passwordChangedAt": 0
-            }
-        }
+                "mentor.passwordChangedAt": 0,
+            },
+        },
     ]);
 
-    res.status(200).json({
+    // ==========================================
+    // 12. RESPONSE
+    // ==========================================
+    console.log(`🏁 [${requestId}] AssignAdviserandCoAdviser END\n`);
+
+    return res.status(200).json({
         status: "success",
         message: "Adviser and Co-adviser assigned successfully",
         data: populatedResult[0] || group,
+        notificationsCreated: finalNotifications.length,
     });
 });
-
 
 // ==========================================
 // DELETE GROUP

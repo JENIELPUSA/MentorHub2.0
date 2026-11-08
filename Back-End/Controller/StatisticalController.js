@@ -70,10 +70,13 @@ exports.getAdviserStatistics = AsyncErrorHandler(async (req, res) => {
     // ==========================================
     // STEP 2.6: TOTAL GROUPS NA TUGMA SA sectionId
     //            NG MGA NAKITANG SECTION
+    //            ✅ SORTED: latest first (createdAt desc)
     // ==========================================
     const userGroups = await Groups.find({
         sectionId: { $in: sectionIds }
-    }).select('_id name referralCode');
+    })
+        .select('_id name referralCode createdAt')
+        .sort({ createdAt: -1 }); // 🔥 pinakabago muna
 
     const totalGroups = userGroups.length;
     const groupIds = userGroups.map(g => g._id);
@@ -116,12 +119,14 @@ exports.getAdviserStatistics = AsyncErrorHandler(async (req, res) => {
     });
 
     // I-build ang pie data kasama ang group name
+    // ✅ Preserve ang order ng userGroups (latest first)
     const groupPieData = userGroups
         .map(g => ({
             groupId: g._id,
             groupName: g.name,
             referralCode: g.referralCode,
-            userCount: countMap[g.referralCode] || 0
+            userCount: countMap[g.referralCode] || 0,
+            createdAt: g.createdAt,
         }))
         .filter(item => item.userCount > 0); // optional: tanggalin kung gusto mo isama ang zero
 

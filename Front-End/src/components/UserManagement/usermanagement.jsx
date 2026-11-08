@@ -14,12 +14,31 @@ import {
     GraduationCap,
     UserCheck,
     ShieldCheck,
-    Briefcase
+    Briefcase,
+    Loader2,
 } from 'lucide-react';
 
 import { DepartmentContext } from '../../contexts/DepartmentContext/DepartmentContext';
 import { UserDisplayContext } from '../../contexts/UserManagementContext/UserManagementContext';
 import { StudentContext } from '../../contexts/StudentContext/StudentContext';
+
+// Roles that support switching (match backend enum)
+const SWITCHABLE_ROLES = ['panelist', 'adviser'];
+
+// Empty form template (reused in reset)
+const EMPTY_FORM = {
+    firstName: '',
+    middleName: '',
+    lastName: '',
+    suffix: '',
+    email: '',
+    role: 'Student',
+    selectedrole: [],
+    department: '',
+    status: 'Active',
+    password: '',
+    confirmPassword: '',
+};
 
 export default function UserManagement() {
     const {
@@ -34,8 +53,6 @@ export default function UserManagement() {
     const { AddUser } = useContext(UserDisplayContext);
     const { departments } = useContext(DepartmentContext);
 
-    console.log("useraccount", useraccount);
-
     const [users, setUsers] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [roleFilter, setRoleFilter] = useState('All');
@@ -49,9 +66,12 @@ export default function UserManagement() {
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [toastMessage, setToastMessage] = useState(null);
 
-    console.log("useraccount", useraccount);
+    const [formData, setFormData] = useState(EMPTY_FORM);
+    const [isSaving, setIsSaving] = useState(false);   // ✅ NEW
 
-    // ✅ FIXED: Map useraccount data to display format
+    const resetForm = () => setFormData(EMPTY_FORM);
+
+    // ✅ Map useraccount data to display format
     const mapUserAccountToDisplay = (account) => {
         if (!account) return null;
 
@@ -92,6 +112,12 @@ export default function UserManagement() {
         const avatarUrl = account.avatar?.url ||
             `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName || 'User')}&background=1e3a8a&color=facc15`;
 
+        // ✅ Read switchable roles from backend array
+        const multipleroleRaw = Array.isArray(account.multiplerole)
+            ? account.multiplerole
+            : [];
+        const multiplerole = multipleroleRaw.map((r) => roleMap[r] || r);
+
         return {
             id: account._id,
             firstName: account.first_name || '',
@@ -112,7 +138,9 @@ export default function UserManagement() {
             isActive: account.isActive !== undefined ? account.isActive : true,
             isVerified: account.isVerified || false,
             statusAccount: account.statusAccount || account.status || 'pending',
-            roleBackend: rawRole.toLowerCase()
+            roleBackend: rawRole.toLowerCase(),
+            multiplerole,
+            multipleroleRaw,
         };
     };
 
@@ -123,7 +151,6 @@ export default function UserManagement() {
                 .map(account => mapUserAccountToDisplay(account))
                 .filter(Boolean);
             setUsers(mappedUsers);
-            console.log('✅ Mapped users:', mappedUsers);
         } else {
             setUsers([]);
         }
@@ -182,8 +209,34 @@ export default function UserManagement() {
         'Admin': 'admin'
     };
 
+    // ✅ Toggle a switchable role in formData.selectedrole
+    const toggleSelectedRole = (roleKey) => {
+        setFormData((prev) => {
+            const exists = prev.selectedrole.includes(roleKey);
+            const next = exists
+                ? prev.selectedrole.filter((r) => r !== roleKey)
+                : [...prev.selectedrole, roleKey];
+            return { ...prev, selectedrole: next };
+        });
+    };
+
+    // ✅ When primary role changes, sync selectedrole
+    const handleRoleChange = (displayRole) => {
+        const backendRole = roleMapToBackend[displayRole] || 'student';
+        setFormData((prev) => {
+            if (!SWITCHABLE_ROLES.includes(backendRole)) {
+                return { ...prev, role: displayRole, selectedrole: [] };
+            }
+            const next = new Set(prev.selectedrole.filter((r) => SWITCHABLE_ROLES.includes(r)));
+            next.add(backendRole);
+            return { ...prev, role: displayRole, selectedrole: [...next] };
+        });
+    };
+
     const handleAddUserSubmit = async (e) => {
         e.preventDefault();
+
+        if (isSaving) return;
 
         if (!formData.firstName || !formData.lastName || !formData.email || !formData.department) {
             showNotification('Please fill in all required fields.', true);
@@ -199,6 +252,7 @@ export default function UserManagement() {
             showNotification('Passwords do not match.', true);
             return;
         }
+
         const fullName = [
             formData.firstName,
             formData.middleName,
@@ -207,6 +261,14 @@ export default function UserManagement() {
         ].filter(Boolean).join(' ');
 
         const username = formData.email.split('@')[0];
+        const backendRole = roleMapToBackend[formData.role] || 'student';
+
+        let selectedrole = [];
+        if (SWITCHABLE_ROLES.includes(backendRole)) {
+            const set = new Set(formData.selectedrole.filter((r) => SWITCHABLE_ROLES.includes(r)));
+            set.add(backendRole);
+            selectedrole = [...set];
+        }
 
         const payload = {
             username: username,
@@ -215,10 +277,10 @@ export default function UserManagement() {
             last_name: formData.lastName,
             suffix: formData.suffix || '',
             email: formData.email,
-            role: roleMapToBackend[formData.role] || 'student',
+            role: backendRole,
             password: formData.password,
             confirmPassword: formData.confirmPassword,
-            selectedrole: [roleMapToBackend[formData.role] || 'student'],
+            selectedrole,
             statusAccount: formData.status === 'Active' ? 'approved' : 'pending',
             isVerified: false,
             isActive: formData.status === 'Active',
@@ -228,24 +290,14 @@ export default function UserManagement() {
             status: formData.status,
         };
 
+        setIsSaving(true);
         try {
             const result = await AddUser(payload);
 
             if (result.success) {
                 showNotification(`✅ Successfully added ${fullName}!`);
                 setIsAddModalOpen(false);
-                setFormData({
-                    firstName: '',
-                    middleName: '',
-                    lastName: '',
-                    suffix: '',
-                    email: '',
-                    role: 'Student',
-                    department: '',
-                    status: 'Active',
-                    password: '',
-                    confirmPassword: ''
-                });
+                resetForm();
                 const params = buildFilterParams();
                 fetchUsersWithLogin(params);
             } else {
@@ -254,6 +306,8 @@ export default function UserManagement() {
         } catch (error) {
             console.error('Error adding user:', error);
             showNotification(`❌ Failed to add user: ${error.message || 'Unknown error'}`, true);
+        } finally {
+            setIsSaving(false);
         }
     };
 
@@ -265,19 +319,6 @@ export default function UserManagement() {
         if (viewUser && viewUser.id === id) setViewUser(null);
         showNotification(`Removed ${userToDelete?.name || 'user'}.`);
     };
-
-    const [formData, setFormData] = useState({
-        firstName: '',
-        middleName: '',
-        lastName: '',
-        suffix: '',
-        email: '',
-        role: 'Student',
-        department: '',
-        status: 'Active',
-        password: '',
-        confirmPassword: ''
-    });
 
     const totalPages = pagination?.totalPages || 1;
     const totalCount = pagination?.totalCount || 0;
@@ -313,6 +354,9 @@ export default function UserManagement() {
     };
 
     const isLoading = contextLoading || isLocalLoading;
+
+    const currentBackendRole = roleMapToBackend[formData.role] || 'student';
+    const showSwitchOptions = SWITCHABLE_ROLES.includes(currentBackendRole);
 
     return (
         <div className="min-h-screen bg-gradient-to-b from-blue-100 via-blue-50 to-sky-50 text-blue-900 p-4 md:p-8 font-sans">
@@ -479,9 +523,16 @@ export default function UserManagement() {
                                                         </span>
                                                     </td>
                                                     <td className="py-3.5 px-4">
-                                                        <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[11px] font-semibold border ${getRoleBadge(user.role)}`}>
-                                                            {user.role}
-                                                        </span>
+                                                        <div className="flex flex-col gap-1">
+                                                            <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[11px] font-semibold border ${getRoleBadge(user.role)}`}>
+                                                                {user.role}
+                                                            </span>
+                                                            {user.multiplerole.length > 1 && (
+                                                                <span className="text-[10px] text-blue-500 italic">
+                                                                    can switch: {user.multiplerole.filter(r => r !== user.role).join(', ')}
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </td>
                                                     <td className="py-3.5 px-4 font-medium text-blue-800">
                                                         {user.department}
@@ -601,21 +652,12 @@ export default function UserManagement() {
 
                         <button
                             onClick={() => {
+                                if (isSaving) return;
                                 setIsAddModalOpen(false);
-                                setFormData({
-                                    firstName: '',
-                                    middleName: '',
-                                    lastName: '',
-                                    suffix: '',
-                                    email: '',
-                                    role: 'Student',
-                                    department: '',
-                                    status: 'Active',
-                                    password: '',
-                                    confirmPassword: ''
-                                });
+                                resetForm();
                             }}
-                            className="absolute top-4 right-4 p-2 text-blue-400 hover:text-blue-700 hover:bg-blue-50 rounded-xl transition"
+                            disabled={isSaving}
+                            className="absolute top-4 right-4 p-2 text-blue-400 hover:text-blue-700 hover:bg-blue-50 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             <X className="w-5 h-5" />
                         </button>
@@ -634,48 +676,58 @@ export default function UserManagement() {
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div>
-                                    <label className="block font-semibold text-blue-800 mb-1">First Name *</label>
+                                    <label className="block font-semibold text-blue-800 mb-1">
+                                        First Name <span className="text-red-500">*</span>
+                                    </label>
                                     <input
                                         type="text"
                                         required
+                                        disabled={isSaving}
                                         placeholder="e.g. Juan"
                                         value={formData.firstName}
                                         onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                                        className="w-full px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 placeholder:text-blue-400 outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 focus:bg-white"
+                                        className="w-full px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 placeholder:text-blue-400 outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 focus:bg-white disabled:opacity-60 disabled:cursor-not-allowed"
                                     />
                                 </div>
 
                                 <div>
-                                    <label className="block font-semibold text-blue-800 mb-1">Middle Name</label>
+                                    <label className="block font-semibold text-blue-800 mb-1">
+                                        Middle Name
+                                    </label>
                                     <input
                                         type="text"
+                                        disabled={isSaving}
                                         placeholder="e.g. Santos"
                                         value={formData.middleName}
                                         onChange={(e) => setFormData({ ...formData, middleName: e.target.value })}
-                                        className="w-full px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 placeholder:text-blue-400 outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 focus:bg-white"
+                                        className="w-full px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 placeholder:text-blue-400 outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 focus:bg-white disabled:opacity-60 disabled:cursor-not-allowed"
                                     />
                                 </div>
                             </div>
 
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                 <div className="sm:col-span-2">
-                                    <label className="block font-semibold text-blue-800 mb-1">Last Name *</label>
+                                    <label className="block font-semibold text-blue-800 mb-1">
+                                        Last Name <span className="text-red-500">*</span>
+                                    </label>
                                     <input
                                         type="text"
                                         required
+                                        disabled={isSaving}
                                         placeholder="e.g. dela Cruz"
                                         value={formData.lastName}
                                         onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                                        className="w-full px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 placeholder:text-blue-400 outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 focus:bg-white"
+                                        className="w-full px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 placeholder:text-blue-400 outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 focus:bg-white disabled:opacity-60 disabled:cursor-not-allowed"
                                     />
                                 </div>
 
                                 <div>
                                     <label className="block font-semibold text-blue-800 mb-1">Suffix</label>
                                     <select
+                                        disabled={isSaving}
                                         value={formData.suffix}
                                         onChange={(e) => setFormData({ ...formData, suffix: e.target.value })}
-                                        className="w-full px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400"
+                                        className="w-full px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 disabled:opacity-60 disabled:cursor-not-allowed"
                                     >
                                         <option value="">None</option>
                                         <option value="Jr.">Jr.</option>
@@ -688,48 +740,60 @@ export default function UserManagement() {
                             </div>
 
                             <div>
-                                <label className="block font-semibold text-blue-800 mb-1">Email Address *</label>
+                                <label className="block font-semibold text-blue-800 mb-1">
+                                    Email Address <span className="text-red-500">*</span>
+                                </label>
                                 <input
                                     type="email"
                                     required
+                                    disabled={isSaving}
                                     placeholder="juan@example.com"
                                     value={formData.email}
                                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                    className="w-full px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 placeholder:text-blue-400 outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 focus:bg-white"
+                                    className="w-full px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 placeholder:text-blue-400 outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 focus:bg-white disabled:opacity-60 disabled:cursor-not-allowed"
                                 />
                             </div>
 
                             <div>
-                                <label className="block font-semibold text-blue-800 mb-1">Password *</label>
+                                <label className="block font-semibold text-blue-800 mb-1">
+                                    Password <span className="text-red-500">*</span>
+                                </label>
                                 <input
                                     type="password"
                                     required
+                                    disabled={isSaving}
                                     placeholder="Minimum 8 characters"
                                     value={formData.password}
                                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                                    className="w-full px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 placeholder:text-blue-400 outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 focus:bg-white"
+                                    className="w-full px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 placeholder:text-blue-400 outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 focus:bg-white disabled:opacity-60 disabled:cursor-not-allowed"
                                 />
                             </div>
 
                             <div>
-                                <label className="block font-semibold text-blue-800 mb-1">Confirm Password *</label>
+                                <label className="block font-semibold text-blue-800 mb-1">
+                                    Confirm Password <span className="text-red-500">*</span>
+                                </label>
                                 <input
                                     type="password"
                                     required
+                                    disabled={isSaving}
                                     placeholder="Re-enter password"
                                     value={formData.confirmPassword}
                                     onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                                    className="w-full px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 placeholder:text-blue-400 outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 focus:bg-white"
+                                    className="w-full px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 placeholder:text-blue-400 outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 focus:bg-white disabled:opacity-60 disabled:cursor-not-allowed"
                                 />
                             </div>
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div>
-                                    <label className="block font-semibold text-blue-800 mb-1">Role *</label>
+                                    <label className="block font-semibold text-blue-800 mb-1">
+                                        Role <span className="text-red-500">*</span>
+                                    </label>
                                     <select
+                                        disabled={isSaving}
                                         value={formData.role}
-                                        onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                                        className="w-full px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 font-medium text-blue-900"
+                                        onChange={(e) => handleRoleChange(e.target.value)}
+                                        className="w-full px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 font-medium text-blue-900 disabled:opacity-60 disabled:cursor-not-allowed"
                                     >
                                         <option value="Student">Student</option>
                                         <option value="Subject Instructor">Subject Instructor</option>
@@ -740,12 +804,15 @@ export default function UserManagement() {
                                 </div>
 
                                 <div>
-                                    <label className="block font-semibold text-blue-800 mb-1">Department *</label>
+                                    <label className="block font-semibold text-blue-800 mb-1">
+                                        Department <span className="text-red-500">*</span>
+                                    </label>
                                     <select
+                                        required
+                                        disabled={isSaving}
                                         value={formData.department}
                                         onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                                        className="w-full px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400"
-                                        required
+                                        className="w-full px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 disabled:opacity-60 disabled:cursor-not-allowed"
                                     >
                                         <option value="">Select Department</option>
                                         {departments.map((dept) => (
@@ -757,25 +824,67 @@ export default function UserManagement() {
                                 </div>
                             </div>
 
+                            {/* ✅ Switchable Roles — only for panelist / adviser */}
+                            {showSwitchOptions && (
+                                <div className="p-3 bg-yellow-50 border border-yellow-300 rounded-xl">
+                                    <label className="block font-semibold text-blue-900 mb-1">
+                                        Allow Switching To
+                                    </label>
+                                    <p className="text-[11px] text-blue-600 mb-2">
+                                        Select which roles this user can switch between. The current role is always included.
+                                    </p>
+                                    <div className="flex flex-wrap gap-3">
+                                        {['panelist', 'adviser'].map((r) => {
+                                            const isPrimary = currentBackendRole === r;
+                                            const checked = formData.selectedrole.includes(r) || isPrimary;
+                                            return (
+                                                <label
+                                                    key={r}
+                                                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium cursor-pointer transition ${
+                                                        checked
+                                                            ? 'bg-blue-900 text-white border-blue-900'
+                                                            : 'bg-white text-blue-800 border-blue-200 hover:bg-blue-50'
+                                                    } ${isPrimary || isSaving ? 'opacity-90 cursor-not-allowed' : ''}`}
+                                                >
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={checked}
+                                                        disabled={isPrimary || isSaving}
+                                                        onChange={() => toggleSelectedRole(r)}
+                                                        className="accent-yellow-400"
+                                                    />
+                                                    <span className="capitalize">{r}</span>
+                                                    {isPrimary && (
+                                                        <span className="text-[10px] italic">(current)</span>
+                                                    )}
+                                                </label>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
                             <div>
                                 <label className="block font-semibold text-blue-800 mb-1">Account Status</label>
                                 <div className="flex gap-4 pt-1">
-                                    <label className="flex items-center gap-2 cursor-pointer font-medium text-blue-800">
+                                    <label className={`flex items-center gap-2 cursor-pointer font-medium text-blue-800 ${isSaving ? 'opacity-60 cursor-not-allowed' : ''}`}>
                                         <input
                                             type="radio"
                                             name="status"
                                             value="Active"
+                                            disabled={isSaving}
                                             checked={formData.status === 'Active'}
                                             onChange={(e) => setFormData({ ...formData, status: e.target.value })}
                                             className="text-blue-900 focus:ring-yellow-400"
                                         />
                                         <span>Active</span>
                                     </label>
-                                    <label className="flex items-center gap-2 cursor-pointer font-medium text-blue-800">
+                                    <label className={`flex items-center gap-2 cursor-pointer font-medium text-blue-800 ${isSaving ? 'opacity-60 cursor-not-allowed' : ''}`}>
                                         <input
                                             type="radio"
                                             name="status"
                                             value="Inactive"
+                                            disabled={isSaving}
                                             checked={formData.status === 'Inactive'}
                                             onChange={(e) => setFormData({ ...formData, status: e.target.value })}
                                             className="text-blue-900 focus:ring-yellow-400"
@@ -788,30 +897,28 @@ export default function UserManagement() {
                             <div className="flex justify-end gap-2 pt-3 border-t border-blue-100">
                                 <button
                                     type="button"
+                                    disabled={isSaving}
                                     onClick={() => {
                                         setIsAddModalOpen(false);
-                                        setFormData({
-                                            firstName: '',
-                                            middleName: '',
-                                            lastName: '',
-                                            suffix: '',
-                                            email: '',
-                                            role: 'Student',
-                                            department: '',
-                                            status: 'Active',
-                                            password: '',
-                                            confirmPassword: ''
-                                        });
+                                        resetForm();
                                     }}
-                                    className="px-4 py-2 font-medium text-blue-800 hover:bg-blue-100 rounded-xl transition"
+                                    className="px-4 py-2 font-medium text-blue-800 hover:bg-blue-100 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     type="submit"
-                                    className="px-5 py-2 font-semibold text-white bg-blue-900 hover:bg-blue-950 rounded-xl shadow-md transition"
+                                    disabled={isSaving}
+                                    className="flex items-center gap-2 px-5 py-2 font-semibold text-white bg-blue-900 hover:bg-blue-950 rounded-xl shadow-md transition disabled:opacity-60 disabled:cursor-wait"
                                 >
-                                    Save User
+                                    {isSaving ? (
+                                        <>
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                            Saving...
+                                        </>
+                                    ) : (
+                                        'Save User'
+                                    )}
                                 </button>
                             </div>
 
@@ -853,6 +960,14 @@ export default function UserManagement() {
                                 <span className="text-blue-500 font-medium">Role:</span>
                                 <span className={`px-2 py-0.5 rounded text-[11px] font-semibold border ${getRoleBadge(viewUser.role)}`}>
                                     {viewUser.role}
+                                </span>
+                            </div>
+                            <div className="flex justify-between py-1 items-start">
+                                <span className="text-blue-500 font-medium">Switchable Roles:</span>
+                                <span className="font-semibold text-blue-900 text-right">
+                                    {viewUser.multiplerole?.length
+                                        ? viewUser.multiplerole.join(', ')
+                                        : 'None'}
                                 </span>
                             </div>
                             <div className="flex justify-between py-1">

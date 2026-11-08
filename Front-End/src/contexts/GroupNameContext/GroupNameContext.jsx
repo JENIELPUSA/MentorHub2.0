@@ -36,7 +36,7 @@ export const GroupProvider = ({ children }) => {
     const fetchInProgress = useRef(false);
 
     const BASE_URL = import.meta.env.VITE_REACT_APP_BACKEND_BASEURL;
-    const referralUrl = `${BASE_URL}/api/v1/referralCode/`;
+    const referralUrl = `${import.meta.env.FRONTEND_URL}/referralCode/`;
 
     // ==========================================
     // FETCH GROUPS

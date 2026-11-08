@@ -10,6 +10,7 @@ import {
 import axios from "axios";
 import { AuthContext } from "../AuthContext";
 
+
 export const ScheduleContext = createContext();
 
 export const ScheduleProvider = ({ children }) => {

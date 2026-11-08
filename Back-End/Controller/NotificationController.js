@@ -1,39 +1,52 @@
 const Notification = require("../Models/NotificationSchema");
 const mongoose = require("mongoose");
 
+// ==========================================
+// ✅ SHARED ROLE-BASED FILTER
+// recipient & uploadedBy are ARRAYS in the schema —
+// mongoose handles array membership automatically,
+// so `{ recipient: userId }` matches if userId is in the array.
+// ==========================================
+const buildRoleFilter = (role, userId) => {
+    const ROLE_FILTERS = {
+        student: {
+            $or: [{ uploadedBy: userId }, { recipient: userId }],
+        },
+        adviser: { recipient: userId },
+        panelist: { recipient: userId },
+        subject_instructor: { recipient: userId },
+        admin: {}, // admin intentionally sees all
+    };
+    return ROLE_FILTERS[role] ?? { recipient: userId };
+};
+
+// ==========================================
+// ✅ DISPLAY NOTIFICATIONS
+// ==========================================
 exports.displayNotifications = async (req, res) => {
     try {
+        const userId = req.user?._id;
+        const role = req.user?.role;
 
-        const userId = req.user._id;
-        const role = req.user.role;
+        console.log("userId", userId);
+        console.log("role", role);
+
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                message: "Not authenticated.",
+            });
+        }
+
         const { showAll, hideAll, page = 1, limit = 15 } = req.query;
 
-        console.log("userId", userId)
-        console.log("role", role)
-
         // Parse pagination
-        const pageNum = parseInt(page);
-        const limitNum = parseInt(limit);
+        const pageNum = Math.max(1, parseInt(page) || 1);
+        const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 15));
         const skip = (pageNum - 1) * limitNum;
 
-        // ==========================================
-        // BUILD FILTER BASED ON ROLE
-        // ==========================================
-        let filter = {};
-
-        if (role === 'student') {
-            // Student: match ang userId sa uploadedBy
-            filter = { uploadedBy: userId };
-        } else if (role === 'adviser') {
-            // Adviser: match ang userId sa recipient
-            filter = { recipient: userId };
-        } else if (role === 'admin') {
-            // Admin: walang filter, makita lahat
-            filter = {};
-        } else {
-            // Default: walang filter
-            filter = {};
-        }
+        // ✅ SAFE DEFAULT — kung hindi kilala ang role, recipient lang
+        const filter = buildRoleFilter(role, userId);
 
         console.log("Filter:", filter);
 
@@ -42,14 +55,8 @@ exports.displayNotifications = async (req, res) => {
         // ==========================================
         if (hideAll === "true") {
             const result = await Notification.updateMany(
-                {
-                    ...filter,
-                    isRead: false,
-                },
-                {
-                    isRead: true,
-                    readAt: new Date(),
-                }
+                { ...filter, isRead: false },
+                { $set: { isRead: true, readAt: new Date() } }
             );
 
             const unreadCount = await Notification.countDocuments({
@@ -68,42 +75,35 @@ exports.displayNotifications = async (req, res) => {
             });
         }
 
-        // Helper function to process notification messages based on role
+        // ==========================================
+        // PROCESS NOTIFICATIONS BY ROLE
+        // ==========================================
         const processNotifications = (notifications) => {
-            return notifications.map(notification => {
-                // Convert to plain object para ma-modify
-                const notif = notification.toObject ? notification.toObject() : notification;
-                
-                // Iba't ibang processing based sa role
-                switch(role) {
-                    case 'student':
-                        // Student: gamitin ang returnmessage kung meron
+            return notifications.map((notification) => {
+                const notif = notification.toObject
+                    ? notification.toObject()
+                    : notification;
+
+                switch (role) {
+                    case "student":
                         if (notif.returnmessage) {
                             notif.message = notif.returnmessage;
                         }
-                        // Optional: tanggalin ang returnmessage para hindi makita
-                        // delete notif.returnmessage;
                         break;
-                        
-                    case 'admin':
-                    case 'adviser':
-                        // Admin at Adviser: tanggalin ang returnmessage field
-                        delete notif.returnmessage;
-                        // I-keep ang original message
-                        break;
-                        
+                    case "admin":
+                    case "adviser":
+                    case "panelist":
+                    case "subject_instructor":
                     default:
-                        // Iba pang roles: tanggalin ang returnmessage
                         delete notif.returnmessage;
                         break;
                 }
-                
                 return notif;
             });
         };
 
         // ==========================================
-        // SHOW ALL - Get all notifications with pagination
+        // SHOW ALL
         // ==========================================
         if (showAll === "true") {
             const total = await Notification.countDocuments(filter);
@@ -116,7 +116,6 @@ exports.displayNotifications = async (req, res) => {
                 .skip(skip)
                 .limit(limitNum);
 
-            // Process notifications based on role
             notifications = processNotifications(notifications);
 
             const unreadCount = await Notification.countDocuments({
@@ -141,7 +140,7 @@ exports.displayNotifications = async (req, res) => {
         }
 
         // ==========================================
-        // DEFAULT - Return unread notifications only with pagination
+        // DEFAULT — unread only
         // ==========================================
         const total = await Notification.countDocuments({
             ...filter,
@@ -159,17 +158,14 @@ exports.displayNotifications = async (req, res) => {
             .skip(skip)
             .limit(limitNum);
 
-        // Process notifications based on role
         notifications = processNotifications(notifications);
 
-        const unreadCount = total;
-
-        res.status(200).json({
+        return res.status(200).json({
             success: true,
             message: "Unread notifications retrieved",
             data: {
                 notifications,
-                unreadCount,
+                unreadCount: total,
                 pagination: {
                     total,
                     page: pageNum,
@@ -180,7 +176,7 @@ exports.displayNotifications = async (req, res) => {
         });
     } catch (error) {
         console.error("Error in display notifications:", error);
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
             message: "Failed to process notification display",
             error: error.message,
@@ -188,5 +184,142 @@ exports.displayNotifications = async (req, res) => {
     }
 };
 
+// ==========================================
+// ✅ MARK ALL AS READ (bulk)
+// ==========================================
+exports.markAllAsRead = async (req, res) => {
+    try {
+        const userId = req.user?._id;
+        const role = req.user?.role;
+
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                message: "Not authenticated.",
+            });
+        }
+
+        const filter = buildRoleFilter(role, userId);
+
+        // updateMany bypasses the pre("save") hook → set readAt manually
+        const now = new Date();
+        const result = await Notification.updateMany(
+            { ...filter, isRead: false },
+            { $set: { isRead: true, readAt: now } }
+        );
+
+        const unreadCount = await Notification.countDocuments({
+            ...filter,
+            isRead: false,
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: "All notifications marked as read",
+            data: {
+                matchedCount: result.matchedCount,
+                modifiedCount: result.modifiedCount,
+                unreadCount,
+            },
+        });
+    } catch (error) {
+        console.error("Error in markAllAsRead:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Failed to mark all notifications as read",
+            error: error.message,
+        });
+    }
+};
+
+// ==========================================
+// ✅ MARK ONE AS READ (by id)
+// ==========================================
+exports.markOneAsRead = async (req, res) => {
+    try {
+        const userId = req.user?._id;
+        const role = req.user?.role;
+        const { id } = req.params;
+
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                message: "Not authenticated.",
+            });
+        }
+
+        if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid notification id.",
+            });
+        }
+
+        const notification = await Notification.findById(id);
+
+        if (!notification) {
+            return res.status(404).json({
+                success: false,
+                message: "Notification not found.",
+            });
+        }
+
+        // ==========================================
+        // ✅ AUTHORIZATION (recipient & uploadedBy are ARRAYS)
+        // ==========================================
+        const uid = String(userId);
+
+        const isRecipient = (notification.recipient || []).some(
+            (r) => String(r) === uid
+        );
+        const isUploader = (notification.uploadedBy || []).some(
+            (u) => String(u) === uid
+        );
+        const isAdmin = role === "admin";
+
+        if (!isRecipient && !isUploader && !isAdmin) {
+            return res.status(403).json({
+                success: false,
+                message: "You are not allowed to modify this notification.",
+            });
+        }
+
+        // Already read → idempotent success
+        if (notification.isRead) {
+            return res.status(200).json({
+                success: true,
+                message: "Notification was already marked as read.",
+                data: { notification },
+            });
+        }
+
+        // Use .save() so the pre("save") hook sets readAt automatically
+        notification.isRead = true;
+        await notification.save();
+
+        // Recompute unread count for this user
+        const filter = buildRoleFilter(role, userId);
+        const unreadCount = await Notification.countDocuments({
+            ...filter,
+            isRead: false,
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: "Notification marked as read",
+            data: {
+                notification,
+                unreadCount,
+            },
+        });
+    } catch (error) {
+        console.error("Error in markOneAsRead:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Failed to mark notification as read",
+            error: error.message,
+        });
+    }
+};
 
 module.exports = exports;

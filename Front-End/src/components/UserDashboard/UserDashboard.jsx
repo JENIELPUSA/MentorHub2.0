@@ -94,6 +94,9 @@ const toLocalDateKey = (date) => {
     return `${y}-${m}-${day}`;
 };
 
+const baseUrl = import.meta.env.VITE_FRONTEND_URL || window.location.origin;
+
+
 const getAdviserStatusDisplay = (status) => {
     const statusConfigs = {
         approved: {
@@ -334,9 +337,6 @@ const StatisticalReferredUsersCard = ({
                             <Copy className="w-3.5 h-3.5" />
                         </button>
                     </div>
-                    <button onClick={onViewQR} className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-yellow-700 hover:text-yellow-800 hover:underline">
-                        <QrCode className="w-3 h-3" /> View QR
-                    </button>
                 </div>
 
                 <div className="rounded-xl border p-3 bg-white border-blue-200">
@@ -961,10 +961,8 @@ export default function UserDashboard() {
 
     useContext(StatisticalContext);
 
-    console.log("first_name", last_name);
-
     const { advisers, advisersLoading } = useContext(UserDisplayContext);
-    const { getGroupDetails, groupDetails, referralUrl, assignAdviserAndCoAdviser } = useContext(GroupContext);
+    const { getGroupDetails, groupDetails, assignAdviserAndCoAdviser } = useContext(GroupContext);
 
     const [darkMode] = useState(false);
     const [toastMessage, setToastMessage] = useState(null);
@@ -1265,44 +1263,22 @@ export default function UserDashboard() {
         );
     };
 
-    const handleViewFormatFile = (url, title, fileName) => {
-        if (!url) {
-            triggerToast('File not found', 'error');
-            return;
-        }
-        setFileViewModal({
-            open: true,
-            url: url,
-            title: title || 'Format Document',
-            fileName: fileName || 'document.pdf',
-        });
-    };
-
-    const handleDownloadFormatFile = (url) => {
-        if (!url) {
-            triggerToast('File not found', 'error');
-            return;
-        }
-        try {
-            let fileUrl = url;
-            if (fileUrl.includes('/image/upload/')) fileUrl = fileUrl.replace('/image/upload/', '/raw/upload/');
-            if (fileUrl.includes('/upload/')) fileUrl = fileUrl.replace('/upload/', '/upload/fl_attachment/');
-
-            const filename = getFileNameFromUrl(url);
-            const link = document.createElement('a');
-            link.href = fileUrl;
-            link.download = filename;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            triggerToast(`Downloading: ${filename}`);
-        } catch {
-            triggerToast('Failed to download file', 'error');
-        }
-    };
-
     const handleCopyReferralCode = () => {
-        copyToClipboard(displayData.group.referralCode, 'Referral Code copied!');
+        const referralCode = displayData?.group?.referralCode;
+
+        if (!referralCode) {
+            copyToClipboard('No referral code available', '⚠️ No referral code to copy');
+            return;
+        }
+
+        const baseUrl = (
+            import.meta.env.VITE_FRONTEND_URL ||   // kung Vite
+            // process.env.REACT_APP_FRONTEND_URL || // kung CRA — gamitin ito imbes
+            window.location.origin
+        ).replace(/\/$/, '');
+
+        const referralUrl = `${baseUrl}/register?ref=${encodeURIComponent(referralCode)}`;
+        copyToClipboard(referralUrl, 'Referral link copied!');
     };
 
     const { adviserDisplay, coadviserDisplay } = getCurrentAdviserDisplay();
@@ -1534,11 +1510,10 @@ export default function UserDashboard() {
                             <button
                                 type="button"
                                 onClick={() => setHeatmapMode('comments')}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 border ${
-                                    heatmapMode === 'comments'
-                                        ? 'bg-yellow-400 text-blue-950 border-yellow-400 shadow-sm ring-2 ring-yellow-200'
-                                        : 'bg-white text-blue-700 border-blue-200 hover:bg-yellow-50'
-                                }`}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 border ${heatmapMode === 'comments'
+                                    ? 'bg-yellow-400 text-blue-950 border-yellow-400 shadow-sm ring-2 ring-yellow-200'
+                                    : 'bg-white text-blue-700 border-blue-200 hover:bg-yellow-50'
+                                    }`}
                             >
                                 <MessageSquare className="w-3.5 h-3.5" />
                                 Comments
@@ -1546,11 +1521,10 @@ export default function UserDashboard() {
                             <button
                                 type="button"
                                 onClick={() => setHeatmapMode('proposals')}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 border ${
-                                    heatmapMode === 'proposals'
-                                        ? 'bg-blue-900 text-yellow-300 border-blue-900 shadow-sm ring-2 ring-yellow-300'
-                                        : 'bg-white text-blue-700 border-blue-200 hover:bg-blue-50'
-                                }`}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 border ${heatmapMode === 'proposals'
+                                    ? 'bg-blue-900 text-yellow-300 border-blue-900 shadow-sm ring-2 ring-yellow-300'
+                                    : 'bg-white text-blue-700 border-blue-200 hover:bg-blue-50'
+                                    }`}
                             >
                                 <FileText className="w-3.5 h-3.5" />
                                 Proposals
@@ -1604,21 +1578,6 @@ export default function UserDashboard() {
                         </div>
                     </div>
                 )}
-
-                {/* TWO-COLUMN LAYOUT */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-                    <FormatDetailsCard
-                        formatDetails={displayData.group.section?.subject?.formatDetails}
-                        onViewFile={handleViewFormatFile}
-                        onDownloadFile={handleDownloadFormatFile}
-                    />
-
-                    <ClassShareLink
-                        referralUrl={referralUrl}
-                        referralCode={displayData.group.referralCode}
-                        onCopy={copyToClipboard}
-                    />
-                </div>
             </main>
 
             {/* FOOTER */}

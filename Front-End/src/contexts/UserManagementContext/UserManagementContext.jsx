@@ -24,50 +24,60 @@ export const UserDisplayProvider = ({ children }) => {
     // CREATE - Add User
     const AddUser = useCallback(
         async (values) => {
+            console.log("Send Payloads", values);
 
-            console.log("Send Payloads", values)
             try {
                 const formData = new FormData();
+
+                // ── Basic fields ──
                 formData.append("first_name", values.first_name || "");
                 formData.append("last_name", values.last_name || "");
-                formData.append("username", values.email || "");
+                formData.append("middle_name", values.middle_name || "");
                 formData.append("suffix", values.suffix || "");
-                // ❌ TANGGALIN ITO - gender
-                // formData.append("gender", values.gender || "");
-                formData.append("role", values.role || "");
+                formData.append("username", values.email || values.username || "");
+                formData.append("role", values.role || ""); // current active role
                 formData.append("password", values.password || "");
                 formData.append("confirmPassword", values.confirmPassword || "");
-                formData.append("departmentId", values.department || "");
+                formData.append("departmentId", values.department || values.departmentId || "");
 
+                // ── Optional fields ──
+                if (values.referralCode) formData.append("referralCode", values.referralCode);
+                if (values.address) formData.append("address", values.address);
+                if (values.contactNumber) formData.append("contactNumber", values.contactNumber);
+                if (values.avatar) formData.append("avatar", values.avatar);
+                const SWITCHABLE_ROLES = ["panelist", "adviser"];
+
+                const rawSelected = Array.isArray(values.selectedrole)
+                    ? values.selectedrole
+                    : values.selectedrole
+                        ? [values.selectedrole]
+                        : [];
+
+                const cleanSelected = [
+                    ...new Set(
+                        rawSelected
+                            .map((r) => String(r).trim().toLowerCase())
+                            .filter((r) => SWITCHABLE_ROLES.includes(r)),
+                    ),
+                ];
+
+                // Include current role if it's switchable and not already present
+                const currentRole = String(values.role || "").toLowerCase();
+                if (
+                    SWITCHABLE_ROLES.includes(currentRole) &&
+                    !cleanSelected.includes(currentRole)
+                ) {
+                    cleanSelected.push(currentRole);
+                }
+
+                // Send each role as its own "selectedrole" field
+                cleanSelected.forEach((r) => formData.append("selectedrole", r));
+
+                // ── Debug log ──
                 console.log("FormData entries:");
                 for (let pair of formData.entries()) {
-                    console.log(pair[0] + ': ' + pair[1]);
+                    console.log(`${pair[0]}: ${pair[1]}`);
                 }
-
-                // ✅ IDAGDAG ITO - selectedrole
-                if (values.selectedrole) {
-                    if (Array.isArray(values.selectedrole)) {
-                        values.selectedrole.forEach(role => {
-                            formData.append("selectedrole[]", role);
-                        });
-                    } else {
-                        formData.append("selectedrole", values.selectedrole);
-                    }
-                }
-
-                if (values.middle_name) {
-                    formData.append("middle_name", values.middle_name);
-                }
-                if (values.referralCode) {
-                    formData.append("referralCode", values.referralCode);
-                }
-                if (values.address) {
-                    formData.append("address", values.address);
-                }
-                if (values.contactNumber) {
-                    formData.append("contactNumber", values.contactNumber);
-                }
-                if (values.avatar) formData.append("avatar", values.avatar);
 
                 const response = await axiosInstance.post(
                     `${import.meta.env.VITE_REACT_APP_BACKEND_BASEURL}/api/v1/authentication/signup`,
@@ -78,19 +88,23 @@ export const UserDisplayProvider = ({ children }) => {
                             Authorization: `Bearer ${authToken}`,
                             "Content-Type": "multipart/form-data",
                         },
-                    }
+                    },
                 );
 
-                console.log("REsponse", response)
+                console.log("Response", response);
 
                 if (response.data?.success === true) {
                     return { success: true, data: response.data.data };
-                } else {
-                    setCustomError(response.data?.message || "Failed to add user.");
-                    return { success: false, error: response.data?.message || "Failed to add user." };
                 }
+
+                setCustomError(response.data?.message || "Failed to add user.");
+                return {
+                    success: false,
+                    error: response.data?.message || "Failed to add user.",
+                };
             } catch (error) {
-                const message = error.response?.data?.message ||
+                const message =
+                    error.response?.data?.message ||
                     error.response?.data?.error ||
                     error.message ||
                     "Something went wrong.";
@@ -100,7 +114,7 @@ export const UserDisplayProvider = ({ children }) => {
                 return { success: false, error: message };
             }
         },
-        [authToken]
+        [authToken],
     );
 
     // READ - Fetch Users Data

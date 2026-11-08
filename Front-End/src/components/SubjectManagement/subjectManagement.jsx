@@ -30,6 +30,8 @@ import { AuthContext } from '../../contexts/AuthContext';
 import { SubjectContext } from '../../contexts/SubjectContext/SubjectContext';
 import SubjectSections from './subjectSection';
 import { FormatContext } from '../../contexts/FormatContext/FormatContext';
+import SuccessModal from '../ReusableFolder/SuccessAuthenticationModal';
+import ConfirmationModal from '../ReusableFolder/ConfirmationModal';
 
 // ==================== FORMAT TYPE COLORS ====================
 const FORMAT_TYPE_COLORS = {
@@ -66,9 +68,7 @@ export default function SubjectManagement() {
         rowsPerPage,
     } = useContext(SubjectContext);
 
-    const { formats } = useContext(FormatContext)
-
-    console.log("subjectsData", subjectsData)
+    const { formats } = useContext(FormatContext);
 
     // ==================== LOCAL STATE ====================
     const [searchTerm, setSearchTerm] = useState('');
@@ -80,6 +80,25 @@ export default function SubjectManagement() {
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [toastMessage, setToastMessage] = useState(null);
+
+    // ✅ SUCCESS MODAL STATE
+    const [successModal, setSuccessModal] = useState({
+        isOpen: false,
+        title: '',
+        message: '',
+        onClose: null,
+    });
+
+    // ✅ CONFIRMATION MODAL STATE
+    const [confirmModal, setConfirmModal] = useState({
+        isOpen: false,
+        title: '',
+        message: '',
+        confirmText: 'Delete',
+        variant: 'danger',
+        onConfirm: null,
+    });
+    const [isConfirmLoading, setIsConfirmLoading] = useState(false);
 
     const [formData, setFormData] = useState({ title: '' });
     const [editingId, setEditingId] = useState(null);
@@ -98,15 +117,11 @@ export default function SubjectManagement() {
     const [assignFormatSearchTerm, setAssignFormatSearchTerm] = useState('');
     const [assignFormatTypeFilter, setAssignFormatTypeFilter] = useState('All');
 
-    console.log("subjectsData", subjectsData)
-
     // ==================== SECTION STATE ====================
     const [sections, setSections] = useState([]);
 
     // ==================== VIEW MODE STATE ====================
     const [viewMode, setViewMode] = useState('sections');
-
-    // ✅ NEW: State para malaman kung nasa Classes/Groups view na (para i-hide ang header)
     const [isInGroupsView, setIsInGroupsView] = useState(false);
 
     // ==================== HELPERS ====================
@@ -116,14 +131,66 @@ export default function SubjectManagement() {
         return `${user.first_name || user.firstName || ''} ${user.last_name || user.lastName || ''}`.trim() || user.username || 'Unknown User';
     };
 
-    const showNotification = (msg, isError = false) => {
-        setToastMessage({ msg, isError });
+    // ✅ ERROR TOAST (red)
+    const showErrorToast = (msg) => {
+        setToastMessage({ msg, isError: true });
         setTimeout(() => setToastMessage(null), 3000);
     };
 
-    const getFormatTypeColor = (type) => {
-        return FORMAT_TYPE_COLORS[type] || FORMAT_TYPE_COLORS.default;
+    // ✅ SUCCESS MODAL
+    const showSuccessModal = (message, title = 'Success!', onClose = null) => {
+        setSuccessModal({ isOpen: true, title, message, onClose });
     };
+
+    const closeSuccessModal = () => {
+        const cb = successModal.onClose;
+        setSuccessModal({ isOpen: false, title: '', message: '', onClose: null });
+        if (typeof cb === 'function') cb();
+    };
+
+    // Generic — auto-detect error vs success
+    const showNotification = (msg, isError = false) => {
+        if (isError) showErrorToast(msg);
+        else showSuccessModal(msg);
+    };
+
+    // ✅ CONFIRMATION MODAL HELPERS
+    const openConfirmModal = ({
+        title = 'Are you sure?',
+        message = 'This action cannot be undone.',
+        confirmText = 'Delete',
+        variant = 'danger',
+        onConfirm,
+    }) => {
+        setConfirmModal({ isOpen: true, title, message, confirmText, variant, onConfirm });
+    };
+
+    const closeConfirmModal = () => {
+        if (isConfirmLoading) return;
+        setConfirmModal({
+            isOpen: false,
+            title: '',
+            message: '',
+            confirmText: 'Delete',
+            variant: 'danger',
+            onConfirm: null,
+        });
+    };
+
+    const handleConfirmAction = async () => {
+        if (!confirmModal.onConfirm) return;
+        setIsConfirmLoading(true);
+        try {
+            await confirmModal.onConfirm();
+            closeConfirmModal();
+        } catch (err) {
+            console.error('Confirm action error:', err);
+        } finally {
+            setIsConfirmLoading(false);
+        }
+    };
+
+    const getFormatTypeColor = (type) => FORMAT_TYPE_COLORS[type] || FORMAT_TYPE_COLORS.default;
 
     const getFormatIcon = (type) => {
         const icons = {
@@ -169,7 +236,7 @@ export default function SubjectManagement() {
             await fetchSubjects(params);
         } catch (error) {
             console.error('❌ [FETCH] Error:', error);
-            showNotification(`Failed to load subjects: ${error.message}`, true);
+            showErrorToast(`Failed to load subjects: ${error.message}`);
         } finally {
             setIsLocalLoading(false);
         }
@@ -224,13 +291,19 @@ export default function SubjectManagement() {
     const handleAddSubject = async (title) => {
         setIsLocalLoading(true);
         try {
-            await createSubject({ title });
-            showNotification(`✅ Successfully added subject "${title}"!`);
-            setIsAddModalOpen(false);
-            resetForm();
-            await fetchFilteredSubjects();
+            const result = await createSubject({ title });
+            if (result.success === true) {
+                console.log("resultMessage", result);
+                setIsAddModalOpen(false);
+                resetForm();
+                await fetchFilteredSubjects();
+                showSuccessModal(
+                    `Successfully added subject "${title}"!`,
+                    'Subject Created!'
+                );
+            }
         } catch (error) {
-            showNotification(`❌ Failed to add subject: ${error.message}`, true);
+            showErrorToast(`Failed to add subject: ${error.message}`);
         } finally {
             setIsLocalLoading(false);
         }
@@ -239,8 +312,9 @@ export default function SubjectManagement() {
     const handleUpdateSubject = async (id, title) => {
         setIsLocalLoading(true);
         try {
-            await updateSubject(id, { title });
-            showNotification(`✅ Successfully updated subject "${title}"!`);
+            const result = await updateSubject(id, { title });
+
+            console.log("resultUpdate", result);
             setIsEditModalOpen(false);
             setEditingId(null);
             resetForm();
@@ -249,29 +323,58 @@ export default function SubjectManagement() {
                 const updated = subjectsData?.find(s => s._id === id);
                 if (updated) setSelectedSubject(mapSubjectToDisplay(updated));
             }
+            showSuccessModal(
+                `Successfully updated subject "${title}"!`,
+                'Subject Updated!'
+            );
         } catch (error) {
-            showNotification(`❌ Failed to update subject: ${error.message}`, true);
+            showErrorToast(`Failed to update subject: ${error.message}`);
         } finally {
             setIsLocalLoading(false);
         }
     };
 
-    const handleDeleteSubject = async (id) => {
+    // ✅ UPDATED: Gumagamit na ng ConfirmationModal
+    const handleDeleteSubject = (id) => {
         const subjectToDelete = subjectsData?.find(s => s._id === id);
         if (!subjectToDelete) return;
-        if (window.confirm(`Are you sure you want to delete "${subjectToDelete.title}"?`)) {
-            setIsLocalLoading(true);
-            try {
-                await deleteSubject(id);
-                showNotification(`Removed "${subjectToDelete.title}" successfully.`);
-                if (selectedSubject && selectedSubject.id === id) setSelectedSubject(null);
-                await fetchFilteredSubjects();
-            } catch (error) {
-                showNotification(`❌ Failed to delete subject: ${error.message}`, true);
-            } finally {
-                setIsLocalLoading(false);
-            }
-        }
+
+        openConfirmModal({
+            title: 'Delete Subject?',
+            message: (
+                <>
+                    Are you sure you want to delete{' '}
+                    <span className="font-semibold text-blue-950">"{subjectToDelete.title}"</span>?
+                    <br />
+                    <span className="text-xs text-rose-600 font-medium">
+                        This action cannot be undone.
+                    </span>
+                </>
+            ),
+            confirmText: 'Delete Subject',
+            variant: 'danger',
+            onConfirm: async () => {
+                setIsLocalLoading(true);
+                try {
+                    const result = await deleteSubject(id);
+                    if (result.success === true) {
+                        if (selectedSubject && selectedSubject.id === id) setSelectedSubject(null);
+                        await fetchFilteredSubjects();
+                        showSuccessModal(
+                            `Removed "${subjectToDelete.title}" successfully.`,
+                            'Subject Deleted!'
+                        );
+                    } else {
+                        throw new Error(result?.message || 'Failed to delete subject.');
+                    }
+                } catch (error) {
+                    showErrorToast(`Failed to delete subject: ${error.message}`);
+                    throw error;
+                } finally {
+                    setIsLocalLoading(false);
+                }
+            },
+        });
     };
 
     // ==================== SEMESTER CREATE HANDLERS ====================
@@ -297,31 +400,17 @@ export default function SubjectManagement() {
 
     const handleOpenCreateSemesterModal = () => {
         if (!selectedSemester || !yearFrom || !yearTo) {
-            showNotification('Please select semester, year from, and year to.', true);
+            showErrorToast('Please select semester, year from, and year to.');
             return;
         }
         if (parseInt(yearTo) <= parseInt(yearFrom)) {
-            showNotification('Year To must be greater than Year From.', true);
+            showErrorToast('Year To must be greater than Year From.');
             return;
         }
         const title = buildSemesterTitle(selectedSemester, yearFrom, yearTo);
         setFormData({ title });
         resetSemesterForm();
         setIsAddModalOpen(true);
-    };
-
-    const handleCreateSemesterDirect = async () => {
-        if (!selectedSemester || !yearFrom || !yearTo) {
-            showNotification('Please select semester, year from, and year to.', true);
-            return;
-        }
-        if (parseInt(yearTo) <= parseInt(yearFrom)) {
-            showNotification('Year To must be greater than Year From.', true);
-            return;
-        }
-        const title = buildSemesterTitle(selectedSemester, yearFrom, yearTo);
-        resetSemesterForm();
-        await handleAddSubject(title);
     };
 
     // ==================== ASSIGN FORMAT OPERATIONS ====================
@@ -345,20 +434,21 @@ export default function SubjectManagement() {
     const handleAssignFormatSubmit = async (e) => {
         e.preventDefault();
         if (!assignSelectedFormatId) {
-            showNotification('Please select a manuscript format.', true);
+            showErrorToast('Please select a manuscript format.');
             return;
         }
         setIsLocalLoading(true);
         try {
             await updateSubject(assignFormatSubject.id, { formatID: assignSelectedFormatId });
             const selectedFormatData = formats?.find(f => f._id === assignSelectedFormatId);
-            showNotification(
-                `✅ Format "${selectedFormatData?.titleFormat || 'Unknown'}" assigned to "${assignFormatSubject.title}"!`
-            );
             closeAssignFormatModal();
             await fetchFilteredSubjects();
+            showSuccessModal(
+                `Format "${selectedFormatData?.titleFormat || 'Unknown'}" assigned to "${assignFormatSubject.title}"!`,
+                'Format Assigned!'
+            );
         } catch (error) {
-            showNotification(`❌ Failed to assign format: ${error.message}`, true);
+            showErrorToast(`Failed to assign format: ${error.message}`);
         } finally {
             setIsLocalLoading(false);
         }
@@ -372,14 +462,33 @@ export default function SubjectManagement() {
             createdAt: new Date().toISOString()
         };
         setSections([...sections, newSection]);
-        showNotification(`✅ Section "${title}" added!`);
+        showSuccessModal(`Section "${title}" added!`, 'Section Created!');
     };
 
+    // ✅ UPDATED: Gumagamit na ng ConfirmationModal
     const handleDeleteSection = (sectionId) => {
-        if (window.confirm('Are you sure you want to delete this section?')) {
-            setSections(sections.filter(s => s.id !== sectionId));
-            showNotification('Section removed.');
-        }
+        const section = sections.find(s => s.id === sectionId);
+        if (!section) return;
+
+        openConfirmModal({
+            title: 'Delete Section?',
+            message: (
+                <>
+                    Are you sure you want to delete{' '}
+                    <span className="font-semibold text-blue-950">"{section.title}"</span>?
+                    <br />
+                    <span className="text-xs text-rose-600 font-medium">
+                        All items inside this section will also be removed.
+                    </span>
+                </>
+            ),
+            confirmText: 'Delete Section',
+            variant: 'danger',
+            onConfirm: async () => {
+                setSections(prev => prev.filter(s => s.id !== sectionId));
+                showSuccessModal(`Section "${section.title}" removed.`, 'Section Deleted!');
+            },
+        });
     };
 
     // ==================== FORM HANDLERS ====================
@@ -391,7 +500,7 @@ export default function SubjectManagement() {
     const handleAddSubmit = (e) => {
         e.preventDefault();
         if (!formData.title.trim()) {
-            showNotification('Please enter a subject title.', true);
+            showErrorToast('Please enter a subject title.');
             return;
         }
         handleAddSubject(formData.title.trim());
@@ -400,7 +509,7 @@ export default function SubjectManagement() {
     const handleEditSubmit = (e) => {
         e.preventDefault();
         if (!formData.title.trim()) {
-            showNotification('Please enter a subject title.', true);
+            showErrorToast('Please enter a subject title.');
             return;
         }
         if (editingId) handleUpdateSubject(editingId, formData.title.trim());
@@ -417,23 +526,21 @@ export default function SubjectManagement() {
         setSelectedSubject(subject);
         setSections(subject.sections || []);
         setViewMode('sections');
-        setIsInGroupsView(false); // ✅ Reset kapag bagong open
+        setIsInGroupsView(false);
     };
 
     const goBackToList = () => {
         setSelectedSubject(null);
         setSections([]);
         setViewMode('sections');
-        setIsInGroupsView(false); // ✅ Reset pagbalik sa list
+        setIsInGroupsView(false);
     };
 
-    // ✅ UPDATED: Handle view mode change at i-hide ang header kapag Classes/Groups
     const handleViewModeChange = (mode) => {
         setViewMode(mode);
         setIsInGroupsView(mode === 'groups' || mode === 'classes');
     };
 
-    // ✅ NEW: Callback mula sa SubjectSections para sa groups/classes view changes
     const handleGroupsViewChange = (inGroups) => {
         setIsInGroupsView(inGroups);
     };
@@ -494,7 +601,7 @@ export default function SubjectManagement() {
     const filteredAssignFormats = (formats || []).filter((format) => {
         const matchesSearch = assignFormatSearchTerm
             ? format.titleFormat?.toLowerCase().includes(assignFormatSearchTerm.toLowerCase()) ||
-              format.description?.toLowerCase().includes(assignFormatSearchTerm.toLowerCase())
+            format.description?.toLowerCase().includes(assignFormatSearchTerm.toLowerCase())
             : true;
         const matchesType = assignFormatTypeFilter === 'All' || format.type === assignFormatTypeFilter;
         return matchesSearch && matchesType;
@@ -508,15 +615,15 @@ export default function SubjectManagement() {
             <div className="min-h-screen bg-gradient-to-b from-blue-100 via-blue-50 to-sky-50 text-blue-900 p-4 md:p-8 font-sans">
                 <div className="max-w-7xl mx-auto space-y-6">
 
-                    {/* Toast */}
-                    {toastMessage && (
-                        <div className={`fixed top-5 right-5 z-50 flex items-center gap-3 px-4 py-3 text-white text-xs font-medium rounded-xl shadow-2xl animate-slide-in ${toastMessage.isError ? 'bg-red-600' : 'bg-blue-900'}`}>
-                            <CheckCircle2 className={`w-4 h-4 ${toastMessage.isError ? 'text-red-200' : 'text-yellow-300'}`} />
+                    {/* ✅ Error Toast lang */}
+                    {toastMessage && toastMessage.isError && (
+                        <div className="fixed top-5 right-5 z-50 flex items-center gap-3 px-4 py-3 text-white text-xs font-medium rounded-xl shadow-2xl animate-slide-in bg-red-600">
+                            <CheckCircle2 className="w-4 h-4 text-red-200" />
                             <span>{toastMessage.msg}</span>
                         </div>
                     )}
 
-                    {/* ✅ Header — HINDI na ipapakita kahit sa Sections view. Nakikita lang ito sa Manage Course (main list) */}
+                    {/* Header — hidden */}
                     {false && (
                         <header className="bg-white rounded-2xl border border-blue-200 shadow-md shadow-blue-900/10 p-6">
                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -567,13 +674,33 @@ export default function SubjectManagement() {
                         onDeleteSection={handleDeleteSection}
                         onSectionCreated={(newSection) => {
                             setSections(prev => [...prev, newSection]);
-                            showNotification(`✅ Section "${newSection.title}" added!`);
+                            showSuccessModal(`Section "${newSection.title}" added!`, 'Section Created!');
                         }}
                         onViewModeChange={handleViewModeChange}
                         viewMode={viewMode}
                         onGroupsViewChange={handleGroupsViewChange}
                     />
                 </div>
+
+                {/* ✅ Success Modal */}
+                <SuccessModal
+                    isOpen={successModal.isOpen}
+                    onClose={closeSuccessModal}
+                    title={successModal.title}
+                    message={successModal.message}
+                />
+
+                {/*Confirmation Modal */}
+                <ConfirmationModal
+                    isOpen={confirmModal.isOpen}
+                    onClose={closeConfirmModal}
+                    onConfirm={handleConfirmAction}
+                    title={confirmModal.title}
+                    message={confirmModal.message}
+                    confirmText={confirmModal.confirmText}
+                    variant={confirmModal.variant}
+                    isLoading={isConfirmLoading}
+                />
 
                 {/* Edit Modal */}
                 {isEditModalOpen && (
@@ -637,15 +764,15 @@ export default function SubjectManagement() {
         <div className="min-h-screen bg-gradient-to-b from-blue-100 via-blue-50 to-sky-50 text-blue-900 p-4 md:p-8 font-sans">
             <div className="max-w-7xl mx-auto space-y-6">
 
-                {/* Toast */}
-                {toastMessage && (
-                    <div className={`fixed top-5 right-5 z-50 flex items-center gap-3 px-4 py-3 text-white text-xs font-medium rounded-xl shadow-2xl animate-slide-in ${toastMessage.isError ? 'bg-red-600' : 'bg-blue-900'}`}>
-                        <CheckCircle2 className={`w-4 h-4 ${toastMessage.isError ? 'text-red-200' : 'text-yellow-300'}`} />
+                {/* ✅ Error Toast lang */}
+                {toastMessage && toastMessage.isError && (
+                    <div className="fixed top-5 right-5 z-50 flex items-center gap-3 px-4 py-3 text-white text-xs font-medium rounded-xl shadow-2xl animate-slide-in bg-red-600">
+                        <CheckCircle2 className="w-4 h-4 text-red-200" />
                         <span>{toastMessage.msg}</span>
                     </div>
                 )}
 
-                {/* ✅ Header — IPAPAKITA LANG DITO SA MANAGE COURSE (main list) */}
+                {/* Header */}
                 <header className="bg-white rounded-2xl border border-blue-200 shadow-md shadow-blue-900/10 p-6">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div className="flex items-center gap-4">
@@ -771,7 +898,7 @@ export default function SubjectManagement() {
                                             className="px-3 py-1.5 text-xs font-semibold text-blue-950 bg-yellow-400 hover:bg-yellow-300 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
                                             Create
-                                        </button>
+                                                                               </button>
                                     </div>
                                 </div>
                             )}
@@ -827,7 +954,7 @@ export default function SubjectManagement() {
                     <>
                         {subjectList.length > 0 ? (
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                                {subjectList.map((subject, index) => {
+                                {subjectList.map((subject) => {
                                     const formatType = subject.formatType;
                                     const typeColors = getFormatTypeColor(formatType);
                                     const FormatIcon = getFormatIcon(formatType);
@@ -1013,6 +1140,26 @@ export default function SubjectManagement() {
                 )}
             </div>
 
+            {/* ✅ Success Modal */}
+            <SuccessModal
+                isOpen={successModal.isOpen}
+                onClose={closeSuccessModal}
+                title={successModal.title}
+                message={successModal.message}
+            />
+
+            {/* ✅ Confirmation Modal */}
+            <ConfirmationModal
+                isOpen={confirmModal.isOpen}
+                onClose={closeConfirmModal}
+                onConfirm={handleConfirmAction}
+                title={confirmModal.title}
+                message={confirmModal.message}
+                confirmText={confirmModal.confirmText}
+                variant={confirmModal.variant}
+                isLoading={isConfirmLoading}
+            />
+
             {/* Assign Format Modal */}
             {isAssignFormatModalOpen && assignFormatSubject && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-blue-950/60 backdrop-blur-sm animate-fadeIn">
@@ -1087,11 +1234,10 @@ export default function SubjectManagement() {
                                                 return (
                                                     <label
                                                         key={format._id}
-                                                        className={`flex items-start gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${
-                                                            isSelected
-                                                                ? `${typeColors.border} ${typeColors.bg} ring-2 ring-offset-1 ring-yellow-400`
-                                                                : 'border-blue-200 hover:border-blue-300 hover:bg-blue-50'
-                                                        }`}
+                                                        className={`flex items-start gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${isSelected
+                                                            ? `${typeColors.border} ${typeColors.bg} ring-2 ring-offset-1 ring-yellow-400`
+                                                            : 'border-blue-200 hover:border-blue-300 hover:bg-blue-50'
+                                                            }`}
                                                     >
                                                         <input
                                                             type="radio"
@@ -1263,3 +1409,4 @@ export default function SubjectManagement() {
         </div>
     );
 }
+                                   

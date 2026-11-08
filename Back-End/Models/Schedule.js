@@ -57,6 +57,21 @@ const defenseAssignmentSchema = new mongoose.Schema(
             trim: true,
             maxlength: 200,
         },
+        activityType: {
+            type: String,
+            required: true,
+            trim: true,
+            enum: {
+                values: [
+                    'Pre-Oral Defense',
+                    'Final Defense',
+                    'Revision Review',
+                    'Mentoring Session',
+                ],
+                message: '{VALUE} is not a supported activity type',
+            },
+            default: 'Pre-Oral Defense',
+        },
         startTime: {
             type: String,
             required: true,
@@ -343,17 +358,17 @@ defenseAssignmentSchema.pre('save', function (next) {
             const found = existing.get(String(id));
             return found
                 ? {
-                      panelistId: id,
-                      status: found.status || 'pending',
-                      notes: found.notes || '',
-                      respondedAt: found.respondedAt || null,
-                  }
+                    panelistId: id,
+                    status: found.status || 'pending',
+                    notes: found.notes || '',
+                    respondedAt: found.respondedAt || null,
+                }
                 : {
-                      panelistId: id,
-                      status: 'pending',
-                      notes: '',
-                      respondedAt: null,
-                  };
+                    panelistId: id,
+                    status: 'pending',
+                    notes: '',
+                    respondedAt: null,
+                };
         });
     } else if (this.isModified('panelistIds')) {
         // Keep only panelists na nasa panelistIds
@@ -364,17 +379,17 @@ defenseAssignmentSchema.pre('save', function (next) {
             const found = existing.get(String(id));
             return found
                 ? {
-                      panelistId: id,
-                      status: found.status || 'pending',
-                      notes: found.notes || '',
-                      respondedAt: found.respondedAt || null,
-                  }
+                    panelistId: id,
+                    status: found.status || 'pending',
+                    notes: found.notes || '',
+                    respondedAt: found.respondedAt || null,
+                }
                 : {
-                      panelistId: id,
-                      status: 'pending',
-                      notes: '',
-                      respondedAt: null,
-                  };
+                    panelistId: id,
+                    status: 'pending',
+                    notes: '',
+                    respondedAt: null,
+                };
         });
     }
     next();

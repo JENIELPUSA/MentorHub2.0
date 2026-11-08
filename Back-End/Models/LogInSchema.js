@@ -1,8 +1,6 @@
 const mongoose = require("mongoose");
-const validator = require("validator");
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
-const { type } = require("os");
 
 const UserLoginSchema = new mongoose.Schema({
   avatar: {
@@ -46,52 +44,65 @@ const UserLoginSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
   status: { type: String, enum: ["Active", "In-Active"], default: "Active" },
+
+  // ── confirmPassword: client-side only, optional, never stored ──
   confirmPassword: {
     type: String,
-    require: [true, "Please confirm your password"],
+    required: false,
+    select: false,
     validate: {
       validator: function (val) {
-        return (val = this.password);
+        // Only validate if a value was actually provided
+        if (val === undefined || val === null || val === "") return true;
+        return val === this.password;
       },
-      message: "Password & confirm Pasword does not match",
+      message: "Password & confirm Password does not match",
     },
   },
+
   theme: {
     type: String,
     enum: ["light", "dark"],
     default: "light",
   },
+
+  // ── ARRAY of switchable roles ──
+  multiplerole: {
+    type: [String],
+    enum: ["panelist", "adviser"],
+    default: [],
+  },
+
   passwordChangedAt: Date,
   passwordResetToken: String,
   passwordResetTokenExpires: Date,
 });
+UserLoginSchema.pre("validate", function (next) {
+  if (!Array.isArray(this.multiplerole)) {
+    this.multiplerole = [];
+  }
 
-// ==========================================
-// PRE-SAVE: Hash password and remove confirmPassword
-// ==========================================
-UserLoginSchema.pre("save", async function (next) {
-  if (!this.isModified("password")) return next();
+  if (
+    (this.role === "adviser" || this.role === "panelist") &&
+    !this.multiplerole.includes(this.role)
+  ) {
+    this.multiplerole.push(this.role);
+  }
 
-  this.password = await bcrypt.hash(this.password, 12);
-  this.confirmPassword = undefined;
-
+  this.multiplerole = [...new Set(this.multiplerole)];
   next();
 });
 
-// ==========================================
-// PRE-SAVE: Handle Guest role
-// ==========================================
-UserLoginSchema.pre("save", function (next) {
-  if (this.role === "Guest") {
-    this.password = undefined;
-  }
+UserLoginSchema.pre("save", async function (next) {
+  if (!this.isModified("password")) return next();
+  this.password = await bcrypt.hash(this.password, 12);
+  this.confirmPassword = undefined;
   next();
 });
 
 // ==========================================
 // INSTANCE METHODS
 // ==========================================
-
 UserLoginSchema.methods.comparePasswordInDb = async function (pswd, pswdDB) {
   return await bcrypt.compare(pswd, pswdDB);
 };
@@ -109,25 +120,47 @@ UserLoginSchema.methods.isPasswordChanged = async function (JWTTimestamp) {
 
 UserLoginSchema.methods.createResetTokenPassword = function () {
   const resetToken = crypto.randomBytes(32).toString("hex");
-
   this.passwordResetToken = crypto
     .createHash("sha256")
     .update(resetToken)
     .digest("hex");
-  this.passwordResetTokenExpires = Date.now() + 10 * 60 * 1000; // Token valid for 10 minutes
-
+  this.passwordResetTokenExpires = Date.now() + 10 * 60 * 1000;
   return resetToken;
 };
 
+UserLoginSchema.methods.switchRole = function (targetRole) {
+  if (!targetRole) throw new Error("Target role is required.");
+  const target = String(targetRole).toLowerCase();
 
-// Find active users
+  if (!this.multiplerole.includes(target)) {
+    throw new Error(
+      `You are not allowed to switch to "${target}". Allowed: ${this.multiplerole.join(", ") || "none"}`,
+    );
+  }
+  if (this.role === target) {
+    throw new Error(`You are already acting as "${target}".`);
+  }
+  this.role = target;
+  return this.role;
+};
+
+UserLoginSchema.methods.availableSwitchRoles = function () {
+  return this.multiplerole.filter((r) => r !== this.role);
+};
+
+// ==========================================
+// STATICS
+// ==========================================
 UserLoginSchema.statics.findActive = function () {
   return this.find({ status: "Active" });
 };
 
-
+// ==========================================
+// INDEXES
+// ==========================================
 UserLoginSchema.index({ username: 1 });
 UserLoginSchema.index({ role: 1 });
 UserLoginSchema.index({ status: 1 });
+UserLoginSchema.index({ multiplerole: 1 });
 
 module.exports = mongoose.model("UserLoginSchema", UserLoginSchema);

@@ -47,15 +47,15 @@ const NotificationSchema = new mongoose.Schema(
                 "ProposedTitleCreated",
                 "ProposedTitleUpdated",
                 "ProposedTitleApproved",
-                "ProposedTitleRejected",
-
+                "ProposedTitleRejected","DefenseAssignmentCreated",
                 // Maintenance
-                "MaintenanceRequest",
+                "MaintenanceRequest", "GroupConfirmed",
                 "AssignedTechnician",
                 "ReassignedTechnician",
                 "MaintenanceStarted",
                 "MaintenanceCompleted",
                 "MaintenanceCancelled",
+                "proposedTitle:created",
 
                 // Equipment
                 "EquipmentAssigned",
@@ -129,10 +129,7 @@ const NotificationSchema = new mongoose.Schema(
                 "ProposedTitle",
                 "RequestMaintenance",
                 "MaintenanceRequest",
-                "Equipment",
-                "Leave",
-                "Booking",
-                "Order",
+                "DefenseAssignment",
             ],
         },
 

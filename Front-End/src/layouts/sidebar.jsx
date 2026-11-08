@@ -32,13 +32,13 @@ export const Sidebar = forwardRef(({ collapsed, onLogout }, ref) => {
             "/dashboard/Add-User",
             "/dashboard/Add-Subject",
             "/dashboard/archived",
-            "/dashboard/logs-audit", "/dashboard/my-researchGroups","/dashboard/proposedTopics", "/dashboard/defense-calendar","/dashboard/propose-title",
+            "/dashboard/logs-audit", "/dashboard/my-researchGroups", "/dashboard/defense-calendar","/dashboard/propose-title",
             
         ],
         panelist: [
             "/dashboard",
             "/dashboard/my-researchGroups",
-            "/dashboard/defense-calendar", "/dashboard/proposedTopics",
+            "/dashboard/defense-calendar",
         ],
         subject_instructor: [
             "/dashboard",

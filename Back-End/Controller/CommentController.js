@@ -7,14 +7,12 @@ const mongoose = require("mongoose");
 // CONSTANTS
 // ============================================================
 const VALID_ANNOTATION_TYPES = [
-    // ✅ Frontend types (PDF viewer)
     "highlight",
     "comment",
     "margin",
     "page",
     "region",
     "global",
-    // ✅ Backend-specific types
     "text",
     "wrong_margin",
     "wrong_font",
@@ -25,6 +23,7 @@ const VALID_ANNOTATION_TYPES = [
     "wrong_size",
     "grammar",
     "other",
+    "proceedings",   // ⭐ valid pa rin — pero may dedicated endpoint
 ];
 
 const VALID_SEVERITIES = ["info", "minor", "major", "critical"];
@@ -41,6 +40,10 @@ const VALID_ROLES = [
 
 const HEX_REGEX = /^#[0-9A-Fa-f]{6}$/;
 const USER_POPULATE = "first_name last_name id_number profilePicture role";
+
+// ⭐ Reusable filters
+const PROCEEDINGS_TYPE = "proceedings";
+const NON_PROCEEDINGS_FILTER = { annotationType: { $ne: PROCEEDINGS_TYPE } };
 
 // ============================================================
 // HELPERS
@@ -144,13 +147,12 @@ const errorResponse = (res, status, message, extra = {}) => {
 };
 
 // ============================================================
-// ✅ Centralized error handler for controllers
+// ✅ Centralized error handler
 // ============================================================
 const handleControllerError = (error, res, controllerName = "controller") => {
     console.error(`❌ ${controllerName} error:`, error);
     if (error.stack) console.error("   Stack:", error.stack);
 
-    // Mongoose ValidationError
     if (error.name === "ValidationError") {
         const messages = Object.values(error.errors).map((e) => e.message);
         return errorResponse(
@@ -161,30 +163,22 @@ const handleControllerError = (error, res, controllerName = "controller") => {
         );
     }
 
-    // Mongoose CastError (invalid ObjectId)
     if (error.name === "CastError") {
-        return errorResponse(
-            res,
-            400,
-            `Invalid ${error.path}: ${error.value}`
-        );
+        return errorResponse(res, 400, `Invalid ${error.path}: ${error.value}`);
     }
 
-    // Mongoose BulkWriteError
     if (error.name === "BulkWriteError" || error.name === "MongoBulkWriteError") {
         return errorResponse(res, 400, "Bulk write failed", {
             writeErrors: error.writeErrors?.map((e) => e.errmsg),
         });
     }
 
-    // Duplicate key
     if (error.code === 11000) {
         return errorResponse(res, 409, "Duplicate entry", {
             keyValue: error.keyValue,
         });
     }
 
-    // Generic
     return errorResponse(
         res,
         error.statusCode || 500,
@@ -192,12 +186,13 @@ const handleControllerError = (error, res, controllerName = "controller") => {
     );
 };
 
-
-
+// ============================================================
+// CREATE COMMENT
+// ============================================================
 exports.createComment = AsyncErrorHandler(async (req, res) => {
     try {
         const {
-            proposedTitleId,      // Parent ProposedTitle._id or any tracking ID
+            proposedTitleId,
             text,
             pageNumber,
             position,
@@ -221,7 +216,6 @@ exports.createComment = AsyncErrorHandler(async (req, res) => {
             return errorResponse(res, 400, "text is required");
         }
 
-        // ✅ Find the parent ProposedTitle (accepts both parent _id and tracking _id)
         const proposedTitle = await findProposedTitleByTrackingId(proposedTitleId);
         if (!proposedTitle) {
             return errorResponse(
@@ -231,7 +225,6 @@ exports.createComment = AsyncErrorHandler(async (req, res) => {
             );
         }
 
-        // ✅ Get LATEST tracking entry from titleUrlTracking
         const latestTracking = getLatestTracking(proposedTitle);
 
         if (!latestTracking) {
@@ -297,12 +290,9 @@ exports.createComment = AsyncErrorHandler(async (req, res) => {
             sanitizedParentId = parentCommentId;
         }
 
-        // ============================================================
-        // 1️⃣ CREATE THE COMMENT
-        // ============================================================
         const comment = await Comment.create({
-            proposedTitleId: latestTracking._id,         // tracking entry ID (para sa PDF annotations)
-            parentProposedTitleId: proposedTitle._id,    // parent doc ID
+            proposedTitleId: latestTracking._id,
+            parentProposedTitleId: proposedTitle._id,
             userId,
             text: String(text).trim(),
             pageNumber: sanitizedPageNumber,
@@ -315,58 +305,46 @@ exports.createComment = AsyncErrorHandler(async (req, res) => {
                 : null,
             severity: severity || "minor",
             authorRole: authorRole || null,
-            parentCommentId: sanitizedParentId,          // ⚠️ dapat sanitizedParentId, hindi req.user._id
+            parentCommentId: sanitizedParentId,
             documentTrackingId: latestTracking._id,
             documentUrl: latestTracking.url,
         });
 
-        // ============================================================
-        // 2️⃣ ⭐ MATCH LOGIC — Compare latestTracking._id vs proposedTitleId
-        //     Kung may nag-match na tracking entry at may comment,
-        //     i-set ang ProposedTitle.status = "Revision"
-        // ============================================================
+        // ⭐ Skip "Revision" status update if it's a proceedings entry
         let statusUpdated = false;
         try {
-            const commentTrackingId = String(latestTracking._id);
-            const incomingProposedTitleId = String(proposedTitleId);
+            const currentStatus = (proposedTitle.status || "").toLowerCase();
+            const isAlreadyRevision = currentStatus === "revision";
+            const isProceedingsEntry = annotationType === PROCEEDINGS_TYPE;
 
-            // I-match sa lahat ng tracking entries kung may match
             const matchedTracking = (proposedTitle.titleUrlTracking || []).find(
-                (t) => String(t._id) === commentTrackingId
+                (t) => String(t._id) === String(latestTracking._id)
             );
 
-            // ⭐ Kung may match na tracking entry (meaning may comment sa chapter)
-            //    AT hindi pa "Revision" ang status — i-update
-            const currentStatus = (proposedTitle.status || '').toLowerCase();
-            const isAlreadyRevision = currentStatus === 'revision';
-
-            const shouldBecomeRevision = matchedTracking && !isAlreadyRevision;
+            const shouldBecomeRevision =
+                matchedTracking && !isAlreadyRevision && !isProceedingsEntry;
 
             if (shouldBecomeRevision) {
-                // Preserve terminal states — huwag galawin kung Done/Ready for Defense
-                const isTerminal = ['done', 'ready for defense', 'rejected'].includes(currentStatus);
+                const isTerminal = ["done", "ready for defense", "rejected"].includes(
+                    currentStatus
+                );
 
                 if (!isTerminal) {
-                    proposedTitle.status = 'Revision';
+                    proposedTitle.status = "Revision";
                     proposedTitle.isRevesion = true;
-
-                    // Reset mentor approval flags para kailangan nilang i-review ulit
                     proposedTitle.adviser = false;
                     proposedTitle.coAdviser = false;
                     proposedTitle.adviserReady = false;
                     proposedTitle.coAdviserReady = false;
-
-                    // Timestamp ng revision request
                     proposedTitle.revisionRequestedAt = new Date();
 
                     await proposedTitle.save();
                     statusUpdated = true;
 
                     console.log(
-                        `✅ Comment on tracking ${commentTrackingId} → ProposedTitle ${proposedTitle._id} status set to "Revision"`
+                        `✅ Comment on tracking ${latestTracking._id} → ProposedTitle ${proposedTitle._id} status set to "Revision"`
                     );
 
-                    // Optional: emit socket event kung may io sa app
                     const io = req.app.get("io");
                     if (io) {
                         io.emit("ProposedTitleStatusChanged", {
@@ -377,24 +355,18 @@ exports.createComment = AsyncErrorHandler(async (req, res) => {
                             trackingId: latestTracking._id,
                         });
                     }
-                } else {
-                    console.log(
-                        `ℹ️ ProposedTitle ${proposedTitle._id} in terminal state "${currentStatus}" — status NOT changed`
-                    );
                 }
+            } else if (isProceedingsEntry) {
+                console.log(`ℹ️ Proceedings entry — status NOT changed`);
             } else if (isAlreadyRevision) {
                 console.log(
                     `ℹ️ ProposedTitle ${proposedTitle._id} already in "Revision" status — no change needed`
                 );
             }
         } catch (statusErr) {
-            // Huwag i-fail ang buong request kung status update lang ang nag-error
             console.error("⚠️ Failed to update ProposedTitle status:", statusErr.message);
         }
 
-        // ============================================================
-        // 3️⃣ POPULATE AND RETURN
-        // ============================================================
         const populatedComment = await Comment.findById(comment._id)
             .populate("userId", USER_POPULATE)
             .lean();
@@ -489,7 +461,7 @@ exports.bulkCreateComments = AsyncErrorHandler(async (req, res) => {
 
 // ============================================================
 // GET COMMENTS BY PROPOSED TITLE (paginated)
-// Returns only comments for the LATEST titleUrlTracking version
+// ⭐ INCLUDE proceedings by default — frontend ang mag-se-separate
 // ============================================================
 exports.getCommentsByProposedTitle = AsyncErrorHandler(async (req, res) => {
     try {
@@ -498,14 +470,13 @@ exports.getCommentsByProposedTitle = AsyncErrorHandler(async (req, res) => {
         console.log("🔍 Fetching comments for:", proposedTitleId);
 
         const page = Math.max(1, parseInt(req.query.page) || 1);
-        const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 10));
+        const limit = Math.min(1000, Math.max(1, parseInt(req.query.limit) || 200)); // ⭐ higher default
         const skip = (page - 1) * limit;
 
         if (!mongoose.Types.ObjectId.isValid(proposedTitleId)) {
             return errorResponse(res, 400, "Invalid proposedTitleId format");
         }
 
-        // ✅ Find parent ProposedTitle (accepts parent _id OR tracking _id)
         const proposedTitle = await findProposedTitleByTrackingId(proposedTitleId);
         if (!proposedTitle) {
             return errorResponse(
@@ -515,7 +486,6 @@ exports.getCommentsByProposedTitle = AsyncErrorHandler(async (req, res) => {
             );
         }
 
-        // ✅ Get the LATEST tracking entry
         const latestTracking = getLatestTracking(proposedTitle);
         if (!latestTracking) {
             return errorResponse(
@@ -525,15 +495,16 @@ exports.getCommentsByProposedTitle = AsyncErrorHandler(async (req, res) => {
             );
         }
 
-        console.log("═══════════════════════════════════════");
-        console.log("📄 Parent ProposedTitle._id:", proposedTitle._id);
-        console.log("🎯 Latest tracking._id:", latestTracking._id);
-        console.log("📅 Latest tracking.date:", latestTracking.date);
-        console.log("📎 Latest tracking.url:", latestTracking.url);
-        console.log("═══════════════════════════════════════");
-
-        // ✅ Direct match — comments where proposedTitleId = latest tracking._id
+        // ⭐ Base filter — INCLUDE LAHAT by default
         const filter = { proposedTitleId: latestTracking._id };
+
+        // ⭐ Optional filters (opt-in lang)
+        if (req.query.onlyProceedings === "true") {
+            filter.annotationType = PROCEEDINGS_TYPE;
+        } else if (req.query.excludeProceedings === "true") {
+            filter.annotationType = { $ne: PROCEEDINGS_TYPE };
+        }
+        // ⭐ Walang query → include LAHAT (feedback + proceedings)
 
         if (req.query.pageNumber) {
             const p = parseInt(req.query.pageNumber);
@@ -579,7 +550,56 @@ exports.getCommentsByProposedTitle = AsyncErrorHandler(async (req, res) => {
 });
 
 // ============================================================
+// ⭐ GET PROCEEDINGS ONLY
+// GET /api/comments/:proposedTitleId/proceedings
+// ============================================================
+exports.getProceedingsByProposedTitle = AsyncErrorHandler(async (req, res) => {
+    try {
+        const { proposedTitleId } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(proposedTitleId)) {
+            return errorResponse(res, 400, "Invalid proposedTitleId format");
+        }
+
+        const proposedTitle = await findProposedTitleByTrackingId(proposedTitleId);
+        if (!proposedTitle) {
+            return errorResponse(
+                res,
+                404,
+                `Proposed title not found for ID: ${proposedTitleId}`
+            );
+        }
+
+        const latestTracking = getLatestTracking(proposedTitle);
+        if (!latestTracking) {
+            return errorResponse(
+                res,
+                400,
+                "No titleUrlTracking entries found for this proposed title"
+            );
+        }
+
+        const proceedings = await Comment.find({
+            proposedTitleId: latestTracking._id,
+            annotationType: PROCEEDINGS_TYPE,
+        })
+            .populate("userId", USER_POPULATE)
+            .sort({ createdAt: -1 })   // pinakabago sa taas
+            .lean();
+
+        return res.status(200).json({
+            status: "success",
+            count: proceedings.length,
+            data: proceedings,
+        });
+    } catch (error) {
+        return handleControllerError(error, res, "getProceedingsByProposedTitle");
+    }
+});
+
+// ============================================================
 // GET ALL ANNOTATIONS FOR THESIS (grouped + stats)
+// ⭐ EXCLUDES proceedings by default
 // ============================================================
 exports.getAllAnnotationsByThesis = AsyncErrorHandler(async (req, res) => {
     try {
@@ -598,7 +618,11 @@ exports.getAllAnnotationsByThesis = AsyncErrorHandler(async (req, res) => {
             );
         }
 
-        const comments = await Comment.find({ proposedTitleId: proposedTitle._id })
+        // ⭐ Exclude proceedings from annotation stats/list
+        const comments = await Comment.find({
+            proposedTitleId: proposedTitle._id,
+            annotationType: { $ne: PROCEEDINGS_TYPE },
+        })
             .populate("userId", USER_POPULATE)
             .populate("resolvedBy", "first_name last_name role")
             .sort({ pageNumber: 1, createdAt: 1 })
@@ -640,6 +664,7 @@ exports.getAllAnnotationsByThesis = AsyncErrorHandler(async (req, res) => {
 
 // ============================================================
 // GET ANNOTATIONS BY PAGE
+// ⭐ EXCLUDES proceedings (walang page ang proceedings)
 // ============================================================
 exports.getAnnotationsByPage = AsyncErrorHandler(async (req, res) => {
     try {
@@ -672,6 +697,7 @@ exports.getAnnotationsByPage = AsyncErrorHandler(async (req, res) => {
             proposedTitleId: proposedTitle._id,
             pageNumber: p,
             position: { $ne: null },
+            annotationType: { $ne: PROCEEDINGS_TYPE },
         })
             .populate("userId", USER_POPULATE)
             .sort({ createdAt: 1 })
@@ -689,7 +715,7 @@ exports.getAnnotationsByPage = AsyncErrorHandler(async (req, res) => {
 });
 
 // ============================================================
-// GET STATS (lightweight)
+// GET STATS (lightweight) — excluding proceedings
 // ============================================================
 exports.getAnnotationStats = AsyncErrorHandler(async (req, res) => {
     try {
@@ -709,10 +735,14 @@ exports.getAnnotationStats = AsyncErrorHandler(async (req, res) => {
         }
 
         const [total, unresolved] = await Promise.all([
-            Comment.countDocuments({ proposedTitleId: proposedTitle._id }),
+            Comment.countDocuments({
+                proposedTitleId: proposedTitle._id,
+                annotationType: { $ne: PROCEEDINGS_TYPE },
+            }),
             Comment.countDocuments({
                 proposedTitleId: proposedTitle._id,
                 isResolved: false,
+                annotationType: { $ne: PROCEEDINGS_TYPE },
             }),
         ]);
 
@@ -760,7 +790,7 @@ exports.getCommentById = AsyncErrorHandler(async (req, res) => {
 });
 
 // ============================================================
-// GET COUNT (lightweight badge)
+// GET COUNT (lightweight badge) — excluding proceedings
 // ============================================================
 exports.getCommentCount = AsyncErrorHandler(async (req, res) => {
     try {
@@ -781,6 +811,7 @@ exports.getCommentCount = AsyncErrorHandler(async (req, res) => {
 
         const count = await Comment.countDocuments({
             proposedTitleId: proposedTitle._id,
+            annotationType: { $ne: PROCEEDINGS_TYPE },
         });
 
         return res.status(200).json({ status: "success", count });
@@ -958,7 +989,7 @@ exports.deleteComment = AsyncErrorHandler(async (req, res) => {
 });
 
 // ============================================================
-// CLEAR PAGE (bulk delete by page)
+// CLEAR PAGE (bulk delete by page) — excludes proceedings
 // ============================================================
 exports.clearPage = AsyncErrorHandler(async (req, res) => {
     try {
@@ -985,6 +1016,7 @@ exports.clearPage = AsyncErrorHandler(async (req, res) => {
         const result = await Comment.deleteMany({
             proposedTitleId: proposedTitle._id,
             pageNumber: p,
+            annotationType: { $ne: PROCEEDINGS_TYPE },
         });
 
         return res.status(200).json({

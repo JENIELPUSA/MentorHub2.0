@@ -17,10 +17,30 @@ import {
     Layers,
     Pencil,
     Trash2,
+    Tag,
 } from 'lucide-react';
 
 import { ScheduleContext } from '../../contexts/ScheduleContext/ScheduleContext';
 import { GroupContext } from '../../contexts/GroupNameContext/GroupNameContext';
+
+// ============================================================
+// ACTIVITY TYPE CONSTANTS  ← must mirror backend enum
+// ============================================================
+const ACTIVITY_TYPES = [
+    'Pre-Oral Defense',
+    'Final Defense',
+    'Revision Review',
+    'Mentoring Session',
+];
+
+const ACTIVITY_TYPE_COLORS = {
+    'Pre-Oral Defense': '#7C3AED',
+    'Final Defense': '#059669',
+    'Revision Review': '#E11D48',
+    'Mentoring Session': '#0D9488',
+};
+
+const DEFAULT_ACTIVITY_TYPE = 'Pre-Oral Defense';
 
 // ============================================================
 // LOCAL CONSTANTS
@@ -33,11 +53,11 @@ const MONTH_NAMES = [
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 const INITIAL_CALENDAR_EVENTS = [
-    { id: 1, title: 'Thesis Defense - Group Alpha', date: '2025-01-15', time: '9:00 AM - 11:00 AM', type: 'defense', location: 'Room 301, Main Building', description: 'Final defense for Group Alpha research project', color: '#1E3A8A', panelists: ['Dr. Jose Rizal', 'Dr. Andres Bonifacio'], groups: ['Group Alpha'], attendees: ['Juan Dela Cruz', 'Maria Santos', 'Pedro Reyes'] },
+    { id: 1, title: 'Thesis Defense - Group Alpha', date: '2025-01-15', time: '9:00 AM - 11:00 AM', type: 'defense', activityType: 'Final Defense', location: 'Room 301, Main Building', description: 'Final defense for Group Alpha research project', color: '#1E3A8A', panelists: ['Dr. Jose Rizal', 'Dr. Andres Bonifacio'], groups: ['Group Alpha'], attendees: ['Juan Dela Cruz', 'Maria Santos', 'Pedro Reyes'] },
     { id: 2, title: 'Adviser Consultation', date: '2025-01-16', time: '2:00 PM - 3:30 PM', type: 'consultation', location: 'Faculty Office 205', description: 'One-on-one consultation with Group Beta', color: '#FBBF24', panelists: ['Prof. Emilio Aguinaldo'], groups: ['Group Beta'], attendees: ['Ana Garcia', 'Carlos Mendoza'] },
     { id: 3, title: 'Chapter 3 Submission Deadline', date: '2025-01-20', time: '11:59 PM', type: 'deadline', location: 'Online Submission Portal', description: 'Deadline for Chapter 3 - Methodology', color: '#EF4444', panelists: ['Dr. Apolinario Mabini'], groups: ['All Groups'], attendees: ['All Groups'] },
     { id: 4, title: 'Research Meeting', date: '2025-01-22', time: '10:00 AM - 12:00 PM', type: 'meeting', location: 'Conference Room A', description: 'Monthly research progress meeting', color: '#10B981', panelists: ['Prof. Marcelo del Pilar', 'Dr. Gabriela Silang'], groups: ['All Groups'], attendees: ['All Advisers', 'Group Leaders'] },
-    { id: 5, title: 'Proposal Defense - Group Gamma', date: '2025-01-25', time: '1:00 PM - 3:00 PM', type: 'defense', location: 'Auditorium', description: 'Proposal defense for Group Gamma', color: '#1E3A8A', panelists: ['Prof. Melchora Aquino', 'Dr. Lapu-Lapu', 'Dr. Jose Rizal'], groups: ['Group Gamma'], attendees: ['Group Gamma Members'] },
+    { id: 5, title: 'Proposal Defense - Group Gamma', date: '2025-01-25', time: '1:00 PM - 3:00 PM', type: 'defense', activityType: 'Pre-Oral Defense', location: 'Auditorium', description: 'Proposal defense for Group Gamma', color: '#1E3A8A', panelists: ['Prof. Melchora Aquino', 'Dr. Lapu-Lapu', 'Dr. Jose Rizal'], groups: ['Group Gamma'], attendees: ['Group Gamma Members'] },
     { id: 6, title: 'Chapter 1-2 Revision Due', date: '2025-01-28', time: '5:00 PM', type: 'deadline', location: 'Online Submission Portal', description: 'Revised Chapters 1 and 2 submission', color: '#EF4444', panelists: ['Dr. Gabriela Silang'], groups: ['Group Alpha', 'Group Beta'], attendees: ['Group Alpha', 'Group Beta'] },
     { id: 7, title: 'Co-Adviser Meeting', date: '2025-01-30', time: '3:00 PM - 4:00 PM', type: 'meeting', location: 'Faculty Lounge', description: 'Co-advisers coordination meeting', color: '#10B981', panelists: ['Prof. Melchora Aquino'], groups: ['All Groups'], attendees: ['All Co-Advisers'] },
 ];
@@ -69,7 +89,6 @@ const format12Hour = (time24) => {
     return `${h}:${m} ${period}`;
 };
 
-// Convert "9:00 AM" → "09:00" para sa <input type="time">
 const to24Hour = (time12) => {
     if (!time12) return '';
     const match = time12.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
@@ -82,7 +101,6 @@ const to24Hour = (time12) => {
     return `${String(h).padStart(2, '0')}:${mStr}`;
 };
 
-// Parse "9:00 AM - 11:00 AM" → { start: "09:00", end: "11:00" }
 const parseTimeRange = (timeRange) => {
     if (!timeRange) return { start: '09:00', end: '11:00' };
     const parts = timeRange.split('-').map((s) => s.trim());
@@ -121,7 +139,7 @@ const buildFullName = (u) =>
         .join(' ') + (u.suffix ? ` ${u.suffix}` : '');
 
 // ============================================================
-// ✅ USER AVATAR COMPONENT
+// USER AVATAR COMPONENT
 // ============================================================
 const UserAvatar = ({ user, size = 'md', className = '' }) => {
     const sizeClasses = {
@@ -163,7 +181,7 @@ const UserAvatar = ({ user, size = 'md', className = '' }) => {
 };
 
 // ============================================================
-// ✅ AVATAR STACK — para sa calendar day cell
+// AVATAR STACK
 // ============================================================
 const AvatarStack = ({ users = [], max = 3, size = 'xs' }) => {
     if (!users || users.length === 0) return null;
@@ -234,7 +252,7 @@ const ModalShell = ({ children, maxWidth = 'max-w-2xl', zIndex = 'z-50' }) => (
 );
 
 // ============================================================
-// EVENT DETAILS MODAL (with Edit & Delete)
+// EVENT DETAILS MODAL
 // ============================================================
 const EventDetailsModal = ({ event, onClose, onSetReminder, onEdit, onDelete }) => {
     if (!event) return null;
@@ -244,7 +262,6 @@ const EventDetailsModal = ({ event, onClose, onSetReminder, onEdit, onDelete }) 
         deadline: Clock3, consultation: UserCog,
     }[event.type] || CalendarIcon;
 
-    // ✅ Edit/Delete lang para sa dynamic defense events (galing sa ScheduleContext)
     const isEditable = event.type === 'defense' && !!event._raw;
 
     return (
@@ -257,7 +274,7 @@ const EventDetailsModal = ({ event, onClose, onSetReminder, onEdit, onDelete }) 
                         </div>
                         <div>
                             <span className="text-xs font-bold uppercase tracking-wider opacity-90">
-                                {getEventTypeLabel(event.type)}
+                                {event.activityType || getEventTypeLabel(event.type)}
                             </span>
                             <h3 className="text-lg font-bold leading-tight">{event.title}</h3>
                         </div>
@@ -373,9 +390,6 @@ const EventDetailsModal = ({ event, onClose, onSetReminder, onEdit, onDelete }) 
                     <button onClick={onClose} className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-200 rounded-lg">
                         Close
                     </button>
-                    <button onClick={onSetReminder} className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-900 hover:bg-blue-800 text-yellow-400 font-bold text-sm rounded-lg shadow-sm">
-                        <Bell className="w-4 h-4" /> Set Reminder
-                    </button>
                 </div>
             </div>
         </ModalShell>
@@ -423,7 +437,7 @@ const DeleteConfirmModal = ({ event, onConfirm, onClose, isDeleting }) => {
 };
 
 // ============================================================
-// DATE ASSIGNMENT MODAL (also used for editing)
+// DATE ASSIGNMENT MODAL  ← activityType added
 // ============================================================
 const DateAssignmentModal = ({
     date, defenseEvents,
@@ -434,6 +448,7 @@ const DateAssignmentModal = ({
     eventLocation, setEventLocation,
     eventStartTime, setEventStartTime,
     eventEndTime, setEventEndTime,
+    eventActivityType, setEventActivityType,
     onToggleGroup, onTogglePanelist, onSelectAllGroups, onSelectAllPanelists,
     onClearGroups, onClearPanelists, onToggleGroupDropdown, onTogglePanelistDropdown,
     onSave, onClose,
@@ -452,7 +467,8 @@ const DateAssignmentModal = ({
         selectedPanelists.length > 0 &&
         eventLocation.trim().length > 0 &&
         eventStartTime &&
-        eventEndTime;
+        eventEndTime &&
+        !!eventActivityType;
 
     const timePreview =
         eventStartTime && eventEndTime
@@ -504,7 +520,7 @@ const DateAssignmentModal = ({
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <span className="text-[10px] font-bold uppercase tracking-wider text-blue-900 bg-yellow-400 px-1.5 py-0.5 rounded">
-                                            Defense
+                                            {event.activityType || 'Defense'}
                                         </span>
                                         <p className="text-sm font-bold text-blue-950 mt-1">{event.title}</p>
                                         <p className="text-xs text-slate-500 mt-0.5">{event.time} • {event.location}</p>
@@ -524,6 +540,26 @@ const DateAssignmentModal = ({
                     <p className="text-xs font-bold text-blue-900 uppercase tracking-wider flex items-center gap-1.5">
                         <MapPin className="w-3.5 h-3.5" /> Event Details
                     </p>
+
+                    {/* ✅ Activity Type selector */}
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+                            Activity Type <span className="text-red-500">*</span>
+                        </label>
+                        <div className="relative">
+                            <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                            <select
+                                value={eventActivityType}
+                                onChange={(e) => setEventActivityType(e.target.value)}
+                                className="w-full pl-10 pr-8 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-blue-950 focus:outline-none focus:ring-2 focus:ring-blue-900 focus:border-blue-900 transition-all appearance-none cursor-pointer"
+                            >
+                                {ACTIVITY_TYPES.map((t) => (
+                                    <option key={t} value={t}>{t}</option>
+                                ))}
+                            </select>
+                            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                        </div>
+                    </div>
 
                     <div>
                         <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
@@ -659,7 +695,7 @@ const DateAssignmentModal = ({
                     )}
                 </div>
 
-                {/* Panelist Selector */}
+                               {/* Panelist Selector */}
                 <div ref={panelistDropdownRef} className="relative">
                     <div className="flex items-center justify-between mb-2">
                         <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">
@@ -751,13 +787,21 @@ const DateAssignmentModal = ({
                     )}
                 </div>
 
-                {/* Summary */}
+                {/* Assignment Summary */}
                 {(selectedGroups.length > 0 || selectedPanelists.length > 0 || eventLocation || timePreview) && (
                     <div className="p-3 bg-blue-50 rounded-xl border border-blue-100">
                         <p className="text-xs font-bold text-blue-900 uppercase tracking-wider mb-2">
                             Assignment Summary
                         </p>
                         <div className="space-y-1.5 text-xs">
+                            {/* ✅ Activity Type row */}
+                            <div className="flex items-start gap-2">
+                                <Tag className="w-3.5 h-3.5 text-blue-900 mt-0.5 flex-shrink-0" />
+                                <div>
+                                    <span className="font-semibold text-slate-500">Activity Type: </span>
+                                    <span className="font-bold text-blue-950">{eventActivityType || 'Not set'}</span>
+                                </div>
+                            </div>
                             <div className="flex items-start gap-2">
                                 <MapPin className="w-3.5 h-3.5 text-blue-900 mt-0.5 flex-shrink-0" />
                                 <div>
@@ -844,10 +888,12 @@ export default function Calendar() {
     const [eventLocation, setEventLocation] = useState('');
     const [eventStartTime, setEventStartTime] = useState('09:00');
     const [eventEndTime, setEventEndTime] = useState('11:00');
+    // ✅ activityType state
+    const [eventActivityType, setEventActivityType] = useState(DEFAULT_ACTIVITY_TYPE);
     const panelistDropdownRef = useRef(null);
     const groupDropdownRef = useRef(null);
 
-    // ✅ Dynamic data mula sa GroupContext
+    // Dynamic data from GroupContext
     const { defenseGroups, panelMembers } = useContext(GroupContext);
 
     // ============================================================
@@ -897,15 +943,20 @@ export default function Calendar() {
                 role: p.role,
             }));
 
+            const activityType = schedule.activityType || DEFAULT_ACTIVITY_TYPE;
+            const activityColor =
+                ACTIVITY_TYPE_COLORS[activityType] || '#1E3A8A';
+
             return {
                 id: schedule._id,
-                title: `Defense - ${groupList.join(', ')}`,
+                title: `${activityType} - ${groupList.join(', ')}`,
                 date: schedule.date,
                 time: schedule.timeRangeLabel || `${schedule.startTime} - ${schedule.endTime}`,
                 type: 'defense',
+                activityType,
                 location: schedule.location,
                 description: schedule.remarks || 'Assigned defense',
-                color: '#1E3A8A',
+                color: activityColor,
                 panelists: panelistObjects,
                 groups: groupList,
                 attendees: groupList,
@@ -962,6 +1013,7 @@ export default function Calendar() {
         setEventLocation('');
         setEventStartTime('09:00');
         setEventEndTime('11:00');
+        setEventActivityType(DEFAULT_ACTIVITY_TYPE); // ✅ reset activity type
         setIsPanelistDropdownOpen(false);
         setIsGroupDropdownOpen(false);
         setEditingScheduleId(null);
@@ -981,7 +1033,6 @@ export default function Calendar() {
         resetDateModalState();
     }, [resetDateModalState]);
 
-    // ✅ EDIT handler
     const handleEditEvent = useCallback((event) => {
         if (!event?._raw) return;
         const raw = event._raw;
@@ -1002,6 +1053,7 @@ export default function Calendar() {
         setSelectedPanelists(panelistNames);
 
         setEventLocation(raw.location || '');
+        setEventActivityType(raw.activityType || DEFAULT_ACTIVITY_TYPE); // ✅ preload
 
         const { start, end } = parseTimeRange(
             raw.timeRangeLabel || `${raw.startTime || ''} - ${raw.endTime || ''}`
@@ -1015,7 +1067,6 @@ export default function Calendar() {
         setIsDateModalOpen(true);
     }, []);
 
-    // ✅ DELETE handler
     const handleDeleteEvent = useCallback((event) => {
         if (!event?._raw) return;
         setIsEventModalOpen(false);
@@ -1075,10 +1126,14 @@ export default function Calendar() {
     }, [availablePanelists]);
 
     // ============================================================
-    // SAVE ASSIGNMENT (create o update)
+    // SAVE ASSIGNMENT — activityType included in payload ✅
     // ============================================================
     const saveAssignment = useCallback(async () => {
         if (selectedGroups.length === 0 || selectedPanelists.length === 0) return;
+        if (!ACTIVITY_TYPES.includes(eventActivityType)) {
+            window.alert('⚠️ Please select a valid activity type.');
+            return;
+        }
         if (eventLocation.trim().length === 0) {
             window.alert('⚠️ Please enter a location before saving.');
             return;
@@ -1102,7 +1157,9 @@ export default function Calendar() {
         const end12 = format12Hour(eventEndTime);
         const timeRange = `${start12} - ${end12}`;
 
+        // ✅ Payload now includes activityType (matches backend enum)
         const payload = {
+            activityType: eventActivityType,
             date: defenseDate,
             location: eventLocation.trim(),
             startTime: eventStartTime,
@@ -1146,6 +1203,7 @@ export default function Calendar() {
         eventLocation,
         eventStartTime,
         eventEndTime,
+        eventActivityType,
         availableGroups,
         availablePanelists,
         createSchedule,
@@ -1186,7 +1244,7 @@ export default function Calendar() {
     return (
         <>
             <div className="bg-white rounded-2xl shadow-sm border border-blue-50 lg:col-span-2 flex flex-col overflow-hidden">
-                {/* Header — COMPACT */}
+                {/* Header */}
                 <div className="p-3 border-b border-blue-50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-gradient-to-r from-blue-900 to-blue-800">
                     <div className="flex items-center gap-2.5">
                         <div className="w-9 h-9 rounded-xl bg-yellow-400 flex items-center justify-center shadow-md">
@@ -1199,7 +1257,7 @@ export default function Calendar() {
                     </div>
                 </div>
 
-                {/* Nav + view toggle + filter — COMPACT */}
+                {/* Nav + view toggle + filter */}
                 <div className="flex flex-wrap items-center justify-between gap-2 p-2 border-b border-slate-100 bg-slate-50">
                     <div className="flex items-center gap-1.5">
                         <button onClick={goToPreviousMonth} className="p-1 rounded-lg border border-slate-200 hover:bg-white hover:border-blue-300">
@@ -1247,7 +1305,7 @@ export default function Calendar() {
                     </div>
                 </div>
 
-                {/* Month view — COMPACT */}
+                {/* Month view */}
                 <div className="p-2 flex-1">
                     {calendarView === 'month' && (
                         <div className="grid grid-cols-7 gap-1">
@@ -1305,7 +1363,6 @@ export default function Calendar() {
                                                                 {event.title}
                                                             </button>
 
-                                                            {/* ✅ AVATAR STACK — panelists sa calendar box */}
                                                             {event.type === 'defense' && event.panelists?.length > 0 && (
                                                                 <AvatarStack
                                                                     users={event.panelists}
@@ -1380,6 +1437,8 @@ export default function Calendar() {
                     setEventStartTime={setEventStartTime}
                     eventEndTime={eventEndTime}
                     setEventEndTime={setEventEndTime}
+                    eventActivityType={eventActivityType}
+                    setEventActivityType={setEventActivityType}
                     onToggleGroup={toggleGroup}
                     onTogglePanelist={togglePanelist}
                     onSelectAllGroups={selectAllGroups}

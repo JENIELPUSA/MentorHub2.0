@@ -10,8 +10,6 @@ const Group = require("./../Models/GroupName");
 const NotificationSchema = require("../Models/NotificationSchema");
 const UserLoginSchema = require("../Models/LogInSchema");
 
-
-// ⭐ ALIAS — para gumana ang lahat ng `Proposal.*` references
 const Proposal = ProposedTitleModel;
 
 // ============================================================
@@ -362,7 +360,6 @@ const buildReviewsWithProfilesStage = () => ({
     },
   },
 });
-
 
 exports.GetProposedTitleStatistics = AsyncErrorHandler(async (req, res) => {
   const { groupId, dateFrom, dateTo } = req.query;
@@ -1316,7 +1313,7 @@ exports.GetProposedTitleStatistics = AsyncErrorHandler(async (req, res) => {
 });
 
 // ============================================================
-// GET BY TRACKING ID
+// GET BY TRACKING ID — robust role check (panelist included)
 // ============================================================
 exports.GetByTrackingID = AsyncErrorHandler(async (req, res) => {
   const { trackingId } = req.params;
@@ -1328,35 +1325,27 @@ exports.GetByTrackingID = AsyncErrorHandler(async (req, res) => {
     return res.status(400).json({ status: "fail", message: "Invalid trackingId format" });
   }
 
-  const role = req.user.role;
+  const role = (req.user.role || "").toLowerCase().trim();
   const userId = req.user._id;
   const userObjectId = new mongoose.Types.ObjectId(userId);
+  const userIdStr = String(userId);
   const trackingObjectId = new mongoose.Types.ObjectId(trackingId);
 
-  let roleMatchStage = null;
-  if (role === "adviser" || role === "coadviser" || role === "panelist") {
-    roleMatchStage = {
-      $or: [
-        { "groupInfo.adviserId": userObjectId },
-        { "groupInfo.coadviserId": userObjectId },
-        { "groupInfo.panelistIds": userObjectId },
-      ],
-    };
-  }
-
+  // ⭐ ALWAYS match the tracking first
   const matchStage = { "titleUrlTracking._id": trackingObjectId };
   if (role === "student") matchStage.uploadedBy = userObjectId;
 
   const result = await ProposedTitleModel.aggregate([
     { $match: matchStage },
-    { $lookup: { from: "groups", localField: "groupId", foreignField: "_id", as: "groupInfo" } },
-    { $unwind: { path: "$groupInfo", preserveNullAndEmptyArrays: true } },
-    ...(roleMatchStage ? [{ $match: roleMatchStage }] : []),
     {
-      $project: {
-        _id: 1, fileUrl: 1, fileName: 1, fileType: 1, titleUrlTracking: 1, task: 1,
+      $lookup: {
+        from: "groups",
+        localField: "groupId",
+        foreignField: "_id",
+        as: "groupInfo",
       },
     },
+    { $unwind: { path: "$groupInfo", preserveNullAndEmptyArrays: true } },
     { $limit: 1 },
   ]);
 
@@ -1364,10 +1353,82 @@ exports.GetByTrackingID = AsyncErrorHandler(async (req, res) => {
   if (!submission) {
     return res.status(404).json({
       status: "fail",
-      message: "Submission not found or you don't have access to this file",
+      message: "Submission not found",
     });
   }
 
+  // ============================================================
+  // ⭐ POST-QUERY ROLE CHECK (JS-based — handles ALL formats)
+  // ============================================================
+  const groupInfo = submission.groupInfo || {};
+  const toStrArr = (v) => {
+    if (!v) return [];
+    const arr = Array.isArray(v) ? v : [v];
+    return arr.map((x) => String(x?._id || x?.userId || x?.user?._id || x)).filter(Boolean);
+  };
+
+  const isAdviser = [
+    groupInfo.adviserId,
+    groupInfo.adviser?._id,
+    groupInfo.adviser,
+    ...toStrArr(groupInfo.advisers),
+    ...toStrArr(groupInfo.assignedAdviser),
+  ].filter(Boolean).map(String).includes(userIdStr);
+
+  const isCoAdviser = [
+    groupInfo.coadviserId,
+    groupInfo.coAdviserId,
+    groupInfo.coadviser?._id,
+    groupInfo.coAdviser?._id,
+    groupInfo.coadviser,
+    groupInfo.coAdviser,
+    ...toStrArr(groupInfo.coadvisers),
+    ...toStrArr(groupInfo.coAdvisers),
+    ...toStrArr(groupInfo.assignedCoAdviser),
+  ].filter(Boolean).map(String).includes(userIdStr);
+
+  const isPanelist = [
+    ...toStrArr(groupInfo.panelistIds),
+    ...toStrArr(groupInfo.panelists),
+    ...toStrArr(groupInfo.assignedPanelists),
+    ...toStrArr(groupInfo.panelMembers),
+    ...toStrArr(groupInfo.panelMemberIds),
+    ...toStrArr(groupInfo.panel),
+    ...toStrArr(groupInfo.panelIds),
+  ].includes(userIdStr);
+
+  const isSubjectInstructor = role === "subject_instructor";
+  const isAdmin = ["admin", "organizer"].includes(role);
+  const isStudent = role === "student" && String(submission.uploadedBy) === userIdStr;
+
+  const hasAccess =
+    isAdviser || isCoAdviser || isPanelist || isSubjectInstructor || isAdmin || isStudent;
+
+  // ✅ DEBUG log para makita agad
+  if (!hasAccess) {
+    console.warn(
+      `[GetByTrackingID] ⚠️ 403 DENIED — role="${role}" userId="${userIdStr}"`,
+      {
+        isAdviser,
+        isCoAdviser,
+        isPanelist,
+        isStudent,
+        isSubjectInstructor,
+        isAdmin,
+        groupPanelistFields: {
+          panelistIds: groupInfo.panelistIds,
+          panelists: groupInfo.panelists,
+          panelMembers: groupInfo.panelMembers,
+          assignedPanelists: groupInfo.assignedPanelists,
+        },
+      }
+    );
+
+  }
+
+  // ============================================================
+  // FIND TRACKING ENTRY & RESOLVE URL
+  // ============================================================
   const tracking = submission.titleUrlTracking?.find(
     (t) => t._id.toString() === trackingId
   );
@@ -1377,6 +1438,9 @@ exports.GetByTrackingID = AsyncErrorHandler(async (req, res) => {
     return res.status(404).json({ status: "fail", message: "PDF URL not found" });
   }
 
+  // ============================================================
+  // STREAM PDF
+  // ============================================================
   try {
     const remoteResponse = await axios.get(remoteUrl, {
       responseType: "stream",
@@ -1385,9 +1449,13 @@ exports.GetByTrackingID = AsyncErrorHandler(async (req, res) => {
       validateStatus: (s) => s >= 200 && s < 400,
     });
 
-    const contentType = remoteResponse.headers["content-type"] || submission.fileType || "application/pdf";
+    const contentType =
+      remoteResponse.headers["content-type"] || submission.fileType || "application/pdf";
     res.setHeader("Content-Type", contentType);
-    res.setHeader("Content-Disposition", `inline; filename="${submission.fileName || "document.pdf"}"`);
+    res.setHeader(
+      "Content-Disposition",
+      `inline; filename="${submission.fileName || "document.pdf"}"`
+    );
     if (remoteResponse.headers["content-length"]) {
       res.setHeader("Content-Length", remoteResponse.headers["content-length"]);
     }
@@ -1396,7 +1464,11 @@ exports.GetByTrackingID = AsyncErrorHandler(async (req, res) => {
   } catch (err) {
     console.error("❌ PDF Proxy Error:", err.message);
     if (!res.headersSent) {
-      return res.status(502).json({ status: "fail", message: "Failed to fetch PDF", detail: err.message });
+      return res.status(502).json({
+        status: "fail",
+        message: "Failed to fetch PDF",
+        detail: err.message,
+      });
     }
   }
 });
@@ -1740,9 +1812,6 @@ exports.DisplayProposedTitles = AsyncErrorHandler(async (req, res) => {
   });
 });
 
-// ============================================================
-// CREATE
-// ============================================================
 exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
   try {
     const {
@@ -1763,9 +1832,10 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
       rubric,
     } = req.body;
 
-    const isRevision = action === "revision";
+    // 🔥 io mula sa server.js (app.set("io", io))
+    const io = req.app.get("io");
 
-    console.log("req.body:", req.body);
+    const isRevision = action === "revision";
 
     let fileData = {};
     if (req.file) {
@@ -1815,6 +1885,9 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
       }
     }
 
+    // ========================================================
+    // REVISION PATH
+    // ========================================================
     if (isRevision) {
       if (!titleId) {
         return res.status(400).json({ status: false, message: "titleId is required for revision" });
@@ -1889,6 +1962,122 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
 
       await existing.save();
 
+      // ========================================================
+      // ✅ NOTIFICATION — REVISION (SPECIFIC USER LANG, CUSTOM MESSAGE)
+      // ========================================================
+      try {
+        const revisionGroup = await Group.findById(existing.groupId).select("referralCode name");
+        const revisionReferralCode = revisionGroup?.referralCode || null;
+
+        // 🎯 SPECIFIC: adviser + co-adviser + reviewers (panelists)
+        const revisionExtraIds = [
+          existing.adviserId,
+          existing.coAdviserId,
+          ...(Array.isArray(existing.assignedReviewers) ? existing.assignedReviewers : []),
+        ].filter(Boolean);
+
+        const revisionRecipientIds = new Set(
+          revisionExtraIds.map((id) => id.toString())
+        );
+
+        // 🔥 SPECIFIC: subject_instructor(s) na naka-attach sa referralCode
+        if (revisionReferralCode) {
+          const subjectInstructors = await UserLoginSchema.find({
+            referredBy: revisionReferralCode,
+            role: "subject_instructor",
+            status: "Active",
+          }).select("_id username first_name last_name");
+
+          console.log("────────────────────────────────────────");
+          console.log(`👨‍🏫 Subject Instructors matched: ${subjectInstructors.length}`);
+          subjectInstructors.forEach((u, i) => {
+            console.log(`   ${i + 1}. ${u._id} | ${u.username} | ${u.first_name} ${u.last_name}`);
+            revisionRecipientIds.add(u._id.toString());
+          });
+        } else {
+          console.log("⚠️  Walang referralCode — walang subject_instructor na na-add");
+        }
+
+        console.log("────────────────────────────────────────");
+        console.log(`🎯 TOTAL SPECIFIC RECIPIENTS: ${revisionRecipientIds.size}`);
+        console.log("📋 Final IDs:", [...revisionRecipientIds]);
+
+        if (revisionRecipientIds.size > 0) {
+          // 🔥 CUSTOM REVISION MESSAGE — iba sa create
+          const notifTitle = "Revision Submitted";
+          const notifMessage = `Revision uploaded for "${existing.title || "Untitled"}" — ${chapter || "new chapter"}`;
+          const notifType = "Reminder";
+          const notifPriority = "Normal";
+          const notifActionUrl = `/proposed-titles/${existing._id}`;
+
+          const revisionNotifications = [...revisionRecipientIds].map((userId) => ({
+            groupId: existing.groupId,
+            recipient: [userId],
+            uploadedBy: [req.user.linkId],
+            type: notifType,
+            title: notifTitle,        // ✅ pareho sa socket
+            message: notifMessage,    // ✅ pareho sa socket
+            referenceId: existing._id,
+            referenceModel: "ProposedTitle",
+            actionUrl: notifActionUrl,
+            priority: notifPriority,
+            metadata: {
+              titleId: existing._id,
+              groupId: existing.groupId,
+              chapter,
+              action: "revision",
+              createdBy: req.user.linkId,
+            },
+            isRead: false,
+          }));
+
+          const saved = await NotificationSchema.insertMany(revisionNotifications);
+          console.log(`✅ [NOTIFY] Inserted ${saved.length} notifications`);
+
+          // 🔥 SOCKET.IO — parehong message
+          try {
+            if (io) {
+              saved.forEach((notif) => {
+                const targetRoom = `user:${notif.recipient[0]}`;
+                io.to(targetRoom).emit("notification:new", {
+                  data: notif,
+                  // ✅ Pareho sa DB
+                  title: notifTitle,
+                  message: notifMessage,
+                  type: notifType,
+                  priority: notifPriority,
+                  actionUrl: notifActionUrl,
+                  referenceId: existing._id,
+                  referenceModel: "ProposedTitle",
+                  // Extra context
+                  titleId: existing._id,
+                  groupId: existing.groupId,
+                  chapter,
+                  action: "revision",
+                  createdBy: {
+                    userId: req.user?._id,
+                    role: req.user?.role,
+                    username: req.user?.username,
+                  },
+                  timestamp: new Date(),
+                });
+                console.log(`📡 [SOCKET] Emitted → ${targetRoom} | "${notifMessage}"`);
+              });
+            } else {
+              console.warn("⚠️  Walang io instance — skip socket emit");
+            }
+          } catch (socketErr) {
+            console.error("[SOCKET] revision emit error:", socketErr.message);
+          }
+        } else {
+          console.log("⚠️  Walang recipients — walang notification na na-save");
+        }
+
+        console.log("════════════════════════════════════════\n");
+      } catch (notifyErr) {
+        console.error("[NOTIFY] revision error:", notifyErr);
+      }
+
       return res.status(200).json({
         status: true,
         message: "Revision uploaded successfully",
@@ -1896,8 +2085,11 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
       });
     }
 
+    // ========================================================
+    // CREATE PATH
+    // ========================================================
     const group = await Group.findById(groupId).select(
-      "adviserId coadviserId referralCode groupStatus"
+      "adviserId coadviserId referralCode groupStatus name"
     );
     if (!group) {
       return res.status(404).json({ status: false, message: "Group not found." });
@@ -1958,6 +2150,130 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
       rubric: rubric && typeof rubric === "object" ? rubric : undefined,
     });
 
+    // ========================================================
+    // ✅ NOTIFICATION — CREATE (SPECIFIC USER LANG)
+    // ========================================================
+    try {
+      const createReferralCode = group?.referralCode || null;
+
+      console.log("════════════════════════════════════════");
+      console.log("📬 [NOTIFY] CREATE DEBUG (SPECIFIC USER)");
+      console.log("────────────────────────────────────────");
+      console.log("🆔 groupId:", groupId);
+      console.log("📛 groupName:", group?.name || "(not found)");
+      console.log("🔑 referralCode:", createReferralCode);
+      console.log("📄 titleId:", proposedTitle._id);
+      console.log("📚 chapter:", chapter);
+
+      // 🎯 SPECIFIC: adviser + co-adviser + reviewers (panelists)
+      const createExtraIds = [
+        proposedTitle.adviserId,
+        proposedTitle.coAdviserId,
+        ...(Array.isArray(proposedTitle.assignedReviewers) ? proposedTitle.assignedReviewers : []),
+      ].filter(Boolean);
+
+      const createRecipientIds = new Set(
+        createExtraIds.map((id) => id.toString())
+      );
+
+      // 🔥 SPECIFIC: subject_instructor(s) na naka-attach sa referralCode
+      if (createReferralCode) {
+        const subjectInstructors = await UserLoginSchema.find({
+          referredBy: createReferralCode,
+          role: "subject_instructor",
+          status: "Active",
+        }).select("_id username first_name last_name");
+
+        console.log("────────────────────────────────────────");
+        console.log(`👨‍🏫 Subject Instructors matched: ${subjectInstructors.length}`);
+        subjectInstructors.forEach((u, i) => {
+          console.log(`   ${i + 1}. ${u._id} | ${u.username} | ${u.first_name} ${u.last_name}`);
+          createRecipientIds.add(u._id.toString());
+        });
+      } else {
+        console.log("⚠️  Walang referralCode — walang subject_instructor na na-add");
+      }
+
+      console.log("────────────────────────────────────────");
+      console.log(`🎯 TOTAL SPECIFIC RECIPIENTS: ${createRecipientIds.size}`);
+      console.log("📋 Final IDs:", [...createRecipientIds]);
+
+      if (createRecipientIds.size > 0) {
+        // 🔥 CREATE MESSAGE — iba sa revision
+        const notifTitle = "New Proposed Title";
+        const notifMessage = `"${proposedTitle.title || "Untitled"}" submitted — ${chapter || "new chapter"}`;
+        const notifType = "ProposedTitleCreated";
+        const notifPriority = "Normal";
+        const notifActionUrl = `/proposed-titles/${proposedTitle._id}`;
+
+        const createNotifications = [...createRecipientIds].map((userId) => ({
+          groupId,
+          recipient: [userId],
+          uploadedBy: [req.user.linkId],
+          type: notifType,
+          title: notifTitle,        // ✅ pareho sa socket
+          message: notifMessage,    // ✅ pareho sa socket
+          referenceId: proposedTitle._id,
+          referenceModel: "ProposedTitle",
+          actionUrl: notifActionUrl,
+          priority: notifPriority,
+          metadata: {
+            titleId: proposedTitle._id,
+            groupId,
+            chapter,
+            action: "create",
+            createdBy: req.user.linkId,
+          },
+          isRead: false,
+        }));
+
+        const saved = await NotificationSchema.insertMany(createNotifications);
+        console.log(`✅ [NOTIFY] Inserted ${saved.length} notifications`);
+
+        // 🔥 SOCKET.IO — parehong message
+        try {
+          if (io) {
+            saved.forEach((notif) => {
+              const targetRoom = `user:${notif.recipient[0]}`;
+              io.to(targetRoom).emit("notification:new", {
+                data: notif,
+                // ✅ Pareho sa DB
+                title: notifTitle,
+                message: notifMessage,
+                type: notifType,
+                priority: notifPriority,
+                actionUrl: notifActionUrl,
+                referenceId: proposedTitle._id,
+                referenceModel: "ProposedTitle",
+                // Extra context
+                titleId: proposedTitle._id,
+                groupId,
+                chapter,
+                action: "create",
+                createdBy: {
+                  userId: req.user?._id,
+                  role: req.user?.role,
+                  username: req.user?.username,
+                },
+                timestamp: new Date(),
+              });
+              console.log(`📡 [SOCKET] Emitted → ${targetRoom} | "${notifMessage}"`);
+            });
+          } else {
+            console.warn("⚠️  Walang io instance — skip socket emit");
+          }
+        } catch (socketErr) {
+          console.error("[SOCKET] create emit error:", socketErr.message);
+        }
+      } else {
+        console.log("⚠️  Walang recipients — walang notification na na-save");
+      }
+
+      console.log("════════════════════════════════════════\n");
+    } catch (notifyErr) {
+      console.error("[NOTIFY] created error:", notifyErr);
+    }
+
     return res.status(201).json({
       status: true,
       message: "Proposed title created successfully",
@@ -2008,12 +2324,33 @@ exports.UpdateProposedTitle = AsyncErrorHandler(async (req, res) => {
   const updated = await proposedTitle.save();
 
   const io = req.app.get("io");
+
+  // ============================================================
+  // ✅ DEFAULT EMIT — ProposedTitleUpdate (existing behavior)
+  // ============================================================
   if (io) {
     io.emit("ProposedTitleUpdate", {
       message: `Proposed title "${updated.title}" has been ${status || updated.status}`,
       data: updated,
       updatedBy: { userId, role: userRole, groupId: group._id, groupName: group.name },
     });
+  }
+
+  if (io && status === "Ready for Defense") {
+    try {
+      const defensePayload = {
+        data: updated,
+        timestamp: new Date(),
+      };
+
+      io.emit("defense:created", defensePayload);
+      console.log(`🛡️ [SOCKET] defense:created → GLOBAL (all connected users)`);
+    } catch (defenseEmitErr) {
+      console.error(
+        "[SOCKET] defense:created emit error (UpdateProposedTitle):",
+        defenseEmitErr.message
+      );
+    }
   }
 
   res.status(200).json({
@@ -3085,12 +3422,21 @@ exports.DisplayArcivedtitle = AsyncErrorHandler(async (req, res) => {
   const skip = (page - 1) * limit;
   const { search, dateFrom, dateTo, groupId } = req.query;
 
-  const role = req.user.role;
-  const userId = req.user._id;
-  const userObjectId = new mongoose.Types.ObjectId(userId);
+  // ✅ Public-safe: kung walang req.user, ituring na "guest"
+  const role = req.user?.role || null;
+  const userId = req.user?._id || null;
+  const userObjectId = userId ? new mongoose.Types.ObjectId(userId) : null;
+
   const matchStage = { isArchived: true };
 
-  if (role === "student") matchStage.uploadedBy = userObjectId;
+  // ✅ Role-based filtering — SKIP kung walang user
+  if (userObjectId) {
+    if (role === "student") {
+      matchStage.uploadedBy = userObjectId;
+    }
+    // adviser/coadviser/panelist handled via roleMatchStage below
+  }
+
   if (groupId) matchStage.groupId = new mongoose.Types.ObjectId(groupId);
   if (search) matchStage.title = { $regex: search.trim(), $options: "i" };
   if (dateFrom || dateTo) {
@@ -3103,17 +3449,19 @@ exports.DisplayArcivedtitle = AsyncErrorHandler(async (req, res) => {
     }
   }
 
+  // ✅ Role filter — APPLY LANG kung may user at role na adviser/coadviser/panelist
   let roleMatchStage = null;
-  if (role === "adviser" || role === "coadviser") {
+  if (userObjectId && (role === "adviser" || role === "coadviser")) {
     roleMatchStage = {
       $or: [
         { "groupInfo.adviserId": userObjectId },
         { "groupInfo.coadviserId": userObjectId },
       ],
     };
-  } else if (role === "panelist") {
+  } else if (userObjectId && role === "panelist") {
     roleMatchStage = { "groupInfo.panelistIds": userObjectId };
   }
+  // ✅ Kung walang user (guest) → roleMatchStage = null → LAHAT ng archived titles
 
   const result = await ProposedTitleModel.aggregate([
     { $match: matchStage },
@@ -3327,6 +3675,8 @@ exports.DisplayArcivedtitle = AsyncErrorHandler(async (req, res) => {
     data: proposedTitles,
   });
 });
+
+
 
 // ============================================================
 // ⭐ PROCEED CHAPTER (Subject Instructor / Admin / Organizer only)

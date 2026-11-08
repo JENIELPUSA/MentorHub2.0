@@ -1,15 +1,18 @@
 // src/components/ProposedTitle/PdfViewer.jsx
 import React, { useState, useEffect, useCallback, useContext, useRef, useMemo } from 'react';
 import {
-  MousePointer2, Highlighter, MessageSquare, Crop, FileText, Eraser,
+  MousePointer2, Highlighter, MessageSquare, FileText, Eraser,
   Globe, Trash2, X, Loader2, Copy, Lock, ArrowLeft, GraduationCap,
   ZoomIn, ZoomOut, ChevronLeft, ChevronRight, RefreshCw, XCircle,
   ArrowRight, ArrowLeft as ArrowLeftIcon, ArrowUp, ArrowDown,
+  ClipboardList, Send,
 } from 'lucide-react';
 
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/TextLayer.css';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
+import { AuthContext } from '../../contexts/AuthContext';
+
 
 pdfjs.GlobalWorkerOptions.workerSrc =
   `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.mjs`;
@@ -20,30 +23,37 @@ import { CommentContext } from '../../contexts/CommentContext/CommentContext';
 // CONSTANTS
 // ============================================================
 const GLOBAL_KEY = '__global__';
+const PROCEEDINGS_KEY = '__proceedings__';
 const ANNOTATION_COLORS = ['#fbbf24', '#34d399', '#60a5fa', '#f472b6', '#f87171'];
 
 const ANNOTATION_TYPE_META = {
   highlight: { label: 'Highlight', color: 'bg-yellow-100 text-yellow-800' },
-  comment:   { label: 'Comment',   color: 'bg-blue-100 text-blue-800' },
-  margin:    { label: 'Margin',    color: 'bg-purple-100 text-purple-800' },
-  page:      { label: 'Page',      color: 'bg-amber-100 text-amber-800' },
-  region:    { label: 'Region',    color: 'bg-emerald-100 text-emerald-800' },
-  global:    { label: '🌐 All Pages', color: 'bg-rose-100 text-rose-800' },
+  comment: { label: 'Comment', color: 'bg-blue-100 text-blue-800' },
+  margin: { label: 'Margin', color: 'bg-purple-100 text-purple-800' },
+  page: { label: 'Page', color: 'bg-amber-100 text-amber-800' },
+  region: { label: 'Region', color: 'bg-emerald-100 text-emerald-800' },
+  global: { label: '🌐 All Pages', color: 'bg-rose-100 text-rose-800' },
+  proceedings: { label: '📋 Proceedings', color: 'bg-amber-100 text-amber-800' },
 };
 
 // ============================================================
 // HELPERS
 // ============================================================
+const isProceedings = (a) =>
+  a?.annotationType === 'proceedings' || a?.type === 'proceedings';
+
 const computeAnnotationNumbers = (allAnnots) => {
   const flat = [
     ...(allAnnots[GLOBAL_KEY] || []).map(a => ({ ...a, _scope: 'global' })),
     ...Object.entries(allAnnots)
-      .filter(([k]) => k !== GLOBAL_KEY)
+      .filter(([k]) => k !== GLOBAL_KEY && k !== PROCEEDINGS_KEY)
       .flatMap(([k, list]) => {
         const p = parseInt(k.replace('page_', ''), 10);
         return (list || []).map(a => ({ ...a, _scope: 'page', _pageNum: p }));
       }),
-  ].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+  ]
+    .filter(a => !isProceedings(a))
+    .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 
   const numberMap = {};
   flat.forEach((a, i) => { numberMap[a.id] = i + 1; });
@@ -79,60 +89,32 @@ const ShapeRenderer = ({ x, y, w, h, color, strokeWidth = 2, opacity = 0.9, isEr
 };
 
 // ============================================================
-// MARGIN EDGE ARROWS — LEFT · RIGHT · TOP · BOTTOM
-// ------------------------------------------------------------
-// Arrows point OUTWARD from the page edge, matching the
-// "<---   --->" visual style:
-//   LEFT   edge:  <---   (points left, out of the page)
-//   RIGHT  edge:  --->   (points right, out of the page)
-//   TOP    edge:  ^      (points up, out of the page)
-//   BOTTOM edge:  v      (points down, out of the page)
+// MARGIN EDGE ARROWS
 // ============================================================
 const MarginEdgeArrows = ({ color, size = 20, offset = 6 }) => {
   const baseClass = 'absolute flex items-center justify-center rounded-full shadow-md border-2 border-white pointer-events-none';
-  const commonStyle = {
-    width: size,
-    height: size,
-    backgroundColor: color,
-    color: 'white',
-    zIndex: 22,
-  };
+  const commonStyle = { width: size, height: size, backgroundColor: color, color: 'white', zIndex: 22 };
 
   return (
     <>
-      {/* LEFT — arrow points LEFT (outward from the page)  <--- */}
-      <div
-        className={baseClass}
+      <div className={baseClass}
         style={{ ...commonStyle, left: `${offset}px`, top: '50%', transform: 'translateY(-50%)' }}
-        title="Margin note (left edge)"
-      >
+        title="Margin note (left edge)">
         <ArrowLeftIcon className="w-3 h-3" strokeWidth={3} />
       </div>
-
-      {/* RIGHT — arrow points RIGHT (outward from the page)  ---> */}
-      <div
-        className={baseClass}
+      <div className={baseClass}
         style={{ ...commonStyle, right: `${offset}px`, top: '50%', transform: 'translateY(-50%)' }}
-        title="Margin note (right edge)"
-      >
+        title="Margin note (right edge)">
         <ArrowRight className="w-3 h-3" strokeWidth={3} />
       </div>
-
-      {/* TOP — arrow points UP (outward from the page)  ^ */}
-      <div
-        className={baseClass}
+      <div className={baseClass}
         style={{ ...commonStyle, top: `${offset}px`, left: '50%', transform: 'translateX(-50%)' }}
-        title="Margin note (top edge)"
-      >
+        title="Margin note (top edge)">
         <ArrowUp className="w-3 h-3" strokeWidth={3} />
       </div>
-
-      {/* BOTTOM — arrow points DOWN (outward from the page)  v */}
-      <div
-        className={baseClass}
+      <div className={baseClass}
         style={{ ...commonStyle, bottom: `${offset}px`, left: '50%', transform: 'translateX(-50%)' }}
-        title="Margin note (bottom edge)"
-      >
+        title="Margin note (bottom edge)">
         <ArrowDown className="w-3 h-3" strokeWidth={3} />
       </div>
     </>
@@ -140,7 +122,7 @@ const MarginEdgeArrows = ({ color, size = 20, offset = 6 }) => {
 };
 
 // ============================================================
-// PDF ANNOTATION BAR — ⭐ NAVY / GOLD THEME
+// PDF ANNOTATION BAR
 // ============================================================
 const PdfAnnotationBar = ({
   activeTool, setActiveTool, activeColor, setActiveColor,
@@ -148,12 +130,11 @@ const PdfAnnotationBar = ({
   onAddGlobalComment, hasGlobalAnnotations, onClearGlobalAnnotations,
 }) => {
   const tools = [
-    { key: 'cursor',    icon: MousePointer2, label: 'Select' },
-    { key: 'highlight', icon: Highlighter,   label: 'Highlight + Comment' },
-    { key: 'comment',   icon: MessageSquare, label: 'Pin Comment' },
-    { key: 'region',    icon: Crop,          label: 'Draw Feedback Region' },
-    { key: 'margin',    icon: FileText,      label: 'Margin Note' },
-    { key: 'eraser',    icon: Eraser,        label: 'Erase — click a comment to delete' },
+    { key: 'cursor', icon: MousePointer2, label: 'Select' },
+    { key: 'highlight', icon: Highlighter, label: 'Highlight + Comment' },
+    { key: 'comment', icon: MessageSquare, label: 'Pin Comment' },
+    { key: 'margin', icon: FileText, label: 'Margin Note' },
+    { key: 'eraser', icon: Eraser, label: 'Erase — click a comment to delete' },
   ];
 
   return (
@@ -161,11 +142,10 @@ const PdfAnnotationBar = ({
       <div className="flex items-center gap-1 bg-blue-50 border border-blue-200 rounded-lg p-1">
         {tools.map(({ key, icon: Icon, label }) => (
           <button key={key} onClick={() => setActiveTool(key)} title={label}
-            className={`p-2 rounded-md transition ${
-              activeTool === key
+            className={`p-2 rounded-md transition ${activeTool === key
                 ? 'bg-blue-900 text-yellow-300 shadow-sm ring-1 ring-yellow-400'
                 : 'text-blue-700 hover:bg-blue-100'
-            }`}>
+              }`}>
             <Icon className="w-4 h-4" />
           </button>
         ))}
@@ -174,11 +154,10 @@ const PdfAnnotationBar = ({
       <div className="flex items-center gap-1.5 border-l border-blue-200 pl-3">
         {ANNOTATION_COLORS.map(c => (
           <button key={c} onClick={() => setActiveColor(c)}
-            className={`w-6 h-6 rounded-full border-2 transition ${
-              activeColor === c
+            className={`w-6 h-6 rounded-full border-2 transition ${activeColor === c
                 ? 'border-blue-900 scale-110 ring-2 ring-yellow-300'
                 : 'border-white hover:scale-105'
-            }`}
+              }`}
             style={{ backgroundColor: c }} />
         ))}
       </div>
@@ -215,7 +194,7 @@ const PdfAnnotationBar = ({
 };
 
 // ============================================================
-// HIGHLIGHT + COMMENT INPUT — ⭐ NAVY / GOLD THEME
+// HIGHLIGHT + COMMENT INPUT
 // ============================================================
 const HighlightCommentInput = ({ highlight, color, onSubmit, onCancel }) => {
   const [text, setText] = useState('');
@@ -272,7 +251,7 @@ const HighlightCommentInput = ({ highlight, color, onSubmit, onCancel }) => {
 };
 
 // ============================================================
-// PDF ANNOTATION OVERLAY — ⭐ NAVY / GOLD THEME
+// PDF ANNOTATION OVERLAY
 // ============================================================
 const PdfAnnotationOverlay = ({
   pageNum, width, height, scale = 1,
@@ -281,6 +260,7 @@ const PdfAnnotationOverlay = ({
   externalComment, onExternalCommentDone, annotationNumbers,
   proposedTitleId, refreshComments, showNotification,
   readOnly = false, onAnchorHover, onAnchorRef,
+  hideAnnotations = false,
 }) => {
   const overlayRef = useRef(null);
   const [dragRect, setDragRect] = useState(null);
@@ -295,7 +275,7 @@ const PdfAnnotationOverlay = ({
   const pageAnnots = [
     ...(annotations[GLOBAL_KEY] || []),
     ...(annotations[`page_${pageNum}`] || []),
-  ];
+  ].filter(a => !isProceedings(a));
 
   useEffect(() => {
     if (externalComment && !readOnly) {
@@ -356,7 +336,7 @@ const PdfAnnotationOverlay = ({
         return x >= a.x && x <= a.x + a.w && y >= a.y && y <= a.y + a.h;
       }
       if (a.type === 'comment') return Math.hypot(x - a.x, y - a.y) < 0.05;
-      if (a.type === 'margin')  return Math.hypot(x - a.x, y - a.y) < 0.06;
+      if (a.type === 'margin') return Math.hypot(x - a.x, y - a.y) < 0.06;
       if (a.type === 'page' && y > 0.10 && y < 0.40) return true;
       if (a.type === 'global' && y < 0.12) return true;
       return false;
@@ -371,7 +351,7 @@ const PdfAnnotationOverlay = ({
       if (target) { e.preventDefault(); e.stopPropagation(); handleErase(target); }
       return;
     }
-    if (activeTool !== 'highlight' && activeTool !== 'region') return;
+    if (activeTool !== 'highlight') return;
     const { x, y } = getCoords(e);
     setDragStart({ x, y });
     setDragRect({ x1: x, y1: y, x2: x, y2: y });
@@ -379,26 +359,25 @@ const PdfAnnotationOverlay = ({
 
   const handleMouseMove = (e) => {
     if (readOnly || activeTool === 'eraser') return;
-    if ((activeTool !== 'highlight' && activeTool !== 'region') || !dragStart) return;
+    if (activeTool !== 'highlight' || !dragStart) return;
     const { x, y } = getCoords(e);
     setDragRect({ x1: dragStart.x, y1: dragStart.y, x2: x, y2: y });
   };
 
   const handleMouseUp = () => {
     if (readOnly || activeTool === 'eraser') return;
-    if ((activeTool !== 'highlight' && activeTool !== 'region') || !dragRect) return;
+    if (activeTool !== 'highlight' || !dragRect) return;
     const x = Math.min(dragRect.x1, dragRect.x2);
     const y = Math.min(dragRect.y1, dragRect.y2);
     const w = Math.abs(dragRect.x2 - dragRect.x1);
     const h = Math.abs(dragRect.y2 - dragRect.y1);
     if (w > 0.005 && h > 0.005) {
       const data = {
-        type: activeTool === 'region' ? 'region' : 'highlight',
+        type: 'highlight',
         shape: 'rectangle', x, y, w, h,
         color: activeColor, createdAt: new Date().toISOString(),
       };
-      if (activeTool === 'region') addAnnotation(pageNum, data);
-      else setPendingHighlight({ ...data, quoted: '' });
+      setPendingHighlight({ ...data, quoted: '' });
     }
     setDragRect(null);
     setDragStart(null);
@@ -469,17 +448,17 @@ const PdfAnnotationOverlay = ({
 
   const cursorStyle = readOnly ? 'default'
     : activeTool === 'eraser' ? 'not-allowed'
-    : (activeTool === 'highlight' || activeTool === 'region') ? 'crosshair'
-    : activeTool === 'comment' ? 'copy'
-    : activeTool === 'margin' ? 'cell' : 'default';
+      : activeTool === 'highlight' ? 'crosshair'
+        : activeTool === 'comment' ? 'copy'
+          : activeTool === 'margin' ? 'cell' : 'default';
 
   const byType = {
-    global:    pageAnnots.filter(a => a.type === 'global'),
-    page:      pageAnnots.filter(a => a.type === 'page'),
+    global: pageAnnots.filter(a => a.type === 'global'),
+    page: pageAnnots.filter(a => a.type === 'page'),
     highlight: pageAnnots.filter(a => a.type === 'highlight'),
-    region:    pageAnnots.filter(a => a.type === 'region'),
-    margin:    pageAnnots.filter(a => a.type === 'margin'),
-    comment:   pageAnnots.filter(a => a.type === 'comment'),
+    region: pageAnnots.filter(a => a.type === 'region'),
+    margin: pageAnnots.filter(a => a.type === 'margin'),
+    comment: pageAnnots.filter(a => a.type === 'comment'),
   };
 
   const NumberBadge = ({ annotId, size = 18, color }) => {
@@ -496,6 +475,11 @@ const PdfAnnotationOverlay = ({
   const eraserActive = !readOnly && activeTool === 'eraser';
   const registerAnchor = (id, node) => { if (onAnchorRef) onAnchorRef(id, node); };
   const globalColor = byType.global[0]?.color || '#f87171';
+
+  // 👇 If hiding annotations, render an empty overlay (still allows cursor style but no visuals)
+  if (hideAnnotations) {
+    return <div ref={overlayRef} className="absolute inset-0" style={{ zIndex: 10, pointerEvents: 'none' }} />;
+  }
 
   return (
     <div ref={overlayRef} className="absolute inset-0"
@@ -572,7 +556,6 @@ const PdfAnnotationOverlay = ({
         </div>
       )}
 
-      {/* ⭐ MARGIN NOTES — ARROWS ON ALL 4 EDGES (outward) */}
       {byType.margin.map(a => (
         <React.Fragment key={a.id}>
           <MarginEdgeArrows color={a.color} size={20} offset={6} />
@@ -689,6 +672,7 @@ const LeaderLineLayer = ({ containerRef, anchorRefs, cardRefs, annotations, hove
       const newPaths = [];
 
       annotations.forEach(a => {
+        if (isProceedings(a)) return;
         const anchorNode = anchorRefs.current?.[a.id];
         const cardNode = cardRefs.current?.[a.id];
         if (!anchorNode || !cardNode) return;
@@ -762,7 +746,7 @@ const LeaderLineLayer = ({ containerRef, anchorRefs, cardRefs, annotations, hove
 };
 
 // ============================================================
-// SIDEBAR FEEDBACK PANEL — ⭐ NAVY / GOLD THEME
+// SIDEBAR FEEDBACK PANEL
 // ============================================================
 const SidebarFeedbackPanel = ({
   pdfAnnotations, annotationNumbers, pageNum, pdfNumPages,
@@ -771,7 +755,7 @@ const SidebarFeedbackPanel = ({
   const pageAnnots = [
     ...(pdfAnnotations[GLOBAL_KEY] || []),
     ...(pdfAnnotations[`page_${pageNum}`] || []),
-  ];
+  ].filter(a => !isProceedings(a));
 
   const sorted = [...pageAnnots].sort((a, b) => {
     if (a.type === 'global' && b.type !== 'global') return -1;
@@ -785,15 +769,15 @@ const SidebarFeedbackPanel = ({
 
   const cardColors = {
     highlight: { border: 'border-l-yellow-400', bg: 'bg-yellow-50', text: 'text-yellow-800' },
-    comment:   { border: 'border-l-blue-400',   bg: 'bg-blue-50',   text: 'text-blue-800' },
-    margin:    { border: 'border-l-purple-400', bg: 'bg-purple-50', text: 'text-purple-800' },
-    page:      { border: 'border-l-amber-400',  bg: 'bg-amber-50',  text: 'text-amber-800' },
-    region:    { border: 'border-l-emerald-400',bg: 'bg-emerald-50',text: 'text-emerald-800' },
-    global:    { border: 'border-l-rose-400',   bg: 'bg-rose-50',   text: 'text-rose-800' },
+    comment: { border: 'border-l-blue-400', bg: 'bg-blue-50', text: 'text-blue-800' },
+    margin: { border: 'border-l-purple-400', bg: 'bg-purple-50', text: 'text-purple-800' },
+    page: { border: 'border-l-amber-400', bg: 'bg-amber-50', text: 'text-amber-800' },
+    region: { border: 'border-l-emerald-400', bg: 'bg-emerald-50', text: 'text-emerald-800' },
+    global: { border: 'border-l-rose-400', bg: 'bg-rose-50', text: 'text-rose-800' },
   };
 
   return (
-    <div className="w-[340px] flex-shrink-0 bg-white border-l border-blue-200 flex flex-col overflow-hidden relative min-h-0 h-full">
+    <>
       <div className="px-4 py-3 border-b border-blue-200 bg-blue-50 flex-shrink-0">
         <div className="flex items-center justify-between">
           <h3 className="text-xs font-bold text-blue-950 uppercase tracking-wider">
@@ -832,9 +816,8 @@ const SidebarFeedbackPanel = ({
                 ref={(n) => { if (cardRefs?.current) cardRefs.current[a.id] = n; }}
                 onMouseEnter={() => onHoverCard?.(a.id)}
                 onMouseLeave={() => onHoverCard?.(null)}
-                className={`relative bg-white rounded-lg border-l-4 ${colors.border} border border-blue-100 shadow-sm transition-all ${
-                  isHovered ? 'ring-2 ring-yellow-400 shadow-lg shadow-blue-900/10 scale-[1.02]' : 'hover:shadow-md'
-                }`}>
+                className={`relative bg-white rounded-lg border-l-4 ${colors.border} border border-blue-100 shadow-sm transition-all ${isHovered ? 'ring-2 ring-yellow-400 shadow-lg shadow-blue-900/10 scale-[1.02]' : 'hover:shadow-md'
+                  }`}>
                 <div className={`flex items-center gap-1.5 px-2.5 py-1.5 ${colors.bg} border-b border-blue-100 rounded-t-md`}>
                   <div className="flex items-center justify-center w-5 h-5 rounded-full text-white text-[10px] font-bold flex-shrink-0 border-2 border-white shadow-sm"
                     style={{ backgroundColor: a.color }}>{num}</div>
@@ -881,12 +864,267 @@ const SidebarFeedbackPanel = ({
           <ChevronRight className="w-3.5 h-3.5" />
         </button>
       </div>
+    </>
+  );
+};
+
+// ============================================================
+// PROCEEDINGS PANEL
+// ============================================================
+const SidebarProceedingsPanel = ({
+  proposedTitleId,
+  proceedings = [],
+  canAnnotate = false,
+  onSaved,
+  onDeleted,
+  showNotification,
+  userRole,
+  pageNum,              // 👈 NEW
+  pdfNumPages,          // 👈 NEW
+  setAnnotationPageNum, // 👈 NEW
+}) => {
+  const [text, setText] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(null);
+
+  const { CreateComment, DeleteComment } = useContext(CommentContext);
+
+  const canWriteProceedings = canAnnotate && userRole === 'panelist';
+
+  const handleSubmit = async () => {
+    if (!text.trim() || isSaving) return;
+    setIsSaving(true);
+    try {
+      const res = await CreateComment(proposedTitleId, {
+        text: text.trim(),
+        pageNumber: null,
+        position: null,
+        selectedText: null,
+        color: '#fbbf24',
+        annotationType: 'proceedings',
+        annotationLabel: 'Proceedings',
+      });
+      if (res?.success) {
+        setText('');
+        showNotification?.('✅ Proceedings saved');
+        onSaved?.(res.data);
+      } else {
+        showNotification?.(`❌ ${res?.error || 'Failed to save'}`, true);
+      }
+    } catch (err) {
+      showNotification?.(`❌ ${err.message}`, true);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDelete = async (comment) => {
+    if (!window.confirm('Delete this proceedings entry?')) return;
+    const id = comment.backendId || comment._id || comment.id;
+    setIsDeleting(id);
+    try {
+      const res = await DeleteComment(id);
+      if (res?.success) {
+        showNotification?.('✅ Proceedings deleted');
+        onDeleted?.(id);
+      } else {
+        showNotification?.(`❌ ${res?.error || 'Failed to delete'}`, true);
+      }
+    } finally {
+      setIsDeleting(null);
+    }
+  };
+
+  const sorted = [...proceedings].sort(
+    (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+  );
+
+  return (
+    <>
+      <div className="px-4 py-3 border-b border-blue-200 bg-blue-50 flex-shrink-0">
+        <h3 className="text-xs font-bold text-blue-950 uppercase tracking-wider flex items-center gap-1.5">
+          <ClipboardList className="w-3.5 h-3.5 text-yellow-600" />
+          Proceedings
+          <span className="ml-1 text-yellow-600 font-extrabold">({proceedings.length})</span>
+        </h3>
+        <p className="text-[10px] text-blue-500 mt-0.5">Panelist proceedings notes</p>
+      </div>
+
+      {canWriteProceedings ? (
+        <div className="px-3 py-3 border-b border-blue-200 bg-blue-50/40 flex-shrink-0">
+          <textarea
+            rows={4}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && e.ctrlKey) handleSubmit(); }}
+            placeholder="Type proceedings here... (e.g., 'Approved Chapter 3. Revise methodology section.')"
+            className="w-full text-xs border border-blue-200 rounded-lg p-2 outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 resize-none text-blue-950 placeholder:text-blue-400"
+          />
+          <div className="flex items-center justify-between mt-2">
+            <p className="text-[10px] text-blue-400">Ctrl+Enter to save</p>
+            <button
+              onClick={handleSubmit}
+              disabled={isSaving || !text.trim()}
+              className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-blue-950 bg-yellow-400 hover:bg-yellow-300 rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {isSaving
+                ? <><Loader2 className="w-3 h-3 animate-spin" /> Saving...</>
+                : <><Send className="w-3 h-3" /> Save Proceedings</>}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="px-3 py-2 border-b border-blue-200 bg-blue-50/40 flex-shrink-0 text-[10px] text-blue-600 flex items-center gap-1.5">
+          <Lock className="w-3 h-3" />
+          Only panelists can add proceedings notes.
+        </div>
+      )}
+
+      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2 min-h-0 bg-gradient-to-b from-white to-blue-50/30">
+        {sorted.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-10 text-center px-4">
+            <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center mb-3">
+              <ClipboardList className="w-6 h-6 text-blue-300" />
+            </div>
+            <p className="text-xs font-semibold text-blue-700">No proceedings yet</p>
+            <p className="text-[10px] text-blue-500 mt-1 leading-relaxed">
+              {canWriteProceedings
+                ? 'Type notes above to record proceedings.'
+                : 'Proceedings will appear here once saved.'}
+            </p>
+          </div>
+        ) : (
+          sorted.map((p) => {
+            const id = p.backendId || p._id || p.id;
+            return (
+              <div key={id}
+                className="relative bg-white rounded-lg border-l-4 border-l-amber-400 border border-blue-100 shadow-sm">
+                <div className="flex items-center justify-between px-2.5 py-1.5 bg-amber-50 border-b border-blue-100 rounded-t-md">
+                  <span className="text-[9px] font-bold uppercase tracking-wide text-amber-800">
+                    {p.author || p.authorRole || 'Panelist'}
+                  </span>
+                  <span className="text-[9px] text-blue-500">
+                    {new Date(p.createdAt).toLocaleDateString('en-US', {
+                      month: 'short', day: 'numeric', year: 'numeric',
+                    })}
+                  </span>
+                </div>
+                <div className="px-2.5 py-2">
+                  <p className="text-[11px] text-blue-950 leading-snug whitespace-pre-wrap break-words">
+                    {p.text}
+                  </p>
+                </div>
+                {canWriteProceedings && (
+                  <div className="flex justify-end px-2.5 py-1 bg-blue-50/60 border-t border-blue-100 rounded-b-md">
+                    <button
+                      onClick={() => handleDelete(p)}
+                      disabled={isDeleting === id}
+                      className="text-[9px] font-semibold text-rose-600 hover:bg-rose-100 px-1.5 py-0.5 rounded transition disabled:opacity-40 inline-flex items-center gap-1"
+                    >
+                      {isDeleting === id
+                        ? <><Loader2 className="w-2.5 h-2.5 animate-spin" /> Deleting...</>
+                        : <><Trash2 className="w-2.5 h-2.5" /> Delete</>}
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* 👇 Page navigation — always visible so panelists can navigate the PDF */}
+      <div className="px-3 py-2 border-t border-blue-200 bg-blue-50 flex items-center justify-center gap-2 flex-shrink-0">
+        <button disabled={pageNum <= 1} onClick={() => setAnnotationPageNum?.(p => Math.max(1, p - 1))}
+          className="p-1.5 bg-white border border-blue-200 text-blue-900 rounded hover:bg-yellow-50 hover:border-yellow-400 disabled:opacity-40 transition"
+          title="Previous page">
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+        <span className="text-[11px] font-semibold text-blue-900 min-w-[80px] text-center">
+          Page {pageNum} / {pdfNumPages || '—'}
+        </span>
+        <button disabled={pageNum >= pdfNumPages} onClick={() => setAnnotationPageNum?.(p => Math.min(pdfNumPages, p + 1))}
+          className="p-1.5 bg-white border border-blue-200 text-blue-900 rounded hover:bg-yellow-50 hover:border-yellow-400 disabled:opacity-40 transition"
+          title="Next page">
+          <ChevronRight className="w-4 h-4" />
+        </button>
+      </div>
+    </>
+  );
+};
+
+// ============================================================
+// SIDEBAR WRAPPER
+// ============================================================
+const SidebarPanel = ({
+  sidebarTab, setSidebarTab,
+  feedbackCount, proceedingsCount,
+  pdfAnnotations, annotationNumbers, pageNum, pdfNumPages,
+  setAnnotationPageNum, onHoverCard, hoveredId, canAnnotate, activeTool, onErase, cardRefs,
+  proposedTitleId, proceedings, onProceedingsSaved, onProceedingsDeleted, showNotification,
+  userRole,
+}) => {
+  const isPanelist = userRole === 'panelist';
+
+  return (
+    <div className="w-[340px] flex-shrink-0 bg-white border-l border-blue-200 flex flex-col overflow-hidden relative min-h-0 h-full">
+      <div className="flex bg-blue-100 border-b border-blue-200 flex-shrink-0">
+        {!isPanelist && (
+          <button
+            onClick={() => setSidebarTab('feedback')}
+            className={`flex-1 px-3 py-2 text-[11px] font-bold uppercase tracking-wide transition ${sidebarTab === 'feedback'
+                ? 'bg-white text-blue-900 border-b-2 border-yellow-400'
+                : 'text-blue-600 hover:bg-blue-50'
+              }`}
+          >
+            💬 Feedback ({feedbackCount})
+          </button>
+        )}
+        <button
+          onClick={() => setSidebarTab('proceedings')}
+          className={`flex-1 px-3 py-2 text-[11px] font-bold uppercase tracking-wide transition ${sidebarTab === 'proceedings'
+              ? 'bg-white text-blue-900 border-b-2 border-yellow-400'
+              : 'text-blue-600 hover:bg-blue-50'
+            }`}
+        >
+          📋 Proceedings ({proceedingsCount})
+        </button>
+      </div>
+
+      {isPanelist || sidebarTab === 'proceedings' ? (
+        <SidebarProceedingsPanel
+          proposedTitleId={proposedTitleId}
+          proceedings={proceedings}
+          canAnnotate={canAnnotate}
+          onSaved={onProceedingsSaved}
+          onDeleted={onProceedingsDeleted}
+          showNotification={showNotification}
+          userRole={userRole}
+          pageNum={pageNum}                    // 👈 PASS DOWN
+          pdfNumPages={pdfNumPages}            // 👈 PASS DOWN
+          setAnnotationPageNum={setAnnotationPageNum}  // 👈 PASS DOWN
+        />
+      ) : (
+        <SidebarFeedbackPanel
+          pdfAnnotations={pdfAnnotations}
+          annotationNumbers={annotationNumbers}
+          pageNum={pageNum}
+          pdfNumPages={pdfNumPages}
+          setAnnotationPageNum={setAnnotationPageNum}
+          hoveredId={hoveredId}
+          onHoverCard={onHoverCard}
+          canAnnotate={canAnnotate}
+          activeTool={activeTool}
+          onErase={onErase}
+          cardRefs={cardRefs}
+        />
+      )}
     </div>
   );
 };
 
 // ============================================================
-// CONTEXT MENU + TEXT LAYER WRAPPER — ⭐ NAVY / GOLD THEME
+// CONTEXT MENU + TEXT LAYER WRAPPER
 // ============================================================
 const PdfTextContextMenu = ({ menu, onClose, onAction, readOnly = false }) => {
   const ref = useRef(null);
@@ -975,7 +1213,7 @@ const PdfTextLayerWrapper = ({ children, onTextContextMenu }) => {
 };
 
 // ============================================================
-// MAIN PDF VIEWER (exported) — ⭐ NAVY / GOLD THEME
+// MAIN PDF VIEWER
 // ============================================================
 export default function PdfViewer({
   viewSubmission, activeTrackingId, proposedTitleId,
@@ -999,6 +1237,74 @@ export default function PdfViewer({
   onEraseFromSidebar, onContextAction,
   refreshComments, showNotification,
 }) {
+  const { role } = useContext(AuthContext);
+
+  const isPanelist = role === 'panelist';
+
+  const [sidebarTab, setSidebarTab] = useState(isPanelist ? 'proceedings' : 'feedback');
+
+  useEffect(() => {
+    if (isPanelist && sidebarTab !== 'proceedings') {
+      setSidebarTab('proceedings');
+    }
+  }, [isPanelist, sidebarTab]);
+
+  // ⭐ PROCEEDINGS — defensive derive
+  const proceedings = useMemo(() => {
+    const all = [];
+    const seen = new Set();
+
+    const scan = (arr) => {
+      if (!Array.isArray(arr)) return;
+      arr.forEach(a => {
+        const id = a.id || a._id;
+        if (!id || seen.has(id)) return;
+        if (a.annotationType === 'proceedings' || a.type === 'proceedings') {
+          seen.add(id);
+          all.push(a);
+        }
+      });
+    };
+
+    Object.values(pdfAnnotations || {}).forEach(scan);
+    if (Array.isArray(pdfAnnotations)) scan(pdfAnnotations);
+
+    return all.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  }, [pdfAnnotations]);
+
+  // ⭐ FEEDBACK count
+  const feedbackCount = useMemo(() => {
+    let count = 0;
+    Object.values(pdfAnnotations || {}).forEach(list => {
+      if (!Array.isArray(list)) return;
+      list.forEach(a => {
+        if (a.annotationType !== 'proceedings' && a.type !== 'proceedings') {
+          count++;
+        }
+      });
+    });
+    return count;
+  }, [pdfAnnotations]);
+
+  // ⭐ DEBUG
+  useEffect(() => {
+    console.log('═══════════════════════════════════════════');
+    console.log('📦 pdfAnnotations keys:', Object.keys(pdfAnnotations || {}));
+    console.log('📋 Proceedings count:', proceedings.length);
+    console.log('💬 Feedback count:', feedbackCount);
+    console.log('👤 User role:', role, '| isPanelist:', isPanelist);
+    console.log('📄 Current page:', annotationPageNum, '/', pdfNumPages);
+    console.log('═══════════════════════════════════════════');
+  }, [pdfAnnotations, proceedings, feedbackCount, role, isPanelist, annotationPageNum, pdfNumPages]);
+
+  const handleProceedingsSaved = useCallback(async () => {
+    if (refreshComments) { try { await refreshComments(); } catch (e) { console.warn(e); } }
+  }, [refreshComments]);
+
+  const handleProceedingsDeleted = useCallback(async () => {
+    if (refreshComments) { try { await refreshComments(); } catch (e) { console.warn(e); } }
+  }, [refreshComments]);
+
   const addAnnotation = useCallback((pageNum, data) => {
     if (!canAnnotate) return;
     setPdfAnnotations(prev => {
@@ -1020,11 +1326,14 @@ export default function PdfViewer({
   const currentPageAnnots = [
     ...(pdfAnnotations[GLOBAL_KEY] || []),
     ...(pdfAnnotations[`page_${annotationPageNum}`] || []),
-  ];
+  ].filter(a => !isProceedings(a));
+
+  const showAnnotationToolbar = canAnnotate && !isPanelist;
+  const overlayReadOnly = effectiveReadOnly || isPanelist;
 
   return (
     <div className="h-screen bg-gradient-to-b from-blue-100 via-blue-50 to-sky-50 flex flex-col overflow-hidden font-sans">
-      {/* ⭐ HEADER — NAVY + GOLD */}
+      {/* HEADER */}
       <div className="bg-blue-900 border-b-4 border-yellow-400 px-4 sm:px-6 py-3 flex items-center justify-between gap-3 flex-wrap flex-shrink-0 shadow-md shadow-blue-900/20">
         <div className="flex items-center gap-3">
           <button onClick={onBack}
@@ -1053,7 +1362,8 @@ export default function PdfViewer({
         </button>
       </div>
 
-      {canAnnotate ? (
+      {/* Toolbar: hidden for panelists */}
+      {showAnnotationToolbar ? (
         <PdfAnnotationBar
           activeTool={annotationTool} setActiveTool={setAnnotationTool}
           activeColor={annotationColor} setActiveColor={setAnnotationColor}
@@ -1068,13 +1378,18 @@ export default function PdfViewer({
       ) : (
         <div className="px-4 py-2 bg-yellow-50 border-b border-yellow-300 text-[11px] text-yellow-800 flex items-center gap-2 font-medium flex-shrink-0">
           <Lock className="w-3.5 h-3.5" />
-          View-only mode — You can read mentor feedback and download the annotated PDF, but you cannot add or delete annotations.
+          {isPanelist
+            ? 'Panelist mode — You can read mentor feedback and add proceedings notes, but you cannot add or delete annotations.'
+            : 'View-only mode — You can read mentor feedback and download the annotated PDF, but you cannot add or delete annotations.'}
         </div>
       )}
 
       <div ref={splitContainerRef} className="flex-1 flex overflow-hidden relative min-h-0">
-        <LeaderLineLayer containerRef={splitContainerRef} anchorRefs={anchorRefs} cardRefs={cardRefs}
-          annotations={currentPageAnnots} hoveredId={hoveredAnnotationId} />
+        {/* 👇 Hide leader lines for panelists — they can't see annotations */}
+        {!isPanelist && (
+          <LeaderLineLayer containerRef={splitContainerRef} anchorRefs={anchorRefs} cardRefs={cardRefs}
+            annotations={currentPageAnnots} hoveredId={hoveredAnnotationId} />
+        )}
 
         <div className="flex-1 overflow-auto flex justify-center items-start py-6 bg-gradient-to-br from-blue-100 via-slate-100 to-blue-50 min-w-0 min-h-0">
           <div className="relative bg-white shadow-xl shadow-blue-900/20 flex-shrink-0 border border-blue-200">
@@ -1133,7 +1448,8 @@ export default function PdfViewer({
                     proposedTitleId={proposedTitleId}
                     refreshComments={refreshComments}
                     showNotification={showNotification}
-                    readOnly={effectiveReadOnly}
+                    readOnly={overlayReadOnly}
+                    hideAnnotations={isPanelist}   // 👈 HIDE annotations for panelists
                     onAnchorHover={setHoveredAnnotationId}
                     onAnchorRef={(id, node) => {
                       if (node) anchorRefs.current[id] = node;
@@ -1150,7 +1466,11 @@ export default function PdfViewer({
           </div>
         </div>
 
-        <SidebarFeedbackPanel
+        <SidebarPanel
+          sidebarTab={sidebarTab}
+          setSidebarTab={setSidebarTab}
+          feedbackCount={feedbackCount}
+          proceedingsCount={proceedings.length}
           pdfAnnotations={pdfAnnotations}
           annotationNumbers={annotationNumbers}
           pageNum={annotationPageNum}
@@ -1162,6 +1482,12 @@ export default function PdfViewer({
           activeTool={annotationTool}
           onErase={onEraseFromSidebar}
           cardRefs={cardRefs}
+          proposedTitleId={proposedTitleId}
+          proceedings={proceedings}
+          onProceedingsSaved={handleProceedingsSaved}
+          onProceedingsDeleted={handleProceedingsDeleted}
+          showNotification={showNotification}
+          userRole={role}
         />
       </div>
 
@@ -1183,7 +1509,7 @@ export default function PdfViewer({
         menu={textMenu}
         onClose={() => setTextMenu(null)}
         onAction={onContextAction}
-        readOnly={effectiveReadOnly}
+        readOnly={overlayReadOnly}
       />
     </div>
   );

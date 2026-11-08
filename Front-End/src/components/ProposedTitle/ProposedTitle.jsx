@@ -68,6 +68,10 @@ const getNextSequentialChapter = (item) => {
 // HELPERS
 // ============================================================
 const GLOBAL_KEY = '__global__';
+const PROCEEDINGS_KEY = '__proceedings__';
+
+const isProceedings = (a) =>
+  a?.annotationType === 'proceedings' || a?.type === 'proceedings';
 
 const hexToRgb = (hex) => {
   const clean = (hex || '#fbbf24').replace('#', '');
@@ -168,8 +172,9 @@ const getLatestTrackingEntry = (submission) => {
   return [...tracking].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))[0];
 };
 
-
-
+// ============================================================
+// ⭐ BACKEND COMMENT → ANNOTATION (with proceedings support)
+// ============================================================
 const backendCommentToAnnotation = (comment) => {
   const pos = comment.position || {};
   const x = pos.x ?? 0.1;
@@ -184,6 +189,7 @@ const backendCommentToAnnotation = (comment) => {
   else if (backendType === 'page') localType = 'page';
   else if (backendType === 'region') localType = 'region';
   else if (backendType === 'global') localType = 'global';
+  else if (backendType === 'proceedings') localType = 'proceedings';   // ⭐ ADD
 
   const author = comment.userId
     ? `${comment.userId.first_name || ''} ${comment.userId.last_name || ''}`.trim() || 'Mentor'
@@ -221,7 +227,16 @@ const mergeBackendCommentsIntoAnnotations = (existing, backendComments) => {
     const ann = backendCommentToAnnotation(c);
     seenIds.add(cid);
 
-    const key = ann.type === 'global' ? GLOBAL_KEY : `page_${ann.pageNum || 1}`;
+    // ⭐ Proceedings → dedicated key; never go to page_* or __global__
+    let key;
+    if (isProceedings(ann)) {
+      key = PROCEEDINGS_KEY;
+    } else if (ann.type === 'global') {
+      key = GLOBAL_KEY;
+    } else {
+      key = `page_${ann.pageNum || 1}`;
+    }
+
     if (!next[key]) next[key] = [];
     next[key].push(ann);
   });
@@ -970,17 +985,23 @@ export default function ProposedTitle() {
   };
 
   // ============================================================
-  // SAVE ANNOTATED PDF
+  // SAVE ANNOTATED PDF — ⭐ EXCLUDE PROCEEDINGS
   // ============================================================
   const handleSaveAnnotatedPdf = async () => {
     if (!pdfBlobUrl || !activeTrackingId) { showNotification('❌ No PDF to generate', true); return; }
 
-    const globals = (pdfAnnotations[GLOBAL_KEY] || []).map(a => ({ ...a, isGlobal: true }));
+    // ⭐ Exclude proceedings — hindi dapat i-bake sa PDF
+    const globals = (pdfAnnotations[GLOBAL_KEY] || [])
+      .filter(a => !isProceedings(a))
+      .map(a => ({ ...a, isGlobal: true }));
+
     const pageSpecific = Object.entries(pdfAnnotations)
-      .filter(([key]) => key !== GLOBAL_KEY)
+      .filter(([key]) => key !== GLOBAL_KEY && key !== PROCEEDINGS_KEY)
       .flatMap(([key, list]) => {
         const pageNum = parseInt(key.replace('page_', ''), 10);
-        return (list || []).map(a => ({ ...a, pageNum }));
+        return (list || [])
+          .filter(a => !isProceedings(a))
+          .map(a => ({ ...a, pageNum }));
       });
 
     if (globals.length === 0 && pageSpecific.length === 0) {
@@ -1202,8 +1223,6 @@ export default function ProposedTitle() {
 
   // ============================================================
   // AVAILABLE ACTIONS
-  // ⭐ "Ready for Defense" is only available when status === 'for_schedule'
-  //    (for subject_instructor / admin / organizer)
   // ============================================================
   const getAvailableActions = (item) => {
     const { status, adviser, coAdviser } = item;
@@ -1246,7 +1265,6 @@ export default function ProposedTitle() {
       const isPrivileged = ['admin', 'organizer'].includes(normalizedRole);
       return {
         showApprove: false, showReject: false, showRevision: false,
-        // ⭐ Ready only when status === 'for_schedule'
         showReadyForDefense: canMarkReadyForDefense && isForSchedule && !isReady && fullyProceeded,
         showForSchedule: (normalizedRole === 'adviser' || userIsAdviser) && !isForSchedule && fullyProceeded,
         isFullyApproved: bothApproved, isReadyForDefense: isReady, isForSchedule,
@@ -1270,14 +1288,13 @@ export default function ProposedTitle() {
     if (normalizedRole === 'student') return { showApprove: false, showReject: false, showRevision: false, showReadyForDefense: false, showForSchedule: false, isFullyApproved: fullyApproved, isReadyForDefense: isReady, isForSchedule, canAct: false, alreadyApproved: false, fullyProceeded };
 
     if (normalizedRole === 'subject_instructor') {
-      // ⭐ Ready button only when status === 'for_schedule'
       const canShowReady = canMarkReadyForDefense && isForSchedule && !isReady && fullyProceeded;
       return {
         showApprove: false,
         showReject: false,
         showRevision: false,
         showReadyForDefense: canShowReady,
-        showForSchedule: false, // ⭐ Subject Instructor should NOT see the Schedule Defense button
+        showForSchedule: false,
         isFullyApproved: fullyApproved,
         isReadyForDefense: isReady,
         isForSchedule,
@@ -1302,7 +1319,6 @@ export default function ProposedTitle() {
       const canActNow = canMarkReadyForDefense || normalizedRole === 'adviser' || userIsAdviser || userIsPanelist;
       return {
         showApprove: false, showReject: true, showRevision: true,
-        // ⭐ Ready only when status === 'for_schedule'
         showReadyForDefense: canMarkReadyForDefense && isForSchedule && !isReady && fullyProceeded,
         showForSchedule: (normalizedRole === 'adviser' || userIsAdviser) && !isForSchedule && !isReady && fullyProceeded,
         isFullyApproved: true, isReadyForDefense: isReady, isForSchedule,
@@ -1313,7 +1329,6 @@ export default function ProposedTitle() {
 
     if (fullyApproved) return {
       showApprove: false, showReject: true, showRevision: true,
-      // ⭐ Status is 'Approved' here (not for_schedule) → Ready is not available yet
       showReadyForDefense: false,
       showForSchedule: (normalizedRole === 'adviser' || userIsAdviser) && fullyProceeded,
       isFullyApproved: true, isReadyForDefense: false, isForSchedule: false,
@@ -1335,7 +1350,6 @@ export default function ProposedTitle() {
       showApprove: status !== 'Approved' && status !== 'Rejected' && status !== 'Revision' && status !== 'Ready for Defense' && status !== 'for_schedule',
       showReject: status !== 'Rejected' && status !== 'Approved' && status !== 'Ready for Defense' && status !== 'for_schedule',
       showRevision: status !== 'Revision' && status !== 'Approved' && status !== 'Ready for Defense' && status !== 'for_schedule',
-      // ⭐ Never reaches here with status === 'for_schedule' (handled above) → no Ready button
       showReadyForDefense: false,
       showForSchedule: false, isFullyApproved: false, isReadyForDefense: false, isForSchedule: false,
       canAct: status !== 'Ready for Defense' && status !== 'Rejected' && status !== 'for_schedule',
@@ -1390,11 +1404,12 @@ export default function ProposedTitle() {
       }
     };
 
+    // ⭐ Exclude proceedings — hindi dapat bilangin bilang feedback
     const totalAnnotationCount =
-      (pdfAnnotations[GLOBAL_KEY] || []).length +
+      (pdfAnnotations[GLOBAL_KEY] || []).filter(a => !isProceedings(a)).length +
       Object.entries(pdfAnnotations)
-        .filter(([k]) => k !== GLOBAL_KEY)
-        .reduce((s, [, l]) => s + (l?.length || 0), 0);
+        .filter(([k]) => k !== GLOBAL_KEY && k !== PROCEEDINGS_KEY)
+        .reduce((s, [, l]) => s + (l || []).filter(a => !isProceedings(a)).length, 0);
 
     return (
       <PdfViewer
@@ -1608,14 +1623,11 @@ export default function ProposedTitle() {
                           isFullyApprovedStatus || isReadyForDefense || isForSchedule ||
                           isDoneStatus || isRevisionStatus || item.isRevesion === true || thisMentorApproved;
 
-                        // ⭐ Hide "Schedule Defense" button for subject_instructor
                         const showForScheduleButton =
                           normalizedRole !== 'subject_instructor' &&
                           item.status === 'Approved' && fullyProceeded &&
                           (normalizedRole === 'adviser' || userIsAdviser || (normalizedRole === 'panelist' && userIsPanelistItem));
 
-                        // ⭐ READY BUTTON — subject_instructor / admin / organizer:
-                        //    only visible when status === 'for_schedule'
                         const isReadyRole = ['subject_instructor', 'admin', 'organizer'].includes(normalizedRole);
                         const readyStatusAllowed = isReadyRole
                           ? item.status === 'for_schedule'
@@ -1640,14 +1652,12 @@ export default function ProposedTitle() {
                         const isRowLoading = rowProceedingId === item._id;
                         const mentorsBothApproved = item.adviser === true && item.coAdviser === true;
 
-                        // ⭐ Step badge (e.g. "2/6") so it's clear which chapter is next
                         const chapterStepLabel = (() => {
                           const approvals = item.chapterProgressionApprovals || {};
                           const done = SEQUENTIAL_CHAPTERS.filter((ch) => getApprovalVal(approvals, ch)).length;
                           return `${Math.min(done + 1, SEQUENTIAL_CHAPTERS.length)}/${SEQUENTIAL_CHAPTERS.length}`;
                         })();
 
-                        // ⭐ PROCEED CHAPTER CONTROL — always rendered FIRST in the actions cell
                         const proceedControl = !canProceedChapters ? null : !mentorsBothApproved ? (
                           <span
                             className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-blue-500 bg-blue-50 border border-blue-200 rounded-lg cursor-help"
@@ -1751,17 +1761,14 @@ export default function ProposedTitle() {
                             </td>
                             <td className="py-3.5 px-4">
                               <div className="flex items-center justify-center gap-1.5 flex-wrap">
-                                {/* 1️⃣ PROCEED CHAPTER — always first */}
                                 {proceedControl}
 
-                                {/* 2️⃣ Progression (Subject Instructor) */}
                                 {isSubjectInstructor && (
                                   <button onClick={() => handleOpenProgressionModal(item)} title="Manage chapter progression" className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-white bg-blue-900 hover:bg-blue-950 rounded-lg shadow-sm transition">
                                     <Award className="w-3.5 h-3.5" /> Progression
                                   </button>
                                 )}
 
-                                {/* 3️⃣ View */}
                                 <button onClick={() => canView && handleOpenModal(item)} disabled={!canView}
                                   title={canView ? 'View thesis document and mentor feedback' : 'Waiting for mentor approval before documents can be viewed'}
                                   className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg transition ${
@@ -1774,7 +1781,6 @@ export default function ProposedTitle() {
                                   <Eye className="w-3.5 h-3.5" /> View
                                 </button>
 
-                                {/* 4️⃣ Approve / Reject / Revision */}
                                 {showActionBlock && (
                                   <>
                                     {showApprove && canAct && (
@@ -1798,14 +1804,12 @@ export default function ProposedTitle() {
                                   </>
                                 )}
 
-                                {/* 5️⃣ Schedule / Ready / status chips */}
                                 {showForScheduleButton && (
                                   <button onClick={() => handleStatusChange(item._id, 'for_schedule')} className="px-2.5 py-1 text-xs font-medium text-white bg-cyan-600 hover:bg-cyan-700 rounded-lg shadow-sm transition inline-flex items-center gap-1">
                                     <CalendarDays className="w-3.5 h-3.5" /> Schedule Defense
                                   </button>
                                 )}
 
-                                {/* ⭐ READY — subject_instructor / admin / organizer see it only when status === 'for_schedule' */}
                                 {showReadyButton && (
                                   <button onClick={() => handleReadyForDefense(item._id)} className="px-2.5 py-1 text-xs font-medium text-blue-950 bg-yellow-400 hover:bg-yellow-300 rounded-lg shadow-sm transition inline-flex items-center gap-1">
                                     <Shield className="w-3.5 h-3.5" /> Ready

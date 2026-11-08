@@ -1,7 +1,8 @@
-import React, { useState, useCallback, useRef, useEffect } from "react";
+import React, { useState, useCallback, useRef, useContext, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
-import { BookOpen, Lock, Mail, Eye, EyeOff, ArrowRight, ShieldCheck } from "lucide-react";
+import { ProposedTitleContext } from "../../contexts/ProposedTitleContext/ProposedTitleContext";
+import { Lock, Mail, Eye, EyeOff, ArrowRight, ShieldCheck } from "lucide-react";
 import {
   motion,
   AnimatePresence,
@@ -44,100 +45,9 @@ const C = {
   inverseSurface: "#213145",
 };
 
-const LOGO_URL =
-  "https://lh3.googleusercontent.com/aida/AEtjO1WE4Lbtt389D-ldX1-08Ewf9k0g1Fid1Hxdek-AuwruftNgNYVHxFGb8Iknzhj-nVZHYDNLSGAm-cwzvWgR8VsJKPEUuIgTQpkgiZ8jPXqh3cjtfv1oGc4fDTUCgpQRoM5fsyGhdh_nr8Ds0oarUydcECK4I5Y4hBLFltIHDE_DzFA5iopqmjTYYJQJI-feJIqFdlcZ-5Da0t4A4RbCNFkw4GUD-Of_6QXTCq90vMGQJ3no4MeeNFeI";
-
 /* ============================================================
    STATIC DATA
    ============================================================ */
-const THESES = [
-  {
-    id: 1,
-    college: "ccs",
-    collegeLabel: "CCS • Capstone 2024",
-    badge: "Magna Cum Laude / Best Capstone 2024",
-    badgeIcon: "star",
-    badgeBg: C.tertiaryFixed,
-    badgeColor: C.onTertiaryFixed,
-    title:
-      "IoT-Driven Mangrove Estuary Telemetry & Coastal Storm Surge Sensor Array for Biliran Island",
-    authors: "Marc Kenneth Aldaba, Rhea Mae Navarro, Carlo S. Tan",
-    advisor: "Dr. Aris V. Ramirez, PECE",
-    ref: "Archival Ref: BiPSU-CCS-2024-081 • DOI: 10.5281/bipsu.2024.081",
-    abstract:
-      "This study engineered a low-cost, solar-powered LoRaWAN sensor network deployed across the Naval mangrove perimeter. The system provides real-time tidal depth telemetry, dissolved oxygen analytics, and automated SMS warnings to barangay DRRM councils with 99.2% transmission reliability during seasonal tropical storms.",
-    pdf: "IoT-Driven Mangrove Estuary Telemetry (BiPSU-CCS-2024-081.pdf)",
-  },
-  {
-    id: 2,
-    college: "agri",
-    collegeLabel: "Agri-Fisheries • 2024",
-    badge: "DOST Regional Awardee",
-    badgeIcon: "military_tech",
-    badgeBg: C.secondaryFixed,
-    badgeColor: C.onSecondaryFixed,
-    title:
-      "Deep Learning Identification of Red Tide Dinoflagellates via Affordable Mobile Microscope",
-    authors: "L. D. Montano, Bianca F. Espina, Samuel T. Corpin",
-    advisor: "Prof. Danilo S. Macariola, Ph.D.",
-    ref: "Archival Ref: BiPSU-MAF-2024-019 • DOI: 10.5281/bipsu.2024.019",
-    abstract:
-      "Utilizes a 3D-printed smartphone microscopic coupler paired with a lightweight YOLOv8 neural network to identify harmful Pyrodinium bahamense cysts in Carigara Bay waters within 90 seconds, bypassing slow traditional laboratory centrifugal assays.",
-    pdf: "Deep Learning Identification of Red Tide (BiPSU-MAF-2024-019.pdf)",
-  },
-  {
-    id: 3,
-    college: "cote",
-    collegeLabel: "CoTE • Engineering 2024",
-    badge: "Patent Pending (IPOPHL UM)",
-    badgeIcon: "lock",
-    badgeBg: C.surfaceTint,
-    badgeColor: C.onPrimary,
-    title:
-      "Volcanic Soil Nutrient Telemetry & Autonomous Drip Fertigation for Biliran Abaca Plantations",
-    authors: "Kevin J. Roble, Mary Ann Cañete, Justin P. Sabitsana",
-    advisor: "Engr. Maria Luisa Corpin, M.Sc.",
-    ref: "Archival Ref: BiPSU-ENG-2024-112 • Utility Model: UM-2024-50012",
-    abstract:
-      "Presents a specialized soil sensor array calibrated for Biliran volcanic loam soil. By correlating live nitrogen and potassium readings with programmed gravity micro-drip fertigation valves, test abaca yields increased by 31.4% with 40% reduced water waste.",
-    pdf: "Volcanic Soil Nutrient Telemetry (BiPSU-ENG-2024-112.pdf)",
-  },
-  {
-    id: 4,
-    college: "coed",
-    collegeLabel: "CoEd • Education 2024",
-    badge: "Outstanding Dissertation 2024",
-    badgeIcon: "grade",
-    badgeBg: C.tertiaryFixed,
-    badgeColor: C.onTertiaryFixed,
-    title:
-      "Pedagogical Waray-Waray Gamified STEM Learning Tools for Rural Elementary Schools",
-    authors: "Joylyn D. Mendoza, Christine P. Velasco",
-    advisor: "Dr. Elena Rosal-Velasco, Ed.D.",
-    ref: "Archival Ref: BiPSU-ED-2024-044 • DepEd Biliran Endorsement",
-    abstract:
-      "Investigates mother-tongue mathematical cognition using localized Waray tablet applications across 8 primary schools in Biliran. Standardized pre/post assessment revealed a 28% increase in numeracy test retention over conventional bilingual texts.",
-    pdf: "Waray-Waray Gamified STEM Tools (BiPSU-ED-2024-044.pdf)",
-  },
-];
-
-const CATEGORY_PILLS = [
-  { id: "all", label: "All Colleges" },
-  { id: "ccs", label: "Computer Studies & IT" },
-  { id: "cote", label: "Engineering" },
-  { id: "coed", label: "Education" },
-  { id: "cas", label: "Arts & Sciences" },
-  { id: "agri", label: "Agriculture & Fisheries" },
-];
-
-const GALLERY_TABS = [
-  "All Documentation",
-  "Oral Presentations",
-  "Prototype Demos",
-  "Panel Evaluations",
-  "Final Approvals",
-];
-
 const CORE_VALUES = [
   { letter: "B", word: "Brilliance" },
   { letter: "I", word: "Innovation" },
@@ -145,6 +55,88 @@ const CORE_VALUES = [
   { letter: "S", word: "Service" },
   { letter: "U", word: "Unity" },
 ];
+
+/* ============================================================
+   HELPERS
+   ============================================================ */
+// Format a full name from an info object
+const formatFullName = (info) => {
+  if (!info) return null;
+  const { first_name, middle_name, last_name, suffix } = info;
+  const name = [first_name, middle_name, last_name, suffix]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+  return name || null;
+};
+
+// Normalize an archived title document into UI-friendly shape
+const normalizeTitle = (doc) => {
+  const g = doc?.groupInfo || {};
+
+  // Adviser & Co-Adviser pulled directly from adviserInfo / coadviserInfo
+  const adviserName = formatFullName(doc?.adviserInfo);
+  const coAdviserName = formatFullName(doc?.coadviserInfo);
+
+  // Authors: prefer group members, fall back to uploader
+  const members = Array.isArray(g.members) ? g.members : [];
+  const memberNames = members.map(formatFullName).filter(Boolean);
+  const authors = memberNames.length
+    ? memberNames.join(", ")
+    : doc?.uploaderName || "—";
+
+  const track = doc?.track || "General";
+  const createdAt = doc?.createdAt
+    ? new Date(doc.createdAt).toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      })
+    : "—";
+
+  const statusBadge = (() => {
+    if (doc?.status === "Done") {
+      return {
+        label: "Archived",
+        bg: C.tertiaryFixed,
+        color: C.onTertiaryFixed,
+      };
+    }
+    if (doc?.groupStatus === "Pending Acceptance") {
+      return {
+        label: "Pending",
+        bg: C.secondaryFixed,
+        color: C.onSecondaryFixed,
+      };
+    }
+    return {
+      label: doc?.status || "—",
+      bg: C.surfaceContainerHighest,
+      color: C.primary,
+    };
+  })();
+
+  return {
+    id: doc?._id,
+    college: track.toLowerCase().replace(/[^a-z]+/g, "-"),
+    collegeLabel: track,
+    badge: statusBadge.label,
+    badgeBg: statusBadge.bg,
+    badgeColor: statusBadge.color,
+    badgeIcon: "verified",
+    title: doc?.title || "(Untitled)",
+    groupName: g?.name || doc?.groupName || null,
+    authors,
+    advisor: adviserName || "—",
+    coAdvisor: coAdviserName,
+    ref: `Ref: ${doc?.referralCode || "—"} • Uploaded ${createdAt} • By ${doc?.uploaderName || "—"}`,
+    abstract: doc?.description || "No abstract provided.",
+    pdf: doc?.fileUrl || null,
+    pdfName:
+      doc?.fileName ||
+      `${(doc?.title || "thesis").slice(0, 40)}.pdf`,
+  };
+};
 
 /* ============================================================
    FRAMER MOTION VARIANTS
@@ -205,15 +197,6 @@ const staggerContainer = {
   },
 };
 
-const scaleIn = {
-  hidden: { opacity: 0, scale: 0.85 },
-  visible: {
-    opacity: 1,
-    scale: 1,
-    transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] },
-  },
-};
-
 const cardHover = {
   rest: { scale: 1, y: 0 },
   hover: {
@@ -229,7 +212,6 @@ const pillTap = {
   tap: { scale: 0.95 },
 };
 
-// NEW: Blur-in reveal effect for section headings
 const blurIn = {
   hidden: { opacity: 0, y: 30, filter: "blur(12px)" },
   visible: {
@@ -244,9 +226,9 @@ const blurIn = {
    MAIN COMPONENT
    ============================================================ */
 export default function BiPSUMentoringHub() {
+  const { archivedTitles } = useContext(ProposedTitleContext);
   const [activeCollege, setActiveCollege] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeGalleryTab, setActiveGalleryTab] = useState("All Documentation");
   const [modal, setModal] = useState({ open: false, title: "", body: "" });
 
   /* ---------- LOGIN LOGIC ---------- */
@@ -276,15 +258,10 @@ export default function BiPSUMentoringHub() {
     offset: ["start start", "end start"],
   });
 
-  // Hero background image moves slower (parallax)
   const heroImageY = useTransform(heroScroll, [0, 1], ["0%", "30%"]);
   const heroImageScale = useTransform(heroScroll, [0, 1], [1.05, 1.2]);
-
-  // Hero text/content fades + moves up slightly
   const heroContentY = useTransform(heroScroll, [0, 1], [0, -80]);
   const heroContentOpacity = useTransform(heroScroll, [0, 0.8], [1, 0]);
-
-  // Decorative blobs parallax
   const blobRightY = useTransform(heroScroll, [0, 1], [0, 150]);
   const blobLeftY = useTransform(heroScroll, [0, 1], [0, -100]);
 
@@ -309,8 +286,6 @@ export default function BiPSUMentoringHub() {
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
-
-    console.log("📤 LOGIN PAYLOAD:", values);
 
     const response = await login(values.email, values.password);
 
@@ -339,22 +314,49 @@ export default function BiPSUMentoringHub() {
     }
   };
 
-  const filteredTheses = THESES.filter((t) => {
-    const matchesCollege = activeCollege === "all" || t.college === activeCollege;
-    const q = searchQuery.toLowerCase().trim();
-    const matchesSearch =
-      !q ||
-      `${t.title} ${t.authors} ${t.advisor} ${t.collegeLabel} ${t.ref}`
-        .toLowerCase()
-        .includes(q);
-    return matchesCollege && matchesSearch;
-  });
+  /* ---------- NORMALIZED ARCHIVE DATA ---------- */
+  const normalizedTheses = useMemo(() => {
+    if (!Array.isArray(archivedTitles)) return [];
+    return archivedTitles
+      .filter((doc) => doc?.title && (doc?.groupInfo || doc?.groupName))
+      .map((doc) => normalizeTitle(doc));
+  }, [archivedTitles]);
+
+  /* ---------- DYNAMIC CATEGORY PILLS ---------- */
+  const dynamicCategories = useMemo(() => {
+    const tracks = new Set();
+    normalizedTheses.forEach((t) => {
+      if (t.collegeLabel) tracks.add(t.collegeLabel);
+    });
+    return [
+      { id: "all", label: "All Tracks" },
+      ...Array.from(tracks).map((track) => ({
+        id: track.toLowerCase().replace(/[^a-z]+/g, "-"),
+        label: track,
+      })),
+    ];
+  }, [normalizedTheses]);
+
+  const filteredTheses = useMemo(() => {
+    return normalizedTheses.filter((t) => {
+      const matchesCollege =
+        activeCollege === "all" || t.college === activeCollege;
+      const q = searchQuery.toLowerCase().trim();
+      const matchesSearch =
+        !q ||
+        `${t.title} ${t.authors} ${t.advisor} ${t.coAdvisor || ""} ${t.collegeLabel} ${t.ref}`
+          .toLowerCase()
+          .includes(q);
+      return matchesCollege && matchesSearch;
+    });
+  }, [normalizedTheses, activeCollege, searchQuery]);
 
   const scrollToRepository = () =>
-    document.getElementById("archived-titles")?.scrollIntoView({ behavior: "smooth" });
+    document
+      .getElementById("archived-titles")
+      ?.scrollIntoView({ behavior: "smooth" });
 
-  const scrollToTop = () =>
-    window.scrollTo({ top: 0, behavior: "smooth" });
+  const scrollToTop = () => window.scrollTo({ top: 0, behavior: "smooth" });
 
   /* ---------- Shared style helpers ---------- */
   const fontBody = "'Public Sans', sans-serif";
@@ -381,7 +383,7 @@ export default function BiPSUMentoringHub() {
      ============================================================ */
   return (
     <>
-      {/* ===================== SCROLL PROGRESS BAR (TOP) ===================== */}
+      {/* SCROLL PROGRESS BAR */}
       <motion.div
         style={{
           scaleX,
@@ -397,7 +399,7 @@ export default function BiPSUMentoringHub() {
         }}
       />
 
-      {/* ===================== BACK TO TOP FLOATING BUTTON ===================== */}
+      {/* BACK TO TOP */}
       <AnimatePresence>
         {showBackToTop && (
           <motion.button
@@ -428,12 +430,14 @@ export default function BiPSUMentoringHub() {
               zIndex: 80,
             }}
           >
-            <span style={{ ...iconFont, fontSize: "1.25rem" }}>arrow_upward</span>
+            <span style={{ ...iconFont, fontSize: "1.25rem" }}>
+              arrow_upward
+            </span>
           </motion.button>
         )}
       </AnimatePresence>
 
-      {/* ===================== FULL-SCREEN LOADING OVERLAY ===================== */}
+      {/* LOADING OVERLAY */}
       <AnimatePresence>
         {isLoading && (
           <motion.div
@@ -457,7 +461,7 @@ export default function BiPSUMentoringHub() {
         )}
       </AnimatePresence>
 
-      {/* ===================== LOGIN STATUS MODAL ===================== */}
+      {/* LOGIN STATUS MODAL */}
       <LoginStatusModal
         isOpen={loginStatus.show}
         onClose={handleModalClose}
@@ -465,7 +469,7 @@ export default function BiPSUMentoringHub() {
         customMessage={loginStatus.message}
       />
 
-      {/* ===================== FORGOT PASSWORD POPUP MODAL ===================== */}
+      {/* FORGOT PASSWORD MODAL */}
       <AnimatePresence>
         {showForgotPassword && (
           <motion.div
@@ -521,7 +525,6 @@ export default function BiPSUMentoringHub() {
                   zIndex: 2,
                 }}
               />
-
               <button
                 type="button"
                 onClick={() => setShowForgotPassword(false)}
@@ -571,7 +574,11 @@ export default function BiPSUMentoringHub() {
                   <img
                     src={logo}
                     alt="BiPSU Logo"
-                    style={{ width: "3rem", height: "3rem", objectFit: "contain" }}
+                    style={{
+                      width: "3rem",
+                      height: "3rem",
+                      objectFit: "contain",
+                    }}
                   />
                 </div>
                 <h3
@@ -594,7 +601,8 @@ export default function BiPSUMentoringHub() {
                     marginBottom: 0,
                   }}
                 >
-                  Enter your registered BiPSU email and we'll send you a reset link.
+                  Enter your registered BiPSU email and we'll send you a reset
+                  link.
                 </p>
               </div>
 
@@ -623,7 +631,7 @@ export default function BiPSUMentoringHub() {
           minHeight: "100vh",
         }}
       >
-        {/* ===================== HEADER (with scroll-driven shrink) ===================== */}
+        {/* ===================== HEADER ===================== */}
         <motion.header
           initial={{ y: -80, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
@@ -655,11 +663,20 @@ export default function BiPSUMentoringHub() {
               href="#"
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              style={{ display: "flex", alignItems: "center", gap: "0.75rem", textDecoration: "none" }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.75rem",
+                textDecoration: "none",
+              }}
             >
               <img
                 alt="BiPSU Mentoring Hub Logo"
-                style={{ height: "2.75rem", width: "auto", objectFit: "contain" }}
+                style={{
+                  height: "2.75rem",
+                  width: "auto",
+                  objectFit: "contain",
+                }}
                 src={logo}
               />
             </motion.a>
@@ -672,8 +689,6 @@ export default function BiPSUMentoringHub() {
                 { href: "#hero", label: "Home", active: true },
                 { href: "#vision-mission", label: "Vision & Mission" },
                 { href: "#archived-titles", label: "Archived Titles" },
-                { href: "#advisors", label: "Faculty Advisors" },
-                { href: "#defense-gallery", label: "Defense Gallery" },
               ].map((l, i) => (
                 <motion.a
                   key={l.href}
@@ -690,7 +705,9 @@ export default function BiPSUMentoringHub() {
                     fontSize: "0.875rem",
                     textDecoration: "none",
                     color: l.active ? C.primary : C.onSurfaceVariant,
-                    background: l.active ? C.surfaceContainerLow : "transparent",
+                    background: l.active
+                      ? C.surfaceContainerLow
+                      : "transparent",
                   }}
                 >
                   {l.label}
@@ -698,7 +715,13 @@ export default function BiPSUMentoringHub() {
               ))}
             </nav>
 
-            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.75rem",
+              }}
+            >
               <a
                 href="#archived-titles"
                 className="bipsu-quickfind"
@@ -742,7 +765,7 @@ export default function BiPSUMentoringHub() {
           </div>
         </motion.header>
 
-        {/* ===================== HERO WITH PARALLAX ===================== */}
+        {/* ===================== HERO ===================== */}
         <section
           id="hero"
           ref={heroRef}
@@ -754,8 +777,14 @@ export default function BiPSUMentoringHub() {
             minHeight: "700px",
           }}
         >
-          {/* Background image with parallax */}
-          <div style={{ position: "absolute", inset: 0, zIndex: 0, overflow: "hidden" }}>
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              zIndex: 0,
+              overflow: "hidden",
+            }}
+          >
             <motion.img
               initial={{ scale: 1.15, opacity: 0 }}
               animate={{ scale: 1.05, opacity: 1 }}
@@ -788,7 +817,6 @@ export default function BiPSUMentoringHub() {
             />
           </div>
 
-          {/* Decorative blobs with parallax */}
           <motion.div
             style={{
               position: "absolute",
@@ -803,10 +831,7 @@ export default function BiPSUMentoringHub() {
               zIndex: 0,
               y: blobRightY,
             }}
-            animate={{
-              scale: [1, 1.15, 1],
-              opacity: [0.3, 0.5, 0.3],
-            }}
+            animate={{ scale: [1, 1.15, 1], opacity: [0.3, 0.5, 0.3] }}
             transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
           />
           <motion.div
@@ -823,11 +848,13 @@ export default function BiPSUMentoringHub() {
               zIndex: 0,
               y: blobLeftY,
             }}
-            animate={{
-              scale: [1, 1.2, 1],
-              opacity: [0.3, 0.5, 0.3],
+            animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.5, 0.3] }}
+            transition={{
+              duration: 10,
+              repeat: Infinity,
+              ease: "easeInOut",
+              delay: 1,
             }}
-            transition={{ duration: 10, repeat: Infinity, ease: "easeInOut", delay: 1 }}
           />
 
           <div
@@ -841,9 +868,14 @@ export default function BiPSUMentoringHub() {
           >
             <div
               className="bipsu-hero-grid"
-              style={{ display: "grid", gridTemplateColumns: "1fr", gap: "3rem", alignItems: "center" }}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr",
+                gap: "3rem",
+                alignItems: "center",
+              }}
             >
-              {/* LEFT — with scroll fade-out */}
+              {/* LEFT */}
               <motion.div
                 variants={staggerContainer}
                 initial="hidden"
@@ -872,7 +904,11 @@ export default function BiPSUMentoringHub() {
                 >
                   <motion.span
                     animate={{ scale: [1, 1.4, 1], opacity: [1, 0.6, 1] }}
-                    transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                    transition={{
+                      duration: 2,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                    }}
                     style={{
                       width: "0.625rem",
                       height: "0.625rem",
@@ -893,7 +929,13 @@ export default function BiPSUMentoringHub() {
                   </span>
                 </motion.div>
 
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "0.75rem",
+                  }}
+                >
                   <motion.h1
                     variants={fadeUp}
                     style={{
@@ -907,7 +949,8 @@ export default function BiPSUMentoringHub() {
                       textShadow: "0 1px 2px rgba(0,0,0,0.1)",
                     }}
                   >
-                    Biliran Province State University Capstone &amp; Thesis Mentoring Portal
+                    Biliran Province State University Capstone &amp; Thesis
+                    Mentoring Portal
                   </motion.h1>
                   <motion.p
                     variants={fadeUp}
@@ -920,9 +963,9 @@ export default function BiPSUMentoringHub() {
                       margin: 0,
                     }}
                   >
-                    Guiding undergraduate and graduate scholars through faculty mentorship,
-                    rigorous research standards, and institutional thesis archival across
-                    Biliran and Eastern Visayas.
+                    Guiding undergraduate and graduate scholars through faculty
+                    mentorship, rigorous research standards, and institutional
+                    thesis archival across Biliran and Eastern Visayas.
                   </motion.p>
                 </div>
 
@@ -984,7 +1027,13 @@ export default function BiPSUMentoringHub() {
                       color: C.onSurfaceVariant,
                     }}
                   >
-                    <span style={{ ...iconFont, color: C.secondary, fontSize: "1.25rem" }}>
+                    <span
+                      style={{
+                        ...iconFont,
+                        color: C.secondary,
+                        fontSize: "1.25rem",
+                      }}
+                    >
                       search
                     </span>
                     <input
@@ -1002,7 +1051,13 @@ export default function BiPSUMentoringHub() {
                       }}
                     />
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.5rem",
+                    }}
+                  >
                     <select
                       value={activeCollege}
                       onChange={(e) => setActiveCollege(e.target.value)}
@@ -1017,12 +1072,11 @@ export default function BiPSUMentoringHub() {
                         cursor: "pointer",
                       }}
                     >
-                      <option value="all">All Colleges</option>
-                      <option value="ccs">Computer Studies (CCS)</option>
-                      <option value="cote">Engineering (CoTE)</option>
-                      <option value="coed">Education (CoEd)</option>
-                      <option value="cas">Arts &amp; Sciences (CAS)</option>
-                      <option value="agri">Agri-Fisheries</option>
+                      {dynamicCategories.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.label}
+                        </option>
+                      ))}
                     </select>
                     <motion.button
                       onClick={scrollToRepository}
@@ -1045,7 +1099,7 @@ export default function BiPSUMentoringHub() {
                 </motion.div>
               </motion.div>
 
-              {/* RIGHT — Login Card */}
+              {/* RIGHT — LOGIN CARD */}
               <div>
                 <motion.div
                   variants={containerVariants}
@@ -1097,7 +1151,12 @@ export default function BiPSUMentoringHub() {
                       <motion.div
                         initial={{ scale: 0, rotate: -180 }}
                         animate={{ scale: 1, rotate: 0 }}
-                        transition={{ delay: 0.3, duration: 0.6, type: "spring", stiffness: 150 }}
+                        transition={{
+                          delay: 0.3,
+                          duration: 0.6,
+                          type: "spring",
+                          stiffness: 150,
+                        }}
                         style={{
                           width: "5rem",
                           height: "5rem",
@@ -1175,7 +1234,11 @@ export default function BiPSUMentoringHub() {
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ duration: 0.3 }}
                       onSubmit={handleLoginSubmit}
-                      style={{ display: "flex", flexDirection: "column", gap: "1rem" }}
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "1rem",
+                      }}
                     >
                       <motion.div
                         initial={{ opacity: 0, y: 15 }}
@@ -1194,7 +1257,13 @@ export default function BiPSUMentoringHub() {
                         >
                           Email Address
                         </label>
-                        <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                        <div
+                          style={{
+                            position: "relative",
+                            display: "flex",
+                            alignItems: "center",
+                          }}
+                        >
                           <Mail
                             size={18}
                             style={{
@@ -1273,7 +1342,13 @@ export default function BiPSUMentoringHub() {
                             Forgot password?
                           </motion.button>
                         </div>
-                        <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                        <div
+                          style={{
+                            position: "relative",
+                            display: "flex",
+                            alignItems: "center",
+                          }}
+                        >
                           <Lock
                             size={18}
                             style={{
@@ -1387,7 +1462,11 @@ export default function BiPSUMentoringHub() {
                         {!isLoading && (
                           <motion.span
                             animate={{ x: [0, 4, 0] }}
-                            transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+                            transition={{
+                              duration: 1.5,
+                              repeat: Infinity,
+                              ease: "easeInOut",
+                            }}
                             style={{ display: "flex" }}
                           >
                             <ArrowRight size={16} />
@@ -1418,7 +1497,9 @@ export default function BiPSUMentoringHub() {
                           gap: "0.375rem",
                         }}
                       >
-                        <span style={{ color: C.onSurfaceVariant }}>First time here?</span>
+                        <span style={{ color: C.onSurfaceVariant }}>
+                          First time here?
+                        </span>
                         <motion.a
                           href="#"
                           onClick={(e) => {
@@ -1439,7 +1520,14 @@ export default function BiPSUMentoringHub() {
                           }}
                         >
                           <span>Activate account</span>
-                          <span style={{ ...iconFont, fontSize: "0.75rem" }}>north_east</span>
+                          <span
+                            style={{
+                              ...iconFont,
+                              fontSize: "0.75rem",
+                            }}
+                          >
+                            north_east
+                          </span>
                         </motion.a>
                       </div>
                       <div
@@ -1453,7 +1541,10 @@ export default function BiPSUMentoringHub() {
                           paddingTop: "0.25rem",
                         }}
                       >
-                        <ShieldCheck size={13} style={{ color: C.tertiaryContainer }} />
+                        <ShieldCheck
+                          size={13}
+                          style={{ color: C.tertiaryContainer }}
+                        />
                         <span>ORDI &amp; ISO 9001 256-Bit SSL Encrypted</span>
                       </div>
                     </motion.div>
@@ -1463,7 +1554,6 @@ export default function BiPSUMentoringHub() {
             </div>
           </div>
 
-          {/* Scroll hint at bottom of hero */}
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: [0, 1, 0.6, 1], y: [0, 8, 0, 8] }}
@@ -1492,7 +1582,9 @@ export default function BiPSUMentoringHub() {
             >
               Scroll to explore
             </span>
-            <span style={{ ...iconFont, fontSize: "1.25rem" }}>keyboard_arrow_down</span>
+            <span style={{ ...iconFont, fontSize: "1.25rem" }}>
+              keyboard_arrow_down
+            </span>
           </motion.div>
         </section>
 
@@ -1509,10 +1601,16 @@ export default function BiPSUMentoringHub() {
             borderBottom: `1px solid ${C.surfaceContainer}`,
           }}
         >
-          <div style={{ maxWidth: "80rem", margin: "0 auto", padding: "0 1rem" }}>
+          <div
+            style={{ maxWidth: "80rem", margin: "0 auto", padding: "0 1rem" }}
+          >
             <motion.div
               variants={blurIn}
-              style={{ textAlign: "center", maxWidth: "48rem", margin: "0 auto 3rem" }}
+              style={{
+                textAlign: "center",
+                maxWidth: "48rem",
+                margin: "0 auto 3rem",
+              }}
             >
               <div
                 style={{
@@ -1548,8 +1646,9 @@ export default function BiPSUMentoringHub() {
                   marginTop: "0.5rem",
                 }}
               >
-                Anchoring academic scholarship, graduate research, and capstone excellence
-                upon the foundational pillars of Biliran Province State University.
+                Anchoring academic scholarship, graduate research, and capstone
+                excellence upon the foundational pillars of Biliran Province
+                State University.
               </p>
             </motion.div>
 
@@ -1605,7 +1704,13 @@ export default function BiPSUMentoringHub() {
                       marginBottom: "1.25rem",
                     }}
                   >
-                    <div style={{ display: "inline-flex", alignItems: "center", gap: "0.75rem" }}>
+                    <div
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "0.75rem",
+                      }}
+                    >
                       <motion.div
                         whileHover={{ rotate: 10, scale: 1.1 }}
                         transition={{ type: "spring", stiffness: 300 }}
@@ -1675,8 +1780,9 @@ export default function BiPSUMentoringHub() {
                       margin: "1.5rem 0",
                     }}
                   >
-                    "A state university leading in research and innovation for human and
-                    societal development."
+                    "BiPSU is an internationally recognized university
+                    responsive to the needs of the local and global
+                    communities."
                   </blockquote>
                   <p
                     style={{
@@ -1686,9 +1792,10 @@ export default function BiPSUMentoringHub() {
                       margin: 0,
                     }}
                   >
-                    Positioning BiPSU as an epicenter of sustainable island technologies,
-                    marine stewardship, and resilient regional problem-solving throughout the
-                    Philippine archipelago and beyond.
+                    Positioning BiPSU as a globally engaged institution
+                    delivering responsive instruction, research, and innovation
+                    that address the evolving needs of local and international
+                    communities.
                   </p>
                 </div>
                 <div
@@ -1704,10 +1811,18 @@ export default function BiPSUMentoringHub() {
                     color: C.primary,
                   }}
                 >
-                  <span style={{ ...iconFont, color: C.secondary, fontSize: "1rem" }}>
+                  <span
+                    style={{
+                      ...iconFont,
+                      color: C.secondary,
+                      fontSize: "1rem",
+                    }}
+                  >
                     auto_awesome
                   </span>
-                  <span>Leading Island Innovation &amp; Technological Discovery</span>
+                  <span>
+                    Internationally Recognized, Community-Responsive
+                  </span>
                 </div>
               </motion.div>
 
@@ -1754,7 +1869,13 @@ export default function BiPSUMentoringHub() {
                       marginBottom: "1.25rem",
                     }}
                   >
-                    <div style={{ display: "inline-flex", alignItems: "center", gap: "0.75rem" }}>
+                    <div
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "0.75rem",
+                      }}
+                    >
                       <motion.div
                         whileHover={{ rotate: -10, scale: 1.1 }}
                         transition={{ type: "spring", stiffness: 300 }}
@@ -1824,10 +1945,9 @@ export default function BiPSUMentoringHub() {
                       margin: "1.5rem 0",
                     }}
                   >
-                    "Biliran Province State University shall advance research, produce
-                    globally competitive professionals, generate and diffuse relevant
-                    knowledge and technologies, and engage in meaningful partnerships for
-                    inclusive and sustainable community development."
+                    "To provide quality and relevant instruction, research, and
+                    extension services for the empowerment and development of
+                    our people."
                   </blockquote>
                   <p
                     style={{
@@ -1837,9 +1957,9 @@ export default function BiPSUMentoringHub() {
                       margin: 0,
                     }}
                   >
-                    Operationalized through disciplined thesis committees, ethics clearances,
-                    and proactive tech transfer to ensure research produces real societal
-                    impact.
+                    Operationalized through quality instruction, relevant
+                    research, and community extension programs that empower
+                    people and drive sustainable development.
                   </p>
                 </div>
                 <div
@@ -1855,8 +1975,18 @@ export default function BiPSUMentoringHub() {
                     color: C.secondary,
                   }}
                 >
-                  <span style={{ ...iconFont, color: C.primary, fontSize: "1rem" }}>school</span>
-                  <span>Human Capital, Applied Science, &amp; Global Competence</span>
+                  <span
+                    style={{
+                      ...iconFont,
+                      color: C.primary,
+                      fontSize: "1rem",
+                    }}
+                  >
+                    school
+                  </span>
+                  <span>
+                    Quality Instruction, Research, &amp; Extension Services
+                  </span>
                 </div>
               </motion.div>
             </div>
@@ -1890,8 +2020,16 @@ export default function BiPSUMentoringHub() {
               >
                 <motion.span
                   animate={{ rotate: [0, 10, -10, 0] }}
-                  transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                  style={{ ...iconFont, color: C.secondary, display: "inline-block" }}
+                  transition={{
+                    duration: 4,
+                    repeat: Infinity,
+                    ease: "easeInOut",
+                  }}
+                  style={{
+                    ...iconFont,
+                    color: C.secondary,
+                    display: "inline-block",
+                  }}
                 >
                   workspace_premium
                 </motion.span>
@@ -1926,577 +2064,15 @@ export default function BiPSUMentoringHub() {
                       cursor: "default",
                     }}
                   >
-                    <strong style={{ color: C.secondary, fontWeight: 700 }}>{v.letter}</strong>
+                    <strong
+                      style={{ color: C.secondary, fontWeight: 700 }}
+                    >
+                      {v.letter}
+                    </strong>
                     {v.word.slice(1)}
                   </motion.span>
                 ))}
               </div>
-            </motion.div>
-          </div>
-        </motion.section>
-
-        {/* ===================== DEFENSE GALLERY ===================== */}
-        <motion.section
-          id="defense-gallery"
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, amount: 0.1 }}
-          variants={staggerContainer}
-          style={{
-            padding: "5rem 0",
-            background: `${C.surfaceContainerLow}99`,
-            borderBottom: `1px solid ${C.surfaceContainer}`,
-          }}
-        >
-          <div style={{ maxWidth: "80rem", margin: "0 auto", padding: "0 1rem" }}>
-            <motion.div
-              variants={blurIn}
-              style={{ textAlign: "center", maxWidth: "48rem", margin: "0 auto 2.5rem" }}
-            >
-              <div
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "0.375rem",
-                  color: C.secondary,
-                  fontSize: "0.75rem",
-                  fontWeight: 700,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.05em",
-                  marginBottom: "0.5rem",
-                  background: C.surfaceContainerLowest,
-                  padding: "0.375rem 0.875rem",
-                  borderRadius: "9999px",
-                  border: `1px solid ${C.surfaceContainerHigh}`,
-                  boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
-                }}
-              >
-                <span style={iconFont}>photo_camera</span>
-                <span>Academic Deliberation &amp; Milestone Records</span>
-              </div>
-              <h2
-                style={{
-                  fontFamily: fontSerif,
-                  fontSize: "2.25rem",
-                  fontWeight: 700,
-                  color: C.primary,
-                  letterSpacing: "-0.025em",
-                  margin: 0,
-                }}
-              >
-                BiPSU Capstone &amp; Thesis Defense Documentation
-              </h2>
-              <p
-                style={{
-                  color: C.onSurfaceVariant,
-                  fontSize: "1rem",
-                  marginTop: "0.75rem",
-                  lineHeight: 1.625,
-                }}
-              >
-                Visual documentation of title defense hearings, colloquium presentations,
-                prototype demonstrations, and oral panel deliberations across Biliran
-                Province State University colleges.
-              </p>
-            </motion.div>
-
-            <motion.div
-              variants={fadeUp}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "0.5rem",
-                overflowX: "auto",
-                paddingBottom: "0.75rem",
-                marginBottom: "2.5rem",
-              }}
-            >
-              {GALLERY_TABS.map((tab) => (
-                <motion.button
-                  key={tab}
-                  onClick={() => setActiveGalleryTab(tab)}
-                  whileHover={pillTap.hover}
-                  whileTap={pillTap.tap}
-                  style={{
-                    fontSize: "0.75rem",
-                    fontWeight: 600,
-                    padding: "0.5rem 1rem",
-                    borderRadius: "0.5rem",
-                    border:
-                      activeGalleryTab === tab
-                        ? "none"
-                        : `1px solid ${C.surfaceContainerHigh}`,
-                    cursor: "pointer",
-                    flexShrink: 0,
-                    background:
-                      activeGalleryTab === tab ? C.primary : C.surfaceContainerLowest,
-                    color: activeGalleryTab === tab ? C.onPrimary : C.onSurface,
-                    boxShadow:
-                      activeGalleryTab === tab ? "0 1px 2px rgba(0,0,0,0.05)" : "none",
-                    position: "relative",
-                    overflow: "hidden",
-                  }}
-                >
-                  {activeGalleryTab === tab && (
-                    <motion.span
-                      layoutId="gallery-tab-bg"
-                      style={{
-                        position: "absolute",
-                        inset: 0,
-                        background: C.primary,
-                        borderRadius: "0.5rem",
-                        zIndex: -1,
-                      }}
-                      transition={{ type: "spring", stiffness: 350, damping: 30 }}
-                    />
-                  )}
-                  <span style={{ position: "relative", zIndex: 1 }}>{tab}</span>
-                </motion.button>
-              ))}
-            </motion.div>
-
-            <div
-              className="bipsu-defense-grid"
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr",
-                gap: "1.5rem",
-                marginBottom: "3rem",
-              }}
-            >
-              <motion.div
-                variants={scaleIn}
-                whileHover={cardHover.hover}
-                initial="rest"
-                animate="rest"
-                style={{
-                  background: C.surfaceContainerLowest,
-                  borderRadius: "1rem",
-                  border: `1px solid ${C.surfaceContainerHigh}`,
-                  overflow: "hidden",
-                  boxShadow: "0 4px 6px rgba(0,0,0,0.07)",
-                  display: "flex",
-                  flexDirection: "column",
-                  justifyContent: "space-between",
-                }}
-              >
-                <div
-                  style={{
-                    position: "relative",
-                    height: "24rem",
-                    width: "100%",
-                    overflow: "hidden",
-                    background: C.surfaceContainer,
-                  }}
-                >
-                  <motion.img
-                    whileHover={{ scale: 1.05 }}
-                    transition={{ duration: 0.6, ease: "easeOut" }}
-                    alt="Undergraduate Title Defense and Prototype Deliberations"
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      objectFit: "cover",
-                      objectPosition: "center",
-                    }}
-                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuBc3W6q_Ahr_Djchq315PfkHFUv_1yWvGns8sbBVIh13T_q4twWvaYiSWmaxPqOUAFQZl16wGQ5oVwqHqT81P1TcpvYto45d6xbCR8m-nw-OgyAcN6rzbQkHWDhYHhB8RWrsCO7H7fIFRLOAgcyUapR_9-VtKcJNEkDg1rs_cK3QgJAFYSty5IkkPi_qQY_DJApjvKsX2w9kEvXZ5muec1kRUxcv8Lfp54U0AZJdpvDfStjsTKfXE8"
-                  />
-                  <div
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      background: `linear-gradient(to top, #001649e6, ${C.primary}4d, transparent)`,
-                    }}
-                  />
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: "1rem",
-                      left: "1rem",
-                      display: "flex",
-                      flexWrap: "wrap",
-                      gap: "0.5rem",
-                    }}
-                  >
-                    <motion.span
-                      animate={{ opacity: [1, 0.85, 1] }}
-                      transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                      style={{
-                        background: C.secondary,
-                        color: "white",
-                        fontSize: "0.6875rem",
-                        fontWeight: 700,
-                        textTransform: "uppercase",
-                        letterSpacing: "0.05em",
-                        padding: "0.25rem 0.75rem",
-                        borderRadius: "9999px",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "0.25rem",
-                      }}
-                    >
-                      <span style={{ ...iconFont, fontSize: "0.75rem" }}>record_voice_over</span>
-                      <span>Panel Review in Progress</span>
-                    </motion.span>
-                    <span
-                      style={{
-                        background: "rgba(255,255,255,0.95)",
-                        backdropFilter: "blur(12px)",
-                        color: C.primary,
-                        fontSize: "0.6875rem",
-                        fontWeight: 600,
-                        padding: "0.25rem 0.625rem",
-                        borderRadius: "9999px",
-                      }}
-                    >
-                      Cycle 2024-2025
-                    </span>
-                  </div>
-                  <div
-                    style={{
-                      position: "absolute",
-                      bottom: "1rem",
-                      left: "1rem",
-                      right: "1rem",
-                      color: "white",
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "0.25rem",
-                        color: C.secondaryFixed,
-                        fontSize: "0.75rem",
-                        fontWeight: 600,
-                        marginBottom: "0.25rem",
-                      }}
-                    >
-                      <span style={{ ...iconFont, fontSize: "0.875rem" }}>apartment</span>
-                      <span>Naval Main Campus Conference Hall</span>
-                    </div>
-                    <h3
-                      style={{
-                        fontFamily: fontSerif,
-                        fontSize: "1.5rem",
-                        fontWeight: 700,
-                        color: "white",
-                        lineHeight: 1.25,
-                        margin: 0,
-                      }}
-                    >
-                      Undergraduate Title Defense &amp; Prototype Deliberations (Naval Campus)
-                    </h3>
-                  </div>
-                </div>
-                <div
-                  style={{
-                    padding: "1.5rem",
-                    display: "flex",
-                    flexDirection: "column",
-                    justifyContent: "space-between",
-                    flex: 1,
-                  }}
-                >
-                  <p
-                    style={{
-                      fontSize: "0.875rem",
-                      color: C.onSurfaceVariant,
-                      lineHeight: 1.625,
-                      marginBottom: "1rem",
-                      marginTop: 0,
-                    }}
-                  >
-                    Scholars defending their IoT &amp; applied engineering capstones with live
-                    operational hardware before accredited faculty evaluators, panel chairs,
-                    and ORDI observers.
-                  </p>
-                  <div
-                    style={{
-                      paddingTop: "1rem",
-                      borderTop: `1px solid ${C.surfaceContainer}`,
-                      display: "flex",
-                      flexWrap: "wrap",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: "0.75rem",
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "0.5rem",
-                        fontSize: "0.75rem",
-                        fontWeight: 600,
-                        color: C.primary,
-                      }}
-                    >
-                      <span style={{ ...iconFont, color: C.secondary, fontSize: "1rem" }}>
-                        verified
-                      </span>
-                      <span>School of Technology &amp; Engineering Panel</span>
-                    </div>
-                    <span
-                      style={{
-                        fontSize: "0.6875rem",
-                        fontWeight: 500,
-                        color: C.outline,
-                        background: C.surfaceContainerLow,
-                        padding: "0.25rem 0.625rem",
-                        borderRadius: "0.25rem",
-                      }}
-                    >
-                      Session Ref: BiPSU-DEF-2024-C12
-                    </span>
-                  </div>
-                </div>
-              </motion.div>
-
-              <motion.div
-                variants={staggerContainer}
-                style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}
-              >
-                {[
-                  {
-                    img: "https://lh3.googleusercontent.com/aida/AEtjO1VArIWFpVGoPXkCoksnEo--AgnMjvMQWktrrIRZGsDU2h66KyNv_GQHJ8XaUQdwNPqhI7c4LcmbK2_lxDAit8tIW3SoUOG0mF4wiNFKCEtBjU_ySk3t4jUQ1_3tQ6aYlXvFERDeqRr1baCqYw2IYlWeAYohXMealm11mjmx6uphONXfZ1hUaA96R40wzAAtRSSgY_gnQXTTKZBPPOHURU03wAMhx4cgq8ygXVC6QoJvJUQuOm423Tss4g",
-                    badge: "Proposal Colloquium",
-                    badgeBg: C.primary,
-                    badgeColor: C.onPrimary,
-                    eyebrowIcon: "event",
-                    eyebrow: "Mid-Term Milestone • Q1 2025",
-                    title: "Colloquium Exhibition & Research Pitch",
-                    desc: "Cross-college poster defense presentations scrutinizing methodology, ethical clearance criteria, and societal relevance.",
-                    footer: "Dean & Ethics Comm. Review",
-                    footerIcon: "check",
-                    footerColor: C.primary,
-                  },
-                  {
-                    img: "https://lh3.googleusercontent.com/aida/AEtjO1VYfHThGxfKlUQtlWe9wZNxY9eY9iOb9gvy_c1oP99fyTHGY7DiSVnjfxLzZy6njiR8VHPnMBAKXRzDWT2Q5rnFo2VccJE7NvjX9Dn9qs4jxNliMmbqUSumANCH9ek98r5KLd6j5bOWV-Meqz26R06hocxetPWoPq2mrd1gMleu1X0AVYKcH2ru5iUxtFUKrO5hDPq86zcMWBKFidYFVckbWMA849ImdVXmkW_XCJG7OtlZcrwlY9AR",
-                    badge: "Pre-Oral Defense",
-                    badgeBg: C.tertiaryContainer,
-                    badgeColor: "white",
-                    eyebrowIcon: "precision_manufacturing",
-                    eyebrow: "Fabrication Lab • Naval Campus",
-                    title: "Hardware & Computational Demonstrations",
-                    desc: "Real-world benchmark stress testing, sensor verification, and software telemetry live audits under faculty technical committees.",
-                    footer: "Live Test Bench Passed",
-                    footerIcon: "task_alt",
-                    footerColor: C.tertiaryContainer,
-                  },
-                  {
-                    img: "https://lh3.googleusercontent.com/aida/AEtjO1Vsi_cfcFFnwkdqBjiI4rkgEDYIUtb8Hbzct_oSunXklB7jHqVCbPImztmsItycKLUe5oidyTGo8zWO9gYIN_4_03NnTrmorDYysp2pUrDzQeRtqX7meQxrwgquEl4esXF9UwUJsw1LxHmz8j1WcMgqF8Y2CFp-Kh1VPOnt0yqZF_tb9gRS4h95i_iSxO1hQxvsmJWm6_mDKl9bByjg5fDKdFBT4GsX1MwS4XXrQrUw3FfQA4o_Zh-OoA",
-                    badge: "Final Defense Sign-Off",
-                    badgeBg: C.surfaceTint,
-                    badgeColor: C.onPrimary,
-                    eyebrowIcon: "menu_book",
-                    eyebrow: "BiPSU Learning Resource Center",
-                    title: "Archival Literature & Oral Defense Sign-Off",
-                    desc: "Final revision concordance verification, Turnitin clearance checks, and signature certifications for institutional archiving.",
-                    footer: "KTTO Registry Cleared",
-                    footerIcon: "verified",
-                    footerColor: C.secondary,
-                  },
-                ].map((card, i) => (
-                  <motion.div
-                    key={i}
-                    variants={fadeRight}
-                    whileHover={cardHover.hover}
-                    initial="rest"
-                    animate="rest"
-                    style={{
-                      background: C.surfaceContainerLowest,
-                      borderRadius: "1rem",
-                      border: `1px solid ${C.surfaceContainerHigh}`,
-                      overflow: "hidden",
-                      boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
-                      display: "flex",
-                      flexDirection: "row",
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: "12rem",
-                        flexShrink: 0,
-                        position: "relative",
-                        overflow: "hidden",
-                        background: C.surfaceContainer,
-                      }}
-                    >
-                      <motion.img
-                        whileHover={{ scale: 1.1 }}
-                        transition={{ duration: 0.5, ease: "easeOut" }}
-                        alt={card.title}
-                        style={{
-                          width: "100%",
-                          height: "100%",
-                          objectFit: "cover",
-                        }}
-                        src={card.img}
-                      />
-                      <span
-                        style={{
-                          position: "absolute",
-                          top: "0.5rem",
-                          left: "0.5rem",
-                          background: card.badgeBg,
-                          color: card.badgeColor,
-                          fontSize: "0.625rem",
-                          fontWeight: 700,
-                          textTransform: "uppercase",
-                          letterSpacing: "0.05em",
-                          padding: "0.125rem 0.5rem",
-                          borderRadius: "0.25rem",
-                        }}
-                      >
-                        {card.badge}
-                      </span>
-                    </div>
-                    <div
-                      style={{
-                        padding: "1.25rem",
-                        display: "flex",
-                        flexDirection: "column",
-                        justifyContent: "space-between",
-                        flex: 1,
-                      }}
-                    >
-                      <div>
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "0.5rem",
-                            fontSize: "0.6875rem",
-                            color: C.secondary,
-                            fontWeight: 600,
-                            marginBottom: "0.25rem",
-                          }}
-                        >
-                          <span style={{ ...iconFont, fontSize: "0.75rem" }}>
-                            {card.eyebrowIcon}
-                          </span>
-                          <span>{card.eyebrow}</span>
-                        </div>
-                        <h4
-                          style={{
-                            fontFamily: fontSerif,
-                            fontSize: "1rem",
-                            fontWeight: 700,
-                            color: C.primary,
-                            lineHeight: 1.375,
-                            marginBottom: "0.375rem",
-                            marginTop: 0,
-                          }}
-                        >
-                          {card.title}
-                        </h4>
-                        <p
-                          style={{
-                            fontSize: "0.75rem",
-                            color: C.onSurfaceVariant,
-                            lineHeight: 1.625,
-                            margin: 0,
-                          }}
-                        >
-                          {card.desc}
-                        </p>
-                      </div>
-                      <div
-                        style={{
-                          marginTop: "0.75rem",
-                          paddingTop: "0.625rem",
-                          borderTop: `1px solid ${C.surfaceContainer}`,
-                          fontSize: "0.6875rem",
-                          fontWeight: 600,
-                          color: card.footerColor,
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "0.25rem",
-                        }}
-                      >
-                        <span>{card.footer}</span>
-                        <span style={{ ...iconFont, fontSize: "0.75rem" }}>
-                          {card.footerIcon}
-                        </span>
-                      </div>
-                    </div>
-                  </motion.div>
-                ))}
-              </motion.div>
-            </div>
-
-            {/* Metrics Bar */}
-            <motion.div
-              variants={fadeUp}
-              className="bipsu-metrics-grid"
-              style={{
-                background: C.surfaceContainerLowest,
-                borderRadius: "1rem",
-                padding: "1.5rem",
-                border: `1px solid ${C.surfaceContainerHigh}`,
-                boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
-                display: "grid",
-                gridTemplateColumns: "1fr",
-                gap: "1.5rem",
-              }}
-            >
-              {[
-                { icon: "groups", bg: C.primary, color: C.secondaryFixed, title: "100% Peer-Reviewed", desc: "Defense Panels & External Chairs" },
-                { icon: "psychology_alt", bg: C.secondary, color: "white", title: "Oral & Demo Rigor", desc: "Live Hardware & Code Verifications" },
-                { icon: "fact_check", bg: C.tertiaryContainer, color: "white", title: "ISO 9001:2015 Evaluator", desc: "Standardized Scoring Rubrics" },
-                { icon: "shield_with_heart", bg: C.surfaceTint, color: C.onPrimary, title: "DOST & UREC Clearance", desc: "Institutional Ethics & Patent Protocol" },
-              ].map((m, i) => (
-                <motion.div
-                  key={m.title}
-                  initial={{ opacity: 0, x: -30 }}
-                  whileInView={{ opacity: 1, x: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: i * 0.1, duration: 0.5 }}
-                  whileHover={{ x: 6 }}
-                  style={{ display: "flex", alignItems: "center", gap: "0.875rem" }}
-                >
-                  <motion.div
-                    whileHover={{ rotate: 8, scale: 1.08 }}
-                    transition={{ type: "spring", stiffness: 300 }}
-                    style={{
-                      width: "2.75rem",
-                      height: "2.75rem",
-                      borderRadius: "0.75rem",
-                      background: m.bg,
-                      color: m.color,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      flexShrink: 0,
-                    }}
-                  >
-                    <span style={{ ...iconFont, fontSize: "1.25rem" }}>{m.icon}</span>
-                  </motion.div>
-                  <div>
-                    <h4
-                      style={{
-                        fontWeight: 700,
-                        color: C.primary,
-                        fontSize: "0.875rem",
-                        margin: 0,
-                      }}
-                    >
-                      {m.title}
-                    </h4>
-                    <p
-                      style={{
-                        fontSize: "0.75rem",
-                        color: C.onSurfaceVariant,
-                        margin: 0,
-                      }}
-                    >
-                      {m.desc}
-                    </p>
-                  </div>
-                </motion.div>
-              ))}
             </motion.div>
           </div>
         </motion.section>
@@ -2510,7 +2086,9 @@ export default function BiPSUMentoringHub() {
           variants={staggerContainer}
           style={{ padding: "5rem 0", background: C.surface }}
         >
-          <div style={{ maxWidth: "80rem", margin: "0 auto", padding: "0 1rem" }}>
+          <div
+            style={{ maxWidth: "80rem", margin: "0 auto", padding: "0 1rem" }}
+          >
             <motion.div
               variants={blurIn}
               style={{
@@ -2558,8 +2136,8 @@ export default function BiPSUMentoringHub() {
                     maxWidth: "42rem",
                   }}
                 >
-                  Browse cleared, defended, and accredited scholarly outputs from BiPSU's
-                  constituent colleges.
+                  Browse cleared, defended, and accredited scholarly outputs
+                  from BiPSU's constituent colleges.
                 </p>
               </div>
               <span
@@ -2591,7 +2169,7 @@ export default function BiPSUMentoringHub() {
                 marginBottom: "2rem",
               }}
             >
-              {CATEGORY_PILLS.map((p) => (
+              {dynamicCategories.map((p) => (
                 <motion.button
                   key={p.id}
                   onClick={() => setActiveCollege(p.id)}
@@ -2605,10 +2183,16 @@ export default function BiPSUMentoringHub() {
                     border: "none",
                     cursor: "pointer",
                     flexShrink: 0,
-                    background: activeCollege === p.id ? C.primary : C.surfaceContainerLow,
-                    color: activeCollege === p.id ? C.onPrimary : C.onSurface,
+                    background:
+                      activeCollege === p.id
+                        ? C.primary
+                        : C.surfaceContainerLow,
+                    color:
+                      activeCollege === p.id ? C.onPrimary : C.onSurface,
                     boxShadow:
-                      activeCollege === p.id ? "0 1px 2px rgba(0,0,0,0.05)" : "none",
+                      activeCollege === p.id
+                        ? "0 1px 2px rgba(0,0,0,0.05)"
+                        : "none",
                     position: "relative",
                     overflow: "hidden",
                   }}
@@ -2623,10 +2207,16 @@ export default function BiPSUMentoringHub() {
                         borderRadius: "0.5rem",
                         zIndex: -1,
                       }}
-                      transition={{ type: "spring", stiffness: 350, damping: 30 }}
+                      transition={{
+                        type: "spring",
+                        stiffness: 350,
+                        damping: 30,
+                      }}
                     />
                   )}
-                  <span style={{ position: "relative", zIndex: 1 }}>{p.label}</span>
+                  <span style={{ position: "relative", zIndex: 1 }}>
+                    {p.label}
+                  </span>
                 </motion.button>
               ))}
             </motion.div>
@@ -2634,7 +2224,11 @@ export default function BiPSUMentoringHub() {
             <motion.div
               layout
               className="bipsu-repo-grid"
-              style={{ display: "grid", gridTemplateColumns: "1fr", gap: "1.5rem" }}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr",
+                gap: "1.5rem",
+              }}
             >
               <AnimatePresence mode="popLayout">
                 {filteredTheses.map((t) => (
@@ -2665,6 +2259,7 @@ export default function BiPSUMentoringHub() {
                           justifyContent: "space-between",
                           gap: "0.5rem",
                           marginBottom: "0.75rem",
+                          flexWrap: "wrap",
                         }}
                       >
                         <span
@@ -2694,7 +2289,11 @@ export default function BiPSUMentoringHub() {
                             gap: "0.25rem",
                           }}
                         >
-                          <span style={{ ...iconFont, fontSize: "0.75rem" }}>{t.badgeIcon}</span>
+                          <span
+                            style={{ ...iconFont, fontSize: "0.75rem" }}
+                          >
+                            {t.badgeIcon}
+                          </span>
                           {t.badge}
                         </span>
                       </div>
@@ -2710,6 +2309,18 @@ export default function BiPSUMentoringHub() {
                       >
                         {t.title}
                       </h3>
+                      {t.groupName && (
+                        <p
+                          style={{
+                            fontSize: "0.75rem",
+                            fontWeight: 600,
+                            color: C.secondary,
+                            margin: "0 0 0.5rem 0",
+                          }}
+                        >
+                          {t.groupName}
+                        </p>
+                      )}
                       <div
                         style={{
                           fontSize: "0.75rem",
@@ -2724,18 +2335,47 @@ export default function BiPSUMentoringHub() {
                         }}
                       >
                         <p style={{ margin: 0 }}>
-                          <span style={{ fontWeight: 600, color: C.onSurface }}>
+                          <span
+                            style={{
+                              fontWeight: 600,
+                              color: C.onSurface,
+                            }}
+                          >
                             Authors / Researchers:
                           </span>{" "}
                           {t.authors}
                         </p>
                         <p style={{ margin: 0 }}>
-                          <span style={{ fontWeight: 600, color: C.onSurface }}>
+                          <span
+                            style={{
+                              fontWeight: 600,
+                              color: C.onSurface,
+                            }}
+                          >
                             Faculty Mentor / Advisor:
                           </span>{" "}
                           {t.advisor}
                         </p>
-                        <p style={{ color: C.outline, fontSize: "0.6875rem", margin: 0 }}>
+                        {t.coAdvisor && (
+                          <p style={{ margin: 0 }}>
+                            <span
+                              style={{
+                                fontWeight: 600,
+                                color: C.onSurface,
+                              }}
+                            >
+                              Co-Advisor:
+                            </span>{" "}
+                            {t.coAdvisor}
+                          </p>
+                        )}
+                        <p
+                          style={{
+                            color: C.outline,
+                            fontSize: "0.6875rem",
+                            margin: 0,
+                          }}
+                        >
                           {t.ref}
                         </p>
                       </div>
@@ -2748,10 +2388,17 @@ export default function BiPSUMentoringHub() {
                         paddingTop: "1rem",
                         borderTop: `1px solid ${C.surfaceContainer}`,
                         gap: "0.5rem",
+                        flexWrap: "wrap",
                       }}
                     >
                       <motion.button
-                        onClick={() => setModal({ open: true, title: t.title, body: t.abstract })}
+                        onClick={() =>
+                          setModal({
+                            open: true,
+                            title: t.title,
+                            body: t.abstract,
+                          })
+                        }
                         whileHover={{ scale: 1.05, x: 2 }}
                         whileTap={{ scale: 0.95 }}
                         style={{
@@ -2767,34 +2414,53 @@ export default function BiPSUMentoringHub() {
                           padding: 0,
                         }}
                       >
-                        <span style={{ ...iconFont, fontSize: "0.875rem" }}>visibility</span>
+                        <span
+                          style={{ ...iconFont, fontSize: "0.875rem" }}
+                        >
+                          visibility
+                        </span>
                         <span>View Abstract</span>
                       </motion.button>
-                      <motion.button
-                        onClick={() =>
-                          alert(
-                            `Accessing verified BiPSU Mentoring Hub Institutional Repository...\nPreparing download for: ${t.pdf}`
-                          )
-                        }
-                        whileHover={{ scale: 1.05, y: -2 }}
-                        whileTap={{ scale: 0.95 }}
-                        style={{
-                          background: C.surfaceContainer,
-                          color: C.primary,
-                          fontSize: "0.75rem",
-                          fontWeight: 600,
-                          padding: "0.5rem 0.875rem",
-                          borderRadius: "0.5rem",
-                          border: "none",
-                          cursor: "pointer",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "0.25rem",
-                        }}
-                      >
-                        <span style={{ ...iconFont, fontSize: "0.875rem" }}>download</span>
-                        <span>Download PDF</span>
-                      </motion.button>
+                      {t.pdf ? (
+                        <motion.a
+                          href={t.pdf}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          whileHover={{ scale: 1.05, y: -2 }}
+                          whileTap={{ scale: 0.95 }}
+                          style={{
+                            background: C.surfaceContainer,
+                            color: C.primary,
+                            fontSize: "0.75rem",
+                            fontWeight: 600,
+                            padding: "0.5rem 0.875rem",
+                            borderRadius: "0.5rem",
+                            border: "none",
+                            cursor: "pointer",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "0.25rem",
+                            textDecoration: "none",
+                          }}
+                        >
+                          <span
+                            style={{ ...iconFont, fontSize: "0.875rem" }}
+                          >
+                            download
+                          </span>
+                          <span>Download PDF</span>
+                        </motion.a>
+                      ) : (
+                        <span
+                          style={{
+                            fontSize: "0.6875rem",
+                            color: C.outline,
+                            fontStyle: "italic",
+                          }}
+                        >
+                          No file attached
+                        </span>
+                      )}
                     </div>
                   </motion.div>
                 ))}
@@ -2815,104 +2481,6 @@ export default function BiPSUMentoringHub() {
                   No theses match your current filter or search.
                 </motion.div>
               )}
-            </motion.div>
-
-            {/* Pagination */}
-            <motion.div
-              variants={fadeUp}
-              style={{
-                marginTop: "2.5rem",
-                display: "flex",
-                flexWrap: "wrap",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: "1rem",
-                paddingTop: "1.5rem",
-                borderTop: `1px solid ${C.surfaceContainer}`,
-              }}
-            >
-              <span style={{ fontSize: "0.75rem", color: C.onSurfaceVariant }}>
-                Showing Page 1 of 12 • Total 480 Cleared Theses
-              </span>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                <button
-                  style={{
-                    padding: "0.375rem 0.75rem",
-                    border: `1px solid ${C.surfaceContainerHigh}`,
-                    borderRadius: "0.25rem",
-                    fontSize: "0.75rem",
-                    color: C.outline,
-                    background: "none",
-                    cursor: "not-allowed",
-                    opacity: 0.6,
-                  }}
-                >
-                  Previous
-                </button>
-                <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                  style={{
-                    padding: "0.375rem 0.75rem",
-                    background: C.primary,
-                    color: C.onPrimary,
-                    borderRadius: "0.25rem",
-                    fontSize: "0.75rem",
-                    fontWeight: 600,
-                    border: "none",
-                    cursor: "pointer",
-                  }}
-                >
-                  1
-                </motion.button>
-                {["2", "3"].map((n) => (
-                  <motion.button
-                    key={n}
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.9 }}
-                    style={{
-                      padding: "0.375rem 0.75rem",
-                      fontSize: "0.75rem",
-                      color: C.onSurface,
-                      background: "none",
-                      border: "none",
-                      cursor: "pointer",
-                    }}
-                  >
-                    {n}
-                  </motion.button>
-                ))}
-                <motion.button
-                  whileHover={{ scale: 1.05, x: 2 }}
-                  whileTap={{ scale: 0.95 }}
-                  style={{
-                    padding: "0.375rem 0.75rem",
-                    border: `1px solid ${C.surfaceContainerHigh}`,
-                    borderRadius: "0.25rem",
-                    fontSize: "0.75rem",
-                    color: C.primary,
-                    fontWeight: 600,
-                    background: "none",
-                    cursor: "pointer",
-                  }}
-                >
-                  Next
-                </motion.button>
-                <motion.a
-                  href="#archived-titles"
-                  whileHover={{ x: 4 }}
-                  style={{
-                    marginLeft: "0.5rem",
-                    fontSize: "0.75rem",
-                    fontWeight: 600,
-                    color: C.secondary,
-                    textDecoration: "none",
-                    display: "inline-block",
-                  }}
-                >
-                  View All Archived Works →
-                </motion.a>
-              </div>
             </motion.div>
           </div>
         </motion.section>
@@ -2959,7 +2527,9 @@ export default function BiPSUMentoringHub() {
                 }}
               >
                 <motion.button
-                  onClick={() => setModal({ open: false, title: "", body: "" })}
+                  onClick={() =>
+                    setModal({ open: false, title: "", body: "" })
+                  }
                   whileHover={{ scale: 1.1, rotate: 90 }}
                   whileTap={{ scale: 0.9 }}
                   style={{
@@ -2985,7 +2555,9 @@ export default function BiPSUMentoringHub() {
                     marginBottom: "0.5rem",
                   }}
                 >
-                  <span style={{ ...iconFont, fontSize: "0.875rem" }}>article</span>
+                  <span style={{ ...iconFont, fontSize: "0.875rem" }}>
+                    article
+                  </span>
                   <span
                     style={{
                       fontSize: "0.75rem",
@@ -3015,7 +2587,6 @@ export default function BiPSUMentoringHub() {
                     fontSize: "0.875rem",
                     color: C.onSurfaceVariant,
                     lineHeight: 1.625,
-                    marginBottom: "1.5rem",
                     background: C.surfaceContainerLow,
                     padding: "1rem",
                     borderRadius: "0.75rem",
@@ -3024,9 +2595,17 @@ export default function BiPSUMentoringHub() {
                 >
                   {modal.body}
                 </p>
-                <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "flex-end",
+                    gap: "0.75rem",
+                  }}
+                >
                   <motion.button
-                    onClick={() => setModal({ open: false, title: "", body: "" })}
+                    onClick={() =>
+                      setModal({ open: false, title: "", body: "" })
+                    }
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                     style={{
@@ -3040,30 +2619,6 @@ export default function BiPSUMentoringHub() {
                     }}
                   >
                     Close
-                  </motion.button>
-                  <motion.button
-                    onClick={() => {
-                      alert("Downloading authenticated PDF repository bundle...");
-                      setModal({ open: false, title: "", body: "" });
-                    }}
-                    whileHover={{ scale: 1.05, y: -2 }}
-                    whileTap={{ scale: 0.95 }}
-                    style={{
-                      background: C.primary,
-                      color: C.onPrimary,
-                      padding: "0.5rem 1rem",
-                      borderRadius: "0.5rem",
-                      fontSize: "0.75rem",
-                      fontWeight: 600,
-                      border: "none",
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "0.375rem",
-                    }}
-                  >
-                    <span style={{ ...iconFont, fontSize: "0.875rem" }}>file_download</span>
-                    <span>Download Certified Copy</span>
                   </motion.button>
                 </div>
               </motion.div>
@@ -3084,7 +2639,13 @@ export default function BiPSUMentoringHub() {
             borderTop: `1px solid ${C.primaryContainer}`,
           }}
         >
-          <div style={{ maxWidth: "80rem", margin: "0 auto", padding: "4rem 1rem" }}>
+          <div
+            style={{
+              maxWidth: "80rem",
+              margin: "0 auto",
+              padding: "4rem 1rem",
+            }}
+          >
             <motion.div
               variants={staggerContainer}
               initial="hidden"
@@ -3101,7 +2662,11 @@ export default function BiPSUMentoringHub() {
             >
               <motion.div
                 variants={fadeUp}
-                style={{ display: "flex", flexDirection: "column", gap: "1rem" }}
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "1rem",
+                }}
               >
                 <motion.div
                   whileHover={{ scale: 1.05 }}
@@ -3115,7 +2680,11 @@ export default function BiPSUMentoringHub() {
                 >
                   <img
                     alt="BiPSU Logo"
-                    style={{ height: "2.5rem", width: "auto", objectFit: "contain" }}
+                    style={{
+                      height: "2.5rem",
+                      width: "auto",
+                      objectFit: "contain",
+                    }}
                     src={logo}
                   />
                 </motion.div>
@@ -3128,9 +2697,9 @@ export default function BiPSUMentoringHub() {
                     margin: 0,
                   }}
                 >
-                  Biliran Province State University Mentoring Hub is the institutional
-                  capstone and thesis lifecycle registry, supporting undergraduate, graduate,
-                  and doctoral scholarship.
+                  Biliran Province State University Mentoring Hub is the
+                  institutional capstone and thesis lifecycle registry,
+                  supporting undergraduate, graduate, and doctoral scholarship.
                 </p>
                 <div
                   style={{
@@ -3141,14 +2710,20 @@ export default function BiPSUMentoringHub() {
                     color: C.secondaryFixed,
                   }}
                 >
-                  <span style={{ ...iconFont, fontSize: "0.875rem" }}>verified</span>
+                  <span style={{ ...iconFont, fontSize: "0.875rem" }}>
+                    verified
+                  </span>
                   <span>ISO 9001:2015 Institutional Compliance</span>
                 </div>
               </motion.div>
 
               <motion.div
                 variants={fadeUp}
-                style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "0.75rem",
+                }}
               >
                 <h4
                   style={{
@@ -3171,7 +2746,14 @@ export default function BiPSUMentoringHub() {
                     color: C.surfaceContainer,
                   }}
                 >
-                  <p style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem", margin: 0 }}>
+                  <p
+                    style={{
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: "0.5rem",
+                      margin: 0,
+                    }}
+                  >
                     <span
                       style={{
                         ...iconFont,
@@ -3189,7 +2771,14 @@ export default function BiPSUMentoringHub() {
                       P.I. Garcia Street, Naval, Biliran 6560, Philippines
                     </span>
                   </p>
-                  <p style={{ display: "flex", alignItems: "center", gap: "0.5rem", margin: 0 }}>
+                  <p
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.5rem",
+                      margin: 0,
+                    }}
+                  >
                     <span
                       style={{
                         ...iconFont,
@@ -3207,7 +2796,11 @@ export default function BiPSUMentoringHub() {
 
               <motion.div
                 variants={fadeUp}
-                style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "0.75rem",
+                }}
               >
                 <h4
                   style={{
@@ -3245,7 +2838,13 @@ export default function BiPSUMentoringHub() {
                         textDecoration: "none",
                       }}
                     >
-                      <span style={{ ...iconFont, color: C.secondaryFixed, fontSize: "1rem" }}>
+                      <span
+                        style={{
+                          ...iconFont,
+                          color: C.secondaryFixed,
+                          fontSize: "1rem",
+                        }}
+                      >
                         mail
                       </span>
                       <span>research.innovation@bipsu.edu.ph</span>
@@ -3263,7 +2862,13 @@ export default function BiPSUMentoringHub() {
                         textDecoration: "none",
                       }}
                     >
-                      <span style={{ ...iconFont, color: C.secondaryFixed, fontSize: "1rem" }}>
+                      <span
+                        style={{
+                          ...iconFont,
+                          color: C.secondaryFixed,
+                          fontSize: "1rem",
+                        }}
+                      >
                         alternate_email
                       </span>
                       <span>ordi@bipsu.edu.ph</span>
@@ -3273,7 +2878,11 @@ export default function BiPSUMentoringHub() {
                     <motion.a
                       href="#archived-titles"
                       whileHover={{ x: 4 }}
-                      style={{ color: "inherit", textDecoration: "none", display: "block" }}
+                      style={{
+                        color: "inherit",
+                        textDecoration: "none",
+                        display: "block",
+                      }}
                     >
                       KTTO Intellectual Property Office
                     </motion.a>
@@ -3299,20 +2908,28 @@ export default function BiPSUMentoringHub() {
               }}
             >
               <p style={{ margin: 0 }}>
-                © 2025 Biliran Province State University. All Rights Reserved. BiPSU
-                Mentoring Hub Portal.
+                © 2025 Biliran Province State University. All Rights Reserved.
+                BiPSU Mentoring Hub Portal.
               </p>
-              <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-                {["Academic Freedom", "Data Privacy", "Research Manual"].map((link) => (
-                  <motion.a
-                    key={link}
-                    href="#"
-                    whileHover={{ y: -2, color: C.secondaryFixed }}
-                    style={{ color: "inherit", textDecoration: "none" }}
-                  >
-                    {link}
-                  </motion.a>
-                ))}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "1rem",
+                }}
+              >
+                {["Academic Freedom", "Data Privacy", "Research Manual"].map(
+                  (link) => (
+                    <motion.a
+                      key={link}
+                      href="#"
+                      whileHover={{ y: -2, color: C.secondaryFixed }}
+                      style={{ color: "inherit", textDecoration: "none" }}
+                    >
+                      {link}
+                    </motion.a>
+                  )
+                )}
               </div>
             </motion.div>
           </div>

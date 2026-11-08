@@ -212,7 +212,6 @@ export const ProposedTitleProvider = ({ children }) => {
         toDate = "",
         groupId = ""
     ) => {
-        if (!authToken) return;
 
         try {
             setIsLoading(true);
@@ -227,9 +226,8 @@ export const ProposedTitleProvider = ({ children }) => {
                 `${import.meta.env.VITE_REACT_APP_BACKEND_BASEURL}/api/v1/proposed-titles/archived`,
                 {
                     params,
-                    withCredentials: true,
                     headers: {
-                        Authorization: `Bearer ${authToken}`,
+            
                         "Cache-Control": "no-cache",
                     },
                 }
@@ -1789,6 +1787,24 @@ export const ProposedTitleProvider = ({ children }) => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [
         authToken,
+        archivedCurrentPage,
+        archivedSearch,
+        archivedDateFrom,
+        archivedDateTo,
+        archivedGroupIdFilter,
+    ]);
+
+        useEffect(() => {
+        FetchArchivedTitle(
+            archivedCurrentPage,
+            limit,
+            archivedSearch,
+            archivedDateFrom,
+            archivedDateTo,
+            archivedGroupIdFilter
+        );
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [
         archivedCurrentPage,
         archivedSearch,
         archivedDateFrom,

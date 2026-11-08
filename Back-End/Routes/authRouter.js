@@ -12,6 +12,7 @@ router.route("/login").post(authController.login);
 
 
 router.route("/forgotPassword").post(authController.forgotPassword);
+router.route("/switch-role").post(authController.switchRole);
 router.route("/resetPassword/:token").patch(authController.resetPassword);
 
 router.route("/mail-verification").post(authController.verifyOtp);

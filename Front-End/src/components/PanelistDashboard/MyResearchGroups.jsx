@@ -3,7 +3,7 @@ import PdfViewer from '../ReusablePDFviewer/PDFViewer';
 import {
     Users, Clock, CheckCircle, Calendar, Search, X, Download,
     LayoutGrid, Table as TableIcon, SlidersHorizontal, RotateCcw,
-    MoreVertical, MessageSquare, FileText, AlertCircle,
+    MessageSquare, FileText, AlertCircle,
 } from 'lucide-react';
 
 import { ScheduleContext } from '../../contexts/ScheduleContext/ScheduleContext';
@@ -11,6 +11,8 @@ import { CommentContext } from '../../contexts/CommentContext/CommentContext';
 import { ProposedTitleContext } from '../../contexts/ProposedTitleContext/ProposedTitleContext';
 
 const GLOBAL_KEY = '__global__';
+const PROCEEDINGS_KEY = '__proceedings__';   // ⭐
+const API_BASE = (import.meta.env?.VITE_API_URL || '').replace(/\/$/, '');
 
 // ============================
 // HELPERS
@@ -80,7 +82,49 @@ const timeAgo = (dateStr) => {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 
-// Backend comment → local annotation
+// ============================
+// PDF URL resolver
+// ============================
+const resolvePdfUrl = async (tracking, proposedTitleId, GetPdfBlobUrl) => {
+    if (!GetPdfBlobUrl) {
+        console.warn('[PDF] GetPdfBlobUrl is missing from context!');
+        return null;
+    }
+
+    if (proposedTitleId) {
+        try {
+            console.log('[PDF] Tier 1: GetPdfBlobUrl(proposedTitleId) →', proposedTitleId);
+            const url = await GetPdfBlobUrl(proposedTitleId);
+            if (url && typeof url === 'string' && url.length > 0) {
+                console.log('[PDF] ✅ Tier 1 success');
+                return url;
+            }
+            console.warn('[PDF] Tier 1 returned null');
+        } catch (err) {
+            console.warn('[PDF] Tier 1 error:', err);
+        }
+    }
+
+    const trackingId = tracking?._id;
+    if (trackingId && trackingId !== proposedTitleId) {
+        try {
+            console.log('[PDF] Tier 2: GetPdfBlobUrl(tracking._id) →', trackingId);
+            const url = await GetPdfBlobUrl(trackingId);
+            if (url && typeof url === 'string' && url.length > 0) {
+                console.log('[PDF] ✅ Tier 2 success');
+                return url;
+            }
+        } catch (err) {
+            console.warn('[PDF] Tier 2 error:', err);
+        }
+    }
+
+    return null;
+};
+
+// ============================
+// ⭐ Backend comment → local annotation (with proceedings support)
+// ============================
 const backendCommentToAnnotation = (comment) => {
     const pos = comment.position || {};
     const x = pos.x ?? 0.1;
@@ -88,13 +132,16 @@ const backendCommentToAnnotation = (comment) => {
     const w = pos.width ?? pos.w ?? 0.03;
     const h = pos.height ?? pos.h ?? 0.03;
 
-    let localType = 'comment';
+    // ⭐ Preserve exact annotationType
     const backendType = comment.annotationType || 'text';
+
+    let localType = 'comment';
     if (backendType === 'highlight') localType = 'highlight';
     else if (backendType === 'margin') localType = 'margin';
     else if (backendType === 'page') localType = 'page';
     else if (backendType === 'region') localType = 'region';
     else if (backendType === 'global') localType = 'global';
+    else if (backendType === 'proceedings') localType = 'proceedings';   // ⭐
 
     const author = comment.userId
         ? `${comment.userId.first_name || ''} ${comment.userId.last_name || ''}`.trim() || 'Mentor'
@@ -104,6 +151,7 @@ const backendCommentToAnnotation = (comment) => {
         id: comment._id,
         backendId: comment._id,
         type: localType,
+        annotationType: backendType,   // ⭐ preserve exact
         shape: comment.shape || pos.shape || 'rectangle',
         x, y, w, h,
         text: comment.text || '',
@@ -116,24 +164,37 @@ const backendCommentToAnnotation = (comment) => {
     };
 };
 
-// Merge backend comments
+// ============================
+// ⭐ Merge — preserves proceedings in dedicated key
+// ============================
 const mergeBackendCommentsIntoAnnotations = (existing, backendComments) => {
     if (!Array.isArray(backendComments) || backendComments.length === 0) return existing;
+
     const next = { ...existing };
+
+    // Collect existing IDs
     const seenIds = new Set();
     Object.values(next).forEach(list => (list || []).forEach(a => {
         if (a.id) seenIds.add(String(a.id));
         if (a.backendId) seenIds.add(String(a.backendId));
     }));
+
     backendComments.forEach((c) => {
         const cid = String(c._id);
         if (seenIds.has(cid)) return;
+
         const ann = backendCommentToAnnotation(c);
         seenIds.add(cid);
-        const key = ann.type === 'global' ? GLOBAL_KEY : `page_${ann.pageNum || 1}`;
+
+        // ⭐ Proceedings → dedicated key; otherwise page_*
+        const key = ann.annotationType === 'proceedings'
+            ? PROCEEDINGS_KEY
+            : (ann.type === 'global' ? GLOBAL_KEY : `page_${ann.pageNum || 1}`);
+
         if (!next[key]) next[key] = [];
         next[key].push(ann);
     });
+
     return next;
 };
 
@@ -170,7 +231,6 @@ const StatusTab = ({ active, label, count, onClick }) => (
 // GROUP ROW
 // ============================
 const GroupRow = ({ group, onOpen }) => {
-    const gBadge = statusBadge(group.groupStatus);
     const tBadge = statusBadge(group.topicStatus);
     return (
         <tr onClick={() => onOpen(group.code)} className="hover:bg-blue-50/60 transition-colors cursor-pointer border-b border-blue-100 last:border-0">
@@ -211,14 +271,12 @@ const GroupRow = ({ group, onOpen }) => {
                     <div className="flex items-center gap-2"><span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 text-[9px] font-bold uppercase">CO</span><span className="text-[11px] text-blue-500">{group.coAdviser}</span></div>
                 </div>
             </td>
-            <td className="py-4 px-2 text-center align-top"><span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${gBadge.container}`}><span className={`w-1.5 h-1.5 rounded-full ${gBadge.dot}`} />{group.groupStatusLabel}</span></td>
             <td className="py-4 px-2 text-center align-top"><span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${tBadge.container}`}><span className={`w-1.5 h-1.5 rounded-full ${tBadge.dot}`} />{group.topicStatusLabel}</span></td>
             <td className="py-4 px-2 text-center align-top"><span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-bold"><MessageSquare className="w-3 h-3" /> {group.comments}</span></td>
             <td className="py-4 px-4 align-top whitespace-nowrap"><div className="flex flex-col"><span className="text-[11px] font-medium text-blue-900">{group.lastUpdatedLabel}</span><span className="text-[10px] text-blue-400">{group.lastUpdatedDate}</span></div></td>
             <td className="py-4 px-4 align-top text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-end gap-1.5">
                     <button onClick={() => onOpen(group.code)} className="px-3 py-1 rounded-lg bg-blue-50 hover:bg-blue-900 hover:text-white text-blue-800 text-[11px] font-semibold transition-all">View Details</button>
-                    <button className="p-1 rounded text-blue-400 hover:bg-blue-50"><MoreVertical className="w-4 h-4" /></button>
                 </div>
             </td>
         </tr>
@@ -249,7 +307,7 @@ const GroupCard = ({ group, onOpen }) => {
 };
 
 // ============================
-// DRAWER — Latest submission only (English)
+// DRAWER
 // ============================
 const GroupDrawer = ({ open, onClose, group, onOpenPdf }) => {
     if (!group) return null;
@@ -259,7 +317,6 @@ const GroupDrawer = ({ open, onClose, group, onOpenPdf }) => {
         (a, b) => new Date(b.date) - new Date(a.date)
     );
 
-    // ⭐ LATEST only
     const latestTracking = sortedTracking.length > 0 ? [sortedTracking[0]] : [];
     const hasMore = sortedTracking.length > 1;
 
@@ -330,7 +387,6 @@ const GroupDrawer = ({ open, onClose, group, onOpenPdf }) => {
                         </div>
                     </div>
 
-                    {/* ⭐ LATEST SUBMISSION ONLY */}
                     <div className="space-y-2">
                         <div className="flex items-center justify-between">
                             <span className="text-[10px] text-blue-500 uppercase tracking-wider font-bold">Latest Submission</span>
@@ -366,13 +422,13 @@ const GroupDrawer = ({ open, onClose, group, onOpenPdf }) => {
                                             </td>
                                             <td className="py-2.5 px-3 text-[11px] text-blue-600 max-w-[180px] truncate" title={t.remarks || ''}>{t.remarks || '—'}</td>
                                             <td className="py-2.5 px-3 text-right">
-                                                {t.url ? (
+                                                {(t.url || group.proposedTitleId) ? (
                                                     <button
                                                         type="button"
                                                         onClick={() => onOpenPdf(t, group)}
                                                         data-tracking-id={t._id}
                                                         className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 hover:bg-blue-900 hover:text-white text-blue-800 text-[10px] font-bold transition-all"
-                                                        title={`titleUrlTracking[i]._id: ${t._id}`}
+                                                        title={`tracking._id: ${t._id}`}
                                                     >
                                                         <FileText className="w-3 h-3" />
                                                         Open
@@ -408,6 +464,7 @@ export default function MyResearchGroups() {
     const [activeTab, setActiveTab] = useState('all');
     const [search, setSearch] = useState('');
     const [drawerCode, setDrawerCode] = useState(null);
+
     const { schedules } = useContext(ScheduleContext);
     const {
         comments,
@@ -423,7 +480,7 @@ export default function MyResearchGroups() {
     const [isViewMode, setIsViewMode] = useState(false);
     const [viewSubmission, setViewSubmission] = useState(null);
     const [activeTrackingId, setActiveTrackingId] = useState(null);
-    const [activeTrackingUrl, setActiveTrackingUrl] = useState(null);
+    const [activeProposedTitleId, setActiveProposedTitleId] = useState(null);
 
     const [pdfBlobUrl, setPdfBlobUrl] = useState(null);
     const [pdfBlobLoading, setPdfBlobLoading] = useState(false);
@@ -449,18 +506,10 @@ export default function MyResearchGroups() {
     const canAnnotate = true;
     const effectiveReadOnly = false;
 
-    // Derive proposedTitleId from activeTrackingId
-    const proposedTitleId = useMemo(() => {
-        if (!viewSubmission) return activeTrackingId || null;
-        const tracking = viewSubmission?.titleUrlTracking;
-        if (Array.isArray(tracking) && tracking.length > 0) {
-            const latest = [...tracking].sort((a, b) =>
-                new Date(b.date || b.createdAt || 0) - new Date(a.date || a.createdAt || 0)
-            )[0];
-            if (latest?._id) return latest._id;
-        }
-        return activeTrackingId || viewSubmission?._id || null;
-    }, [viewSubmission, activeTrackingId]);
+    const getPdfBlobUrlRef = useRef(GetPdfBlobUrl);
+    useEffect(() => { getPdfBlobUrlRef.current = GetPdfBlobUrl; }, [GetPdfBlobUrl]);
+
+    const proposedTitleId = activeProposedTitleId;
 
     // ============================================================
     // MAP SCHEDULES → GROUPS
@@ -537,7 +586,7 @@ export default function MyResearchGroups() {
     }, [groups]);
 
     // ============================================================
-    // Sync comments from context
+    // ⭐ Sync comments from context → annotations
     // ============================================================
     useEffect(() => {
         if (!comments || comments.length === 0) return;
@@ -545,34 +594,56 @@ export default function MyResearchGroups() {
     }, [comments]);
 
     // ============================================================
-    // FETCH PDF via GetPdfBlobUrl
+    // FETCH PDF
     // ============================================================
     useEffect(() => {
         let cancelled = false;
+
         const fetchPdf = async () => {
-            if (!isViewMode || !activeTrackingId || !GetPdfBlobUrl) {
-                setPdfBlobUrl(prev => { if (prev) URL.revokeObjectURL(prev); return null; });
+            if (!isViewMode || !proposedTitleId) {
+                setPdfBlobUrl(prev => { if (prev && prev.startsWith('blob:')) URL.revokeObjectURL(prev); return null; });
                 setPdfBlobError(null);
+                setPdfBlobLoading(false);
                 return;
             }
+
             setPdfBlobLoading(true);
             setPdfBlobError(null);
+
             try {
-                const url = await GetPdfBlobUrl(activeTrackingId);
-                if (cancelled) { if (url) URL.revokeObjectURL(url); return; }
-                if (url) setPdfBlobUrl(prev => { if (prev) URL.revokeObjectURL(prev); return url; });
-                else setPdfBlobError('Failed to load thesis PDF. Backend returned no document.');
+                const tracking = viewSubmission?.titleUrlTracking?.find(t => t._id === activeTrackingId);
+                const url = await resolvePdfUrl(tracking, proposedTitleId, getPdfBlobUrlRef.current);
+
+                if (cancelled) {
+                    if (url && url.startsWith('blob:')) URL.revokeObjectURL(url);
+                    return;
+                }
+
+                if (url) {
+                    setPdfBlobUrl(prev => {
+                        if (prev && prev !== url && prev.startsWith('blob:')) URL.revokeObjectURL(prev);
+                        return url;
+                    });
+                } else {
+                    setPdfBlobError('Hindi ma-load ang PDF. Sinubukan ang proposedTitleId at trackingId.');
+                }
             } catch (err) {
                 if (!cancelled) setPdfBlobError(err.message || 'Failed to load thesis PDF');
             } finally {
                 if (!cancelled) setPdfBlobLoading(false);
             }
         };
+
         fetchPdf();
         return () => { cancelled = true; };
-    }, [isViewMode, activeTrackingId, GetPdfBlobUrl]);
+    }, [isViewMode, proposedTitleId, activeTrackingId]);
 
-    useEffect(() => () => { if (pdfBlobUrl) URL.revokeObjectURL(pdfBlobUrl); }, []);
+    useEffect(() => {
+        return () => {
+            if (pdfBlobUrl && pdfBlobUrl.startsWith('blob:')) URL.revokeObjectURL(pdfBlobUrl);
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const resetAnnotationsForNewSubmission = useCallback(() => {
         setPdfAnnotations({});
@@ -594,16 +665,20 @@ export default function MyResearchGroups() {
     };
 
     // ============================================================
-    // OPEN PDF VIEWER
+    // ⭐ OPEN PDF VIEWER
     // ============================================================
     const handleOpenPdfViewer = (tracking, group) => {
         const titleUrlTrackingId = tracking?._id;
+        const proposedId = group?.proposedTitleId;
+
         if (!titleUrlTrackingId) {
-            console.warn('No titleUrlTracking[i]._id found');
+            showNotification('Walang tracking ID ang submission na ito.', true);
             return;
         }
-
-        console.log('titleUrlTracking[i]._id -> comments fetch:', titleUrlTrackingId);
+        if (!proposedId) {
+            showNotification('Walang proposedTitle ID ang group na ito.', true);
+            return;
+        }
 
         resetAnnotationsForNewSubmission();
         try { if (ResetComments) ResetComments(); } catch (e) { console.warn(e); }
@@ -612,31 +687,28 @@ export default function MyResearchGroups() {
             ...group,
             title: tracking.chapter || group?.title || 'Latest Submission',
             uploaderName: group?.members?.[0]?.name || 'Researcher',
-            titleUrlTracking: group?.titleUrlTracking || [],
+            proposedTitleId: proposedId,
         });
         setActiveTrackingId(titleUrlTrackingId);
+        setActiveProposedTitleId(proposedId);
         setIsViewMode(true);
-
-        if (FetchCommentsByProposedTitle) {
-            FetchCommentsByProposedTitle(titleUrlTrackingId, 1, 100).catch(err => {
-                console.warn('FetchComments error:', err);
-            });
-        }
     };
 
     const handleBackFromViewer = () => {
         setIsViewMode(false);
         setViewSubmission(null);
         setActiveTrackingId(null);
-        setPdfBlobUrl(prev => { if (prev) URL.revokeObjectURL(prev); return null; });
+        setActiveProposedTitleId(null);
+        setPdfBlobUrl(prev => { if (prev && prev.startsWith('blob:')) URL.revokeObjectURL(prev); return null; });
+        setPdfBlobError(null);
         try { if (ResetComments) ResetComments(); } catch (e) { console.warn(e); }
     };
 
     const handleRetryPdf = () => {
-        if (!activeTrackingId || !GetPdfBlobUrl) return;
+        if (!proposedTitleId || !getPdfBlobUrlRef.current) return;
         setPdfBlobError(null);
         setPdfBlobLoading(true);
-        GetPdfBlobUrl(activeTrackingId).then(url => {
+        getPdfBlobUrlRef.current(proposedTitleId).then(url => {
             if (url) setPdfBlobUrl(url);
             else setPdfBlobError('Failed to load PDF');
             setPdfBlobLoading(false);
@@ -646,20 +718,103 @@ export default function MyResearchGroups() {
         });
     };
 
+    // ============================================================
+    // ⭐ refreshComments — DOUBLE FETCH (feedback + proceedings)
+    // ============================================================
     const refreshComments = useCallback(async () => {
-        if (!FetchCommentsByProposedTitle || !proposedTitleId) return;
-        try { await FetchCommentsByProposedTitle(proposedTitleId, 1, 100); } catch (err) { console.warn(err); }
-    }, [FetchCommentsByProposedTitle, proposedTitleId]);
+        if (!activeTrackingId) return;
+
+        try {
+            // 1️⃣ Feedback (exclude proceedings sa backend)
+            if (FetchCommentsByProposedTitle) {
+                await FetchCommentsByProposedTitle(activeTrackingId, 1, 100);
+            }
+
+            // 2️⃣ Proceedings (dedicated endpoint)
+            let procRes = { data: [] };
+            try {
+                const r = await fetch(
+                    `${API_BASE}/api/comments/${activeTrackingId}/proceedings`,
+                    { credentials: 'include' }
+                );
+                if (r.ok) procRes = await r.json();
+            } catch (e) {
+                console.warn('⚠️ Proceedings fetch failed:', e);
+            }
+
+            console.log('═══════════════════════════════════════════');
+            console.log('📥 Proceedings fetched:', procRes?.data?.length || 0);
+            console.log('═══════════════════════════════════════════');
+
+            // 3️⃣ Merge proceedings sa pdfAnnotations
+            if ((procRes?.data || []).length > 0) {
+                setPdfAnnotations(prev => {
+                    const next = { ...prev };
+                    const seen = new Set();
+                    Object.values(next).forEach(list => (list || []).forEach(a => {
+                        if (a.id) seen.add(String(a.id));
+                        if (a.backendId) seen.add(String(a.backendId));
+                    }));
+
+                    const procAnnots = [];
+                    procRes.data.forEach(c => {
+                        const cid = String(c._id);
+                        if (seen.has(cid)) return;
+                        seen.add(cid);
+
+                        procAnnots.push({
+                            id: c._id,
+                            backendId: c._id,
+                            type: 'proceedings',
+                            annotationType: 'proceedings',
+                            shape: 'rectangle',
+                            x: 0, y: 0, w: 0, h: 0,
+                            text: c.text || '',
+                            quoted: null,
+                            color: c.color || '#fbbf24',
+                            author: c.userId
+                                ? `${c.userId.first_name || ''} ${c.userId.last_name || ''}`.trim() || 'Mentor'
+                                : 'Mentor',
+                            pageNum: null,
+                            createdAt: c.createdAt || new Date().toISOString(),
+                            __fromBackend: true,
+                        });
+                    });
+
+                    if (procAnnots.length > 0) {
+                        next[PROCEEDINGS_KEY] = [
+                            ...(next[PROCEEDINGS_KEY] || []),
+                            ...procAnnots,
+                        ];
+                    }
+
+                    console.log('📦 After merge keys:', Object.keys(next));
+                    console.log('📋 Proceedings count:', next[PROCEEDINGS_KEY]?.length || 0);
+
+                    return next;
+                });
+            }
+        } catch (err) {
+            console.warn('❌ refreshComments error:', err);
+        }
+    }, [FetchCommentsByProposedTitle, activeTrackingId]);
+
+    // ⭐ Auto-fetch comments kapag nag-open ng PDF viewer
+    useEffect(() => {
+        if (isViewMode && activeTrackingId) {
+            refreshComments();
+        }
+    }, [isViewMode, activeTrackingId, refreshComments]);
 
     // ============================================================
-    // Annotation handlers (English messages)
+    // Annotation handlers
     // ============================================================
     const handleAddPageComment = async (pageNum) => {
         if (!canAnnotate) return showNotification('View-only mode — you cannot add feedback.', true);
         const value = window.prompt(`Page ${pageNum} — Describe the issue:`);
-        if (!value?.trim() || !proposedTitleId) return;
+        if (!value?.trim() || !activeTrackingId) return;
         try {
-            const res = await CreateComment(proposedTitleId, {
+            const res = await CreateComment(activeTrackingId, {
                 text: value.trim(), pageNumber: pageNum, position: null, selectedText: null,
                 color: annotationColor, annotationType: 'page', annotationLabel: 'Page Feedback', shape: 'pin',
             });
@@ -671,9 +826,9 @@ export default function MyResearchGroups() {
     const handleAddGlobalComment = async () => {
         if (!canAnnotate) return showNotification('View-only mode — you cannot add feedback.', true);
         const value = window.prompt('Applies to ALL pages — Describe the issue:');
-        if (!value?.trim() || !proposedTitleId) return;
+        if (!value?.trim() || !activeTrackingId) return;
         try {
-            const res = await CreateComment(proposedTitleId, {
+            const res = await CreateComment(activeTrackingId, {
                 text: value.trim(), pageNumber: null, position: null, selectedText: null,
                 color: '#f87171', annotationType: 'global', annotationLabel: 'All Pages Feedback', shape: 'pin',
             });
@@ -685,11 +840,11 @@ export default function MyResearchGroups() {
     const handleClearPage = async () => {
         if (!canAnnotate) return showNotification('View-only mode — you cannot clear annotations.', true);
         const annotations = pdfAnnotations[`page_${annotationPageNum}`] || [];
-        if (annotations.length === 0 || !proposedTitleId) return;
+        if (annotations.length === 0 || !activeTrackingId) return;
         if (!window.confirm(`Delete all ${annotations.length} annotation(s) on page ${annotationPageNum}?`)) return;
         try {
             setIsClearing(true);
-            const res = await ClearPageAnnotations(proposedTitleId, annotationPageNum);
+            const res = await ClearPageAnnotations(activeTrackingId, annotationPageNum);
             if (!res?.success) return showNotification(`${res?.error || 'Unknown error'}`, true);
             setPdfAnnotations(prev => ({ ...prev, [`page_${annotationPageNum}`]: [] }));
             await refreshComments();
@@ -724,7 +879,9 @@ export default function MyResearchGroups() {
             if (!res?.success) return showNotification('Delete failed', true);
         }
         setPdfAnnotations(prev => {
-            const key = target.type === 'global' || target.pageNum == null ? GLOBAL_KEY : `page_${target.pageNum || annotationPageNum}`;
+            const key = target.annotationType === 'proceedings'
+                ? PROCEEDINGS_KEY
+                : (target.type === 'global' || target.pageNum == null ? GLOBAL_KEY : `page_${target.pageNum || annotationPageNum}`);
             return { ...prev, [key]: (prev[key] || []).filter(a => a.id !== target.id) };
         });
         await refreshComments();
@@ -732,18 +889,17 @@ export default function MyResearchGroups() {
     };
 
     const handleSaveAnnotatedPdf = async () => {
-        if (!activeTrackingId) return showNotification('No active tracking ID', true);
+        if (!proposedTitleId) return showNotification('No proposedTitleId', true);
         setIsSavingPdf(true);
         try {
-            const API_BASE = import.meta.env.VITE_API_URL || '';
-            const res = await fetch(`${API_BASE}/api/v1/proposed-titles/pdf/${activeTrackingId}/annotated-pdf`, { credentials: 'include' });
+            const res = await fetch(`${API_BASE}/api/v1/proposed-titles/pdf/${proposedTitleId}/annotated-pdf`, { credentials: 'include' });
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const blob = await res.blob();
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
             const safeTitle = (viewSubmission?.title || 'thesis').replace(/[^a-z0-9]/gi, '_').slice(0, 60);
-            a.download = `${safeTitle}_annotated_${activeTrackingId}.pdf`;
+            a.download = `${safeTitle}_annotated_${proposedTitleId}.pdf`;
             document.body.appendChild(a); a.click(); document.body.removeChild(a);
             setTimeout(() => URL.revokeObjectURL(url), 1500);
             showNotification('Annotated PDF downloaded');
@@ -757,7 +913,9 @@ export default function MyResearchGroups() {
     if (isViewMode && viewSubmission) {
         const totalAnnotationCount =
             (pdfAnnotations[GLOBAL_KEY] || []).length +
-            Object.entries(pdfAnnotations).filter(([k]) => k !== GLOBAL_KEY).reduce((s, [, l]) => s + (l?.length || 0), 0);
+            Object.entries(pdfAnnotations)
+                .filter(([k]) => k !== GLOBAL_KEY && k !== PROCEEDINGS_KEY)
+                .reduce((s, [, l]) => s + (l?.length || 0), 0);
 
         return (
             <PdfViewer
@@ -862,7 +1020,6 @@ export default function MyResearchGroups() {
                                         <th className="py-3.5 px-4 min-w-[280px]">Research Title</th>
                                         <th className="py-3.5 px-4 whitespace-nowrap">Members</th>
                                         <th className="py-3.5 px-4 min-w-[200px]">Advisers</th>
-                                        <th className="py-3.5 px-2 text-center whitespace-nowrap">Group</th>
                                         <th className="py-3.5 px-2 text-center whitespace-nowrap">Topic</th>
                                         <th className="py-3.5 px-2 text-center whitespace-nowrap">Feedback</th>
                                         <th className="py-3.5 px-4 whitespace-nowrap">Updated</th>
@@ -871,7 +1028,7 @@ export default function MyResearchGroups() {
                                 </thead>
                                 <tbody className="text-xs text-blue-900">
                                     {filteredGroups.length === 0 ? (
-                                        <tr><td colSpan={9} className="py-8 px-4 text-center text-blue-400"><AlertCircle className="w-8 h-8 mx-auto mb-2 opacity-50" /><p className="text-sm">No groups match your filters.</p></td></tr>
+                                        <tr><td colSpan={8} className="py-8 px-4 text-center text-blue-400"><AlertCircle className="w-8 h-8 mx-auto mb-2 opacity-50" /><p className="text-sm">No groups match your filters.</p></td></tr>
                                     ) : filteredGroups.map((g) => <GroupRow key={g.code} group={g} onOpen={setDrawerCode} />)}
                                 </tbody>
                             </table>

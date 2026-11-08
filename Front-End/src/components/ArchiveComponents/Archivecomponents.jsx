@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useContext, useCallback } from 'react';
 import { ProposedTitleContext } from '../../contexts/ProposedTitleContext/ProposedTitleContext';
+import PDFimage from "../../assets/cardbg.jpg"
 
 // ============================================================
 // HELPERS
@@ -50,6 +51,39 @@ const getAvatarColor = (name) => {
 };
 
 // ============================================================
+// PDF URL HELPER
+// ============================================================
+const CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || 'your-cloud-name';
+const API_URL = import.meta.env.VITE_API_URL || '';
+
+const getPdfUrl = (raw) => {
+    if (!raw) return null;
+
+    const fileId =
+        raw?.fileId ||
+        raw?.file?.public_id ||
+        raw?.pdfId ||
+        raw?.pdfPublicId ||
+        raw?.titleUrlTracking?.fileId ||
+        raw?.titleUrlTracking?.publicId;
+
+    const directUrl =
+        raw?.fileUrl ||
+        raw?.pdfUrl ||
+        raw?.file?.url ||
+        raw?.titleUrlTracking?.url;
+
+    if (directUrl) return directUrl;
+    if (!fileId) return null;
+
+    if (raw?.file?.resource_type === 'raw' || raw?.isCloudinary) {
+        return `https://res.cloudinary.com/${CLOUD_NAME}/raw/upload/${fileId}`;
+    }
+
+    return `${API_URL}/files/${fileId}/view`;
+};
+
+// ============================================================
 // AVATAR COMPONENTS
 // ============================================================
 const Avatar = ({ name, size = 'md', ring = true }) => {
@@ -93,7 +127,9 @@ const AvatarGroup = ({ names = [], max = 3, size = 'md' }) => {
     );
 };
 
-// Map a back-end archived title -> the shape this UI expects
+// ============================================================
+// MAP BACKEND -> UI SHAPE
+// ============================================================
 const mapArchivedToProject = (item) => {
     const group = item.groupInfo || {};
     const adviser = item.adviserInfo || null;
@@ -134,6 +170,7 @@ const mapArchivedToProject = (item) => {
         keywords,
         downloads: item.downloads ?? 0,
         raw: item,
+        pdfUrl: getPdfUrl(item),
     };
 };
 
@@ -154,13 +191,14 @@ export default function Archivecomponents() {
         GetFileFromCloudinary,
     } = useContext(ProposedTitleContext);
 
+    console.log("archivedTitles", archivedTitles)
+
     const [searchInput, setSearchInput] = useState(archivedSearch);
     const [deptFilter, setDeptFilter] = useState('');
     const [yearFilter, setYearFilter] = useState('');
     const [tagFilter, setTagFilter] = useState('All');
     const [selectedProject, setSelectedProject] = useState(null);
     const [toastMessage, setToastMessage] = useState(null);
-    const [downloading, setDownloading] = useState(false);
 
     useEffect(() => {
         setSearchInput(archivedSearch);
@@ -222,18 +260,88 @@ export default function Archivecomponents() {
         [archivedTotalPages, setArchivedCurrentPage]
     );
 
-    const handleDownload = async (project) => {
-        if (!project?.raw?._id || !GetFileFromCloudinary) return;
-        setDownloading(true);
-        showToast('Initiating document download...');
+    // ============================================================
+    // OPEN PDF IN BROWSER (new tab)
+    // ============================================================
+    const handleOpenInBrowser = async (project) => {
+        const pdfUrl = project?.pdfUrl;
+
+        // Case 1: May direct PDF URL — buksan agad sa new tab
+        if (pdfUrl) {
+            showToast('Opening document in browser...');
+            const newTab = window.open(pdfUrl, '_blank', 'noopener,noreferrer');
+
+            // Fallback kung na-block ng popup blocker
+            if (!newTab) {
+                const link = document.createElement('a');
+                link.href = pdfUrl;
+                link.target = '_blank';
+                link.rel = 'noopener noreferrer';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+            return;
+        }
+
+        // Case 2: Walang direct URL — subukan ang GetFileFromCloudinary
+        if (!project?.raw?._id || !GetFileFromCloudinary) {
+            showToast('No PDF document available for this project.');
+            return;
+        }
+
         try {
-            await GetFileFromCloudinary(project.raw._id);
+            showToast('Opening document in browser...');
+            const result = await GetFileFromCloudinary(project.raw._id);
+
+            // Kung Blob ang binalik
+            if (result instanceof Blob) {
+                const blobUrl = URL.createObjectURL(
+                    new Blob([result], { type: 'application/pdf' })
+                );
+                const newTab = window.open(blobUrl, '_blank');
+                if (!newTab) {
+                    const link = document.createElement('a');
+                    link.href = blobUrl;
+                    link.target = '_blank';
+                    link.rel = 'noopener noreferrer';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                }
+                setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+            }
+            // Kung URL string ang binalik
+            else if (typeof result === 'string') {
+                const newTab = window.open(result, '_blank', 'noopener,noreferrer');
+                if (!newTab) {
+                    const link = document.createElement('a');
+                    link.href = result;
+                    link.target = '_blank';
+                    link.rel = 'noopener noreferrer';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                }
+            }
+            // Kung object na may url property
+            else if (result?.url) {
+                const newTab = window.open(result.url, '_blank', 'noopener,noreferrer');
+                if (!newTab) {
+                    const link = document.createElement('a');
+                    link.href = result.url;
+                    link.target = '_blank';
+                    link.rel = 'noopener noreferrer';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                }
+            } else {
+                showToast('Failed to open document.');
+            }
         } catch (err) {
             console.error(err);
-            showToast('Failed to download document.');
-        } finally {
-            setDownloading(false);
-            setSelectedProject(null);
+            showToast('Failed to open document.');
         }
     };
 
@@ -241,7 +349,7 @@ export default function Archivecomponents() {
         <div className="min-h-screen bg-gradient-to-b from-blue-100 via-blue-50 to-sky-50 text-slate-800 font-sans antialiased flex flex-col">
             <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
 
-                {/* Header — navy with yellow accent */}
+                {/* Header */}
                 <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-blue-900 p-6 rounded-2xl shadow-md border-b-4 border-yellow-400">
                     <div className="flex items-center space-x-3">
                         <div className="bg-blue-800 p-2.5 rounded-lg text-yellow-300 shadow-sm">
@@ -265,7 +373,7 @@ export default function Archivecomponents() {
                     </div>
                 </header>
 
-                {/* Search + Filters — white card with blue inputs */}
+                {/* Search + Filters */}
                 <div className="bg-white p-4 rounded-2xl border border-blue-200 shadow-md shadow-blue-900/10 space-y-3 border-t-4 border-t-yellow-400">
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                         <div className="md:col-span-2 relative">
@@ -330,15 +438,17 @@ export default function Archivecomponents() {
                 {isLoading ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {[...Array(6)].map((_, i) => (
-                            <div key={i} className="bg-white rounded-2xl border border-blue-200 shadow-md shadow-blue-900/10 p-5 space-y-4 animate-pulse border-t-4 border-t-blue-900">
-                                <div className="flex justify-between">
-                                    <div className="h-4 w-16 bg-blue-100 rounded" />
-                                    <div className="h-4 w-12 bg-blue-100 rounded" />
+                            <div key={i} className="bg-white rounded-2xl border border-blue-200 shadow-md shadow-blue-900/10 overflow-hidden animate-pulse border-t-4 border-t-blue-900">
+                                <div className="h-44 w-full bg-blue-100" />
+                                <div className="p-5 space-y-4">
+                                    <div className="flex justify-between">
+                                        <div className="h-4 w-16 bg-blue-100 rounded" />
+                                        <div className="h-4 w-12 bg-blue-100 rounded" />
+                                    </div>
+                                    <div className="h-4 w-full bg-blue-100 rounded" />
+                                    <div className="h-4 w-3/4 bg-blue-100 rounded" />
+                                    <div className="h-12 w-full bg-blue-50 rounded" />
                                 </div>
-                                <div className="h-4 w-full bg-blue-100 rounded" />
-                                <div className="h-4 w-3/4 bg-blue-100 rounded" />
-                                <div className="h-12 w-full bg-blue-50 rounded" />
-                                <div className="h-14 w-full bg-blue-50 rounded" />
                             </div>
                         ))}
                     </div>
@@ -348,6 +458,19 @@ export default function Archivecomponents() {
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             {filteredProjects.map(p => (
                                 <div key={p.id} className="bg-white rounded-2xl border border-blue-200 shadow-md shadow-blue-900/10 hover:shadow-lg hover:border-blue-900/40 transition-all duration-200 flex flex-col justify-between overflow-hidden group border-t-4 border-t-blue-900">
+
+                                    {/* 👇 CARD IMAGE */}
+                                    <div className="h-44 w-full border-b border-blue-100 overflow-hidden relative">
+                                        <img
+                                            src={PDFimage}
+                                            alt={p.title}
+                                            className="w-full h-full object-cover object-center"
+                                        />
+                                        <div className="absolute top-2 right-2 bg-blue-900/90 text-yellow-300 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider shadow">
+                                            PDF
+                                        </div>
+                                    </div>
+
                                     <div className="p-5 space-y-3">
                                         {/* Dept + Year badges */}
                                         <div className="flex items-center justify-between">
@@ -378,30 +501,6 @@ export default function Archivecomponents() {
                                                         ? p.authorList[0]
                                                         : `${p.authorList[0]} +${p.authorList.length - 1} more`}
                                                 </span>
-                                            </div>
-                                        )}
-
-                                        {/* Adviser / Co-Adviser */}
-                                        {(isValid(p.adviser) || isValid(p.coAdviser)) && (
-                                            <div className="bg-blue-50 px-3 py-2 rounded-md text-xs space-y-1.5 border border-blue-200">
-                                                {isValid(p.adviser) && (
-                                                    <div className="flex items-center gap-2">
-                                                        <Avatar name={p.adviser} size="sm" />
-                                                        <div className="min-w-0">
-                                                            <p className="text-[9px] uppercase tracking-wider text-blue-900/60 font-bold leading-tight">Adviser</p>
-                                                            <p className="text-slate-700 font-medium truncate text-[11px]">{p.adviser}</p>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                                {isValid(p.coAdviser) && (
-                                                    <div className="flex items-center gap-2">
-                                                        <Avatar name={p.coAdviser} size="sm" />
-                                                        <div className="min-w-0">
-                                                            <p className="text-[9px] uppercase tracking-wider text-blue-900/60 font-bold leading-tight">Co-Adviser</p>
-                                                            <p className="text-slate-700 font-medium truncate text-[11px]">{p.coAdviser}</p>
-                                                        </div>
-                                                    </div>
-                                                )}
                                             </div>
                                         )}
 
@@ -514,6 +613,19 @@ export default function Archivecomponents() {
             {selectedProject && (
                 <div className="fixed inset-0 z-50 bg-blue-950/60 backdrop-blur-sm flex items-center justify-center p-4">
                     <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-xl border border-blue-200 border-t-4 border-t-yellow-400">
+
+                        {/* 👇 MODAL IMAGE */}
+                        <div className="h-64 w-full border-b border-blue-100 rounded-t-2xl overflow-hidden relative">
+                            <img
+                                src={PDFimage}
+                                alt={selectedProject.title}
+                                className="w-full h-full object-cover object-center"
+                            />
+                            <div className="absolute top-2 right-2 bg-blue-900/90 text-yellow-300 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider shadow">
+                                PDF
+                            </div>
+                        </div>
+
                         <div className="p-6 space-y-5">
                             <div className="flex items-start justify-between border-b border-blue-100 pb-4">
                                 <div>
@@ -607,12 +719,13 @@ export default function Archivecomponents() {
                                     Close
                                 </button>
                                 <button
-                                    onClick={() => handleDownload(selectedProject)}
-                                    disabled={downloading}
-                                    className="px-4 py-2 bg-blue-900 hover:bg-blue-800 text-yellow-300 text-xs font-bold rounded-md shadow-sm flex items-center space-x-2 transition disabled:opacity-60 tracking-wide"
+                                    onClick={() => handleOpenInBrowser(selectedProject)}
+                                    className="px-4 py-2 bg-blue-900 hover:bg-blue-800 text-yellow-300 text-xs font-bold rounded-md shadow-sm flex items-center space-x-2 transition tracking-wide"
                                 >
-                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                                    <span>{downloading ? 'Downloading...' : 'Download Document (PDF)'}</span>
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                    </svg>
+                                    <span>Open Document (PDF)</span>
                                 </button>
                             </div>
                         </div>

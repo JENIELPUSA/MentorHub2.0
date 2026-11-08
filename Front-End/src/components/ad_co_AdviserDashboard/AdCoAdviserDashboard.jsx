@@ -18,6 +18,7 @@ import {
     BarChart3,
     PieChart as PieChartIcon,
     TrendingUp,
+    RefreshCw,
 } from 'lucide-react';
 
 import { AuthContext } from '../../contexts/AuthContext';
@@ -104,7 +105,7 @@ const HeaderSkeleton = () => (
 );
 
 const SkeletonDashboard = () => (
-    <div className={`min-h-screen ${PAGE_BG} text-slate-800 font-sans p-4 md:p-8`}>
+    <div className={`min-h-screen ${PAGE_BG} font-sans p-4 md:p-8`}>
         <div className="max-w-7xl mx-auto space-y-8">
             <HeaderSkeleton />
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
@@ -467,9 +468,10 @@ export default function AdCoAdviserDashboard() {
     const [isProcessing, setIsProcessing] = useState(false);
     const [isLoadingDetails, setIsLoadingDetails] = useState(false);
     const [isPageLoading, setIsPageLoading] = useState(true);
+    const [isRefreshing, setIsRefreshing] = useState(false); // 🔄 REFRESH STATE
 
     const { role, first_name, last_name } = useContext(AuthContext);
-    const { dashboardData, isLoading } = useContext(StatisticalContext);
+    const { dashboardData, isLoading, refetch } = useContext(StatisticalContext);
     const {
         getGroupDetails,
         groupDetails,
@@ -481,6 +483,24 @@ export default function AdCoAdviserDashboard() {
         const timer = setTimeout(() => setIsPageLoading(false), 1500);
         return () => clearTimeout(timer);
     }, []);
+
+    /* 🔄 REFRESH HANDLER */
+    const handleRefresh = async () => {
+        if (isRefreshing) return;
+        setIsRefreshing(true);
+        try {
+            if (typeof refetch === 'function') {
+                await refetch();
+            } else {
+                // fallback kung walang refetch sa context
+                window.location.reload();
+            }
+        } catch (err) {
+            console.error('❌ Refresh error:', err);
+        } finally {
+            setIsRefreshing(false);
+        }
+    };
 
     const bannerDisplayData = useMemo(() => {
         const cards = dashboardData?.cards || {};
@@ -565,6 +585,7 @@ export default function AdCoAdviserDashboard() {
         setIsProcessing(false);
     };
 
+    /* ✅ APPROVE — with auto-refresh after success */
     const handleApprove = async (groupId) => {
         const referralCode = groupDetails?.group?.referralCode || selectedGroup?.referralCode;
         if (!referralCode) {
@@ -577,6 +598,8 @@ export default function AdCoAdviserDashboard() {
             if (result.success) {
                 alert(result.message || 'Group approved successfully!');
                 closeModal();
+                // 🔄 AUTO-REFRESH AFTER SUCCESSFUL APPROVAL
+                await handleRefresh();
             } else {
                 alert(result.error || result.message || 'Failed to approve group.');
             }
@@ -588,6 +611,7 @@ export default function AdCoAdviserDashboard() {
         }
     };
 
+    /* ✅ REJECT — with auto-refresh after success */
     const handleReject = async (groupId) => {
         const referralCode = groupDetails?.group?.referralCode || selectedGroup?.referralCode;
         if (!referralCode) {
@@ -600,6 +624,8 @@ export default function AdCoAdviserDashboard() {
             if (result.success) {
                 alert(result.message || 'Group rejected successfully.');
                 closeModal();
+                // 🔄 AUTO-REFRESH AFTER SUCCESSFUL REJECTION
+                await handleRefresh();
             } else {
                 alert(result.error || result.message || 'Failed to reject group.');
             }
@@ -868,7 +894,7 @@ export default function AdCoAdviserDashboard() {
     };
 
     return (
-        <div className={`min-h-screen ${PAGE_BG} text-slate-800 font-sans p-4 md:p-8`}>
+        <div className={`min-h-screen ${PAGE_BG} font-sans p-4 md:p-8`}>
             <div className="max-w-7xl mx-auto space-y-8">
 
                 {/* UserDashboardBanner */}
@@ -956,18 +982,34 @@ export default function AdCoAdviserDashboard() {
                             <p className="text-blue-200 text-sm mt-0.5">Manage groups where you are assigned as adviser or co-adviser.</p>
                         </div>
 
-                        <div className="relative">
-                            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-400" />
-                            <input
-                                type="text"
-                                placeholder="Search group or code..."
-                                value={searchTerm}
-                                onChange={(e) => {
-                                    setSearchTerm(e.target.value);
-                                    setCurrentPage(1);
-                                }}
-                                className="pl-10 pr-4 py-2 bg-white border-2 border-transparent rounded-xl text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-yellow-400 w-full sm:w-64"
-                            />
+                        <div className="flex items-center gap-2">
+                            {/* 🔄 MANUAL REFRESH BUTTON */}
+                            <button
+                                onClick={handleRefresh}
+                                disabled={isRefreshing || isLoading}
+                                className="flex items-center gap-2 px-4 py-2 bg-yellow-400 hover:bg-yellow-300 text-blue-950 font-bold text-sm rounded-xl transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                                title="Refresh groups"
+                            >
+                                <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                                <span className="hidden sm:inline">
+                                    {isRefreshing ? 'Refreshing...' : 'Refresh'}
+                                </span>
+                            </button>
+
+                            {/* Search input */}
+                            <div className="relative">
+                                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-400" />
+                                <input
+                                    type="text"
+                                    placeholder="Search group or code..."
+                                    value={searchTerm}
+                                    onChange={(e) => {
+                                        setSearchTerm(e.target.value);
+                                        setCurrentPage(1);
+                                    }}
+                                    className="pl-10 pr-4 py-2 bg-white border-2 border-transparent rounded-xl text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-yellow-400 w-full sm:w-64"
+                                />
+                            </div>
                         </div>
                     </div>
 

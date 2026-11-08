@@ -4,87 +4,123 @@ const mongoose = require("mongoose");
 const group = require("../Models/GroupName");
 
 
-// ==========================================
-// CREATE SECTION
-// ==========================================
 exports.createSection = AsyncErrorHandler(async (req, res, next) => {
-    console.log("Create Section Called");
-    console.log(req.body);
+  const { name, subjectId } = req.body;
 
-    const { name, subjectId } = req.body;
-
-    // Basic validation
-    if (!name) {
-        return res.status(400).json({
-            success: false,
-            message: "Section name is required",
-        });
-    }
-
-    if (!subjectId) {
-        return res.status(400).json({
-            success: false,
-            message: "Subject ID is required",
-        });
-    }
-
-    // Check if section name already exists for this subject
-    const existingSection = await SectionModel.findOne({
-        name,
-        subjectId
+  // Basic validation
+  if (!name) {
+    return res.status(400).json({
+      success: false,
+      message: "Section name is required",
     });
+  }
 
-    if (existingSection) {
-        return res.status(400).json({
-            success: false,
-            message: "A section with this name already exists in this subject",
-        });
-    }
-
-    const section = await SectionModel.create({
-        name,
-        subjectId
+  if (!subjectId) {
+    return res.status(400).json({
+      success: false,
+      message: "Subject ID is required",
     });
+  }
 
-    // Use lookup to get subject details
-    const populatedSection = await SectionModel.aggregate([
-        { $match: { _id: section._id } },
-        {
-            $lookup: {
-                from: "subjects",
-                localField: "subjectId",
-                foreignField: "_id",
-                as: "subjectDetails"
-            }
+  // Check if section name already exists for this subject
+  const existingSection = await SectionModel.findOne({
+    name,
+    subjectId,
+  });
+
+  if (existingSection) {
+    return res.status(400).json({
+      success: false,
+      message: "A section with this name already exists in this subject",
+    });
+  }
+
+  const section = await SectionModel.create({
+    name,
+    subjectId,
+  });
+
+  // Use lookup to get subject details
+  const populatedSection = await SectionModel.aggregate([
+    { $match: { _id: section._id } },
+    {
+      $lookup: {
+        from: "subjects",
+        localField: "subjectId",
+        foreignField: "_id",
+        as: "subjectDetails",
+      },
+    },
+    {
+      $addFields: {
+        subjectId: { $arrayElemAt: ["$subjectDetails", 0] },
+      },
+    },
+    {
+      $project: {
+        subjectDetails: 0,
+        "subjectId.__v": 0,
+      },
+    },
+  ]);
+
+  const dataToSend = populatedSection[0] || section;
+
+  // =========================================================
+  // SOCKET.IO — Notify all relevant clients
+  // =========================================================
+  try {
+    const io = req.app.get("io");
+    if (io) {
+      // Extract subjectId — pwedeng populated object o raw ObjectId
+      const subjectIdValue =
+        dataToSend?.subjectId?._id || dataToSend?.subjectId || subjectId;
+
+      // Broadcast sa lahat ng authenticated users
+      io.to("all-roles").emit("section:created", {
+        data: dataToSend,
+        subjectId: subjectIdValue, // ✅ explicit subjectId sa top level
+        subject: dataToSend?.subjectId || null, // ✅ subject details (kung populated)
+        createdBy: {
+          userId: req.user?._id,
+          role: req.user?.role,
+          username: req.user?.username,
         },
-        {
-            $addFields: {
-                subjectId: { $arrayElemAt: ["$subjectDetails", 0] }
-            }
-        },
-        {
-            $project: {
-                subjectDetails: 0,
-                "subjectId.__v": 0
-            }
-        }
-    ]);
+        timestamp: new Date(),
+      });
 
-    return res.status(201).json({
-        status: "Success",
-        message: "Section created successfully",
-        data: populatedSection[0] || section
-    });
+      // Notify admins separately
+      io.to("role:admin").emit("admin:section:created", {
+        data: dataToSend,
+        subjectId: subjectIdValue, // ✅ explicit subjectId
+        subject: dataToSend?.subjectId || null,
+        timestamp: new Date(),
+      });
+
+      console.log(
+        `📡 Socket broadcast: section:created (sectionId=${dataToSend._id}, subjectId=${subjectIdValue})`
+      );
+    } else {
+      console.warn("⚠️ Socket.IO not available on req.app");
+    }
+  } catch (socketErr) {
+    console.error("❌ Socket broadcast error:", socketErr);
+  }
+
+  return res.status(201).json({
+    status: "Success",
+    message: "Section created successfully",
+    data: dataToSend,
+  });
 });
 
 
-// ==========================================
-// DISPLAY SECTIONS BY SUBJECT ID (WITH PAGINATION + SEARCH + ADVISER FILTER)
-// ==========================================
 exports.DisplaySections = AsyncErrorHandler(async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
+
+    console.log("00000000000000000000000")
 
     const userId = req.user._id;
     const role = req.user.role;

@@ -33,7 +33,7 @@ router.route('/forreadystatus')
     .get(authController.protect, Proposal.DisplayReadytitle);
 
 router.route('/Archived')
-    .get(authController.protect, Proposal.DisplayArcivedtitle);
+    .get(Proposal.DisplayArcivedtitle);
 
 // ============================================================
 // ⭐ CHAPTER PROGRESSION ROUTES (Subject Instructor / Admin)

@@ -62,7 +62,7 @@ const CommentSchema = new Schema(
                 "margin",
                 "grammar",
                 "other",
-                "highlight", "page", "global", "comment"
+                "highlight", "page", "global", "comment", "proceedings"
             ],
             default: "text"
         },

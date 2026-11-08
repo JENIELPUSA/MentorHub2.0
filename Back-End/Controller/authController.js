@@ -17,7 +17,12 @@ const signToken = (id, role, linkId) => {
   });
 };
 
+const SWITCHABLE_ROLES = ["panelist", "adviser"];
 
+
+// ==========================================
+// SIGNUP — Create new user
+// ==========================================
 exports.signup = async (req, res) => {
   try {
     const {
@@ -32,6 +37,7 @@ exports.signup = async (req, res) => {
       groupId,
       address,
       password,
+      confirmPassword,
       yearLevel,
       course,
       major,
@@ -41,13 +47,51 @@ exports.signup = async (req, res) => {
       referralCode,
     } = req.body;
 
-    const userRoles = Array.isArray(selectedrole) && selectedrole.length > 0
-      ? selectedrole
-      : [role || "student"];
-
-    // ✅ Default password kung walang ibinigay
+    // =========================================================
+    // ✅ VALIDATE PASSWORDS (manual — before hitting the model)
+    // =========================================================
     const defaultPassword = password || "default123";
 
+    if (confirmPassword !== undefined && confirmPassword !== "") {
+      if (confirmPassword !== defaultPassword) {
+        return res.status(400).json({
+          success: false,
+          message: "Passwords do not match.",
+        });
+      }
+    }
+
+    // =========================================================
+    // ✅ NORMALIZE multiplerole (switchable roles)
+    // =========================================================
+    const rawSelected = Array.isArray(selectedrole)
+      ? selectedrole
+      : selectedrole
+        ? [selectedrole]
+        : [];
+
+    const cleanSelected = [
+      ...new Set(
+        rawSelected
+          .map((r) => String(r).trim().toLowerCase())
+          .filter((r) => SWITCHABLE_ROLES.includes(r)),
+      ),
+    ];
+
+    const currentRole = (role || "student").toLowerCase();
+
+    // Only allow multiplerole for switchable roles
+    let multiplerole = [];
+    if (SWITCHABLE_ROLES.includes(currentRole)) {
+      if (!cleanSelected.includes(currentRole)) {
+        cleanSelected.push(currentRole);
+      }
+      multiplerole = cleanSelected;
+    }
+
+    // =========================================================
+    // ✅ CREATE USER
+    // =========================================================
     const newUser = new UserLogin({
       avatar: {
         url: "",
@@ -59,7 +103,9 @@ exports.signup = async (req, res) => {
       suffix: suffix || "",
       username: username || "",
       password: defaultPassword,
-      role: role || "student",
+      confirmPassword: confirmPassword || defaultPassword, // ✅ now passed
+      role: currentRole,
+      multiplerole, // ✅ array of switchable roles
 
       departmentId: departmentId || null,
       groupId: groupId || null,
@@ -83,7 +129,7 @@ exports.signup = async (req, res) => {
     await newUser.save();
 
     // =========================================================
-    // ✅ SEND EMAIL — PLAIN TEXT (text, hindi message)
+    // ✅ SEND EMAIL — PLAIN TEXT
     // =========================================================
     const text = `
 Welcome, ${first_name || username}!
@@ -101,17 +147,17 @@ Your Referral Code: ${newUser.referralCode}
 
     try {
       await sendEmail({
-        email: username, // ✅ username ang recipient
+        email: username,
         subject: "Your Account Credentials",
-        text, // ✅ "text" hindi "message"
+        text,
       });
     } catch (emailErr) {
       console.error("❌ Email sending failed:", emailErr);
-      // Hindi i-cacancel ang signup kahit mabigo ang email
+      // Don't cancel signup even if email fails
     }
 
     // =========================================================
-    // REMOVE SENSITIVE DATA BAGO MAG-RESPOND
+    // REMOVE SENSITIVE DATA BEFORE RESPONDING
     // =========================================================
     const userResponse = newUser.toObject();
     delete userResponse.password;
@@ -126,20 +172,30 @@ Your Referral Code: ${newUser.referralCode}
       message: "Account created successfully. Credentials sent to your email.",
       data: {
         user: userResponse,
-        role: role || "student",
-        selectedrole: userRoles,
+        role: currentRole,
+        multiplerole: newUser.multiplerole,
         referralCode: newUser.referralCode,
       },
     });
-
   } catch (error) {
     console.error("❌ Signup failed:", error);
 
+    // Duplicate key (username)
     if (error.code === 11000) {
       const field = Object.keys(error.keyPattern)[0];
       return res.status(400).json({
         success: false,
         message: `Duplicate ${field} error. Please use a different ${field}.`,
+      });
+    }
+
+    // Mongoose validation error — show which field failed
+    if (error.name === "ValidationError") {
+      const fields = Object.keys(error.errors);
+      return res.status(400).json({
+        success: false,
+        message: error.message,
+        fields,
       });
     }
 
@@ -149,6 +205,123 @@ Your Referral Code: ${newUser.referralCode}
     });
   }
 };
+
+
+exports.switchRole = AsyncErrorHandler(async (req, res, next) => {
+  try {
+    const { userId: bodyUserId, targetRole } = req.body || {};
+
+    // ✅ Primary: userId from body
+    const userId = bodyUserId || req.user?._id || req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "userId is required (body or token).",
+      });
+    }
+
+    if (!targetRole) {
+      return res.status(400).json({
+        success: false,
+        message: "targetRole is required.",
+      });
+    }
+
+    const target = String(targetRole).toLowerCase().trim();
+    if (!["adviser", "panelist"].includes(target)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid target role. Allowed: adviser, panelist.",
+      });
+    }
+
+    const user = await UserLogin.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found.",
+      });
+    }
+
+    if (user.role === target) {
+      return res.status(400).json({
+        success: false,
+        message: `You are already acting as "${target}".`,
+      });
+    }
+
+    if (
+      !Array.isArray(user.multiplerole) ||
+      !user.multiplerole.includes(target)
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: `You are not allowed to switch to "${target}".`,
+        allowed: user.multiplerole || [],
+      });
+    }
+
+    const previousRole = user.role;
+    user.role = target;
+    user.updatedAt = Date.now();
+    await user.save();
+
+    const linkId = user.linkedId || user._id;
+    const token = signToken(user._id, user.role, linkId);
+
+    if (req.session?.isLoggedIn && req.session?.user) {
+      req.session.user.role = user.role;
+      req.session.user._id = user._id;
+    }
+
+    return res.status(200).json({
+      success: true,
+      status: "Success",
+      message: `Switched to "${user.role}".`,
+      token,
+      role: user.role,
+      previousRole,
+      multiplerole: user.multiplerole || [],
+      userId: user._id,
+      linkId,
+    });
+  } catch (err) {
+    console.error("❌ switchRole error:", err);
+
+    if (err.name === "ValidationError") {
+      return res.status(400).json({
+        success: false,
+        message: err.message,
+        fields: Object.keys(err.errors || {}),
+      });
+    }
+    if (err.name === "CastError") {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid user ID format.",
+      });
+    }
+    if (err.name === "JsonWebTokenError" || err.name === "TokenExpiredError") {
+      return res.status(401).json({
+        success: false,
+        message: "Token error. Please log in again.",
+      });
+    }
+    if (err.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: "Duplicate entry error.",
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: err.message || "Internal server error while switching roles.",
+    });
+  }
+});
+
 // ============ LOGIN FUNCTION ============
 exports.login = AsyncErrorHandler(async (req, res, next) => {
   const { email, password } = req.body;

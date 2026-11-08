@@ -350,7 +350,6 @@ const ProgressChapter = ({ schedule }) => {
 // MAIN COMPONENT
 // ============================
 export default function DefenseCalendar() {
-    const [viewMode, setViewMode] = useState('month');
     const { schedules } = useContext(ScheduleContext);
 
     // ===== MAP SCHEDULES -> EVENTS =====
@@ -543,7 +542,7 @@ export default function DefenseCalendar() {
                         <div className="flex items-center gap-2 mb-2 flex-wrap">
                             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white border border-blue-200 text-[10px] text-blue-700 uppercase tracking-wider font-bold">
                                 <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                                Academic Council • Module 8
+                                Academic Council • Modulse 8
                             </span>
                             <span className="text-[11px] text-blue-500">
                                 AY 2024–2025 Regular Defense Cycle
@@ -572,34 +571,6 @@ export default function DefenseCalendar() {
                             <button className="p-1.5 rounded-lg text-blue-500 hover:text-blue-900 hover:bg-blue-100 transition-all">
                                 <ChevronRight className="w-4 h-4" />
                             </button>
-                        </div>
-                        <button className="px-3 py-1.5 bg-blue-50 text-blue-800 text-[11px] font-bold rounded-lg hover:bg-blue-100 transition-all flex items-center gap-1.5 border border-blue-200">
-                            <Calendar className="w-3.5 h-3.5" />
-                            Today
-                        </button>
-
-                        <div className="inline-flex p-1 bg-blue-50 rounded-lg gap-0.5">
-                            {[
-                                { key: 'month', label: 'Month', icon: LayoutGrid },
-                                { key: 'week', label: 'Week', icon: CalendarDays },
-                                { key: 'day', label: 'Day', icon: Calendar },
-                                { key: 'agenda', label: 'Agenda', icon: List },
-                            ].map((v) => {
-                                const Icon = v.icon;
-                                return (
-                                    <button
-                                        key={v.key}
-                                        onClick={() => setViewMode(v.key)}
-                                        className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1.5 ${viewMode === v.key
-                                            ? 'bg-blue-900 text-white shadow-sm'
-                                            : 'text-blue-600 hover:text-blue-900 hover:bg-blue-100'
-                                            }`}
-                                    >
-                                        <Icon className="w-3.5 h-3.5" />
-                                        <span className="hidden sm:inline">{v.label}</span>
-                                    </button>
-                                );
-                            })}
                         </div>
                     </div>
 
@@ -820,26 +791,6 @@ export default function DefenseCalendar() {
                                                 )}
                                             </div>
                                         </div>
-                                    </div>
-
-                                    {/* Quick Actions */}
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <button className="px-3 py-2 bg-blue-900 text-white text-[11px] font-bold rounded-lg hover:bg-blue-800 transition-all flex items-center justify-center gap-1.5">
-                                            <FolderOpen className="w-3.5 h-3.5" />
-                                            View Group
-                                        </button>
-                                        <button className="px-3 py-2 bg-blue-50 text-blue-800 text-[11px] font-bold rounded-lg hover:bg-blue-100 transition-all flex items-center justify-center gap-1.5 border border-blue-200">
-                                            <MessageSquare className="w-3.5 h-3.5" />
-                                            Comments
-                                        </button>
-                                        <button className="px-3 py-2 bg-blue-50 text-blue-800 text-[11px] font-bold rounded-lg hover:bg-blue-100 transition-all flex items-center justify-center gap-1.5 border border-blue-200">
-                                            <Download className="w-3.5 h-3.5" />
-                                            Download PDF
-                                        </button>
-                                        <button className="px-3 py-2 bg-blue-50 text-blue-800 text-[11px] font-bold rounded-lg hover:bg-blue-100 transition-all flex items-center justify-center gap-1.5 border border-blue-200">
-                                            <CalendarDays className="w-3.5 h-3.5" />
-                                            Sync Outlook
-                                        </button>
                                     </div>
                                 </div>
                             </div>
