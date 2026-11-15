@@ -1832,13 +1832,11 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
       rubric,
     } = req.body;
 
-    // 🔥 io mula sa server.js (app.set("io", io))
     const io = req.app.get("io");
-
     const isRevision = action === "revision";
 
     // ========================================================
-    // UPLOAD FILE TO HOSTINGER
+    // UPLOAD FILE TO HOSTINGER (WALANG try/catch — direct propagate)
     // ========================================================
     let fileData = {};
     if (req.file) {
@@ -1850,90 +1848,86 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
         mimetype: req.file.mimetype,
       });
 
-      // ✅ Use buffer directly (memoryStorage) — no disk, safe on Render
+      if (!process.env.UPLOADMENTOR_URL) {
+        throw new Error(
+          "UPLOADMENTOR_URL is not set on this environment (Render → Environment tab)"
+        );
+      }
+
       const form = new FormData();
       form.append("file", req.file.buffer, {
         filename: req.file.originalname,
         contentType: req.file.mimetype,
       });
 
-      try {
-        // ✅ Validate env var BEFORE calling axios (clearer error)
-        if (!process.env.UPLOADMENTOR_URL) {
-          throw new Error(
-            "UPLOADMENTOR_URL is not set on this environment (Render → Environment tab)"
-          );
-        }
+      // ✅ WALANG try/catch — kung mag-fail, dadaan sa outer catch
+      const response = await axios.post(process.env.UPLOADMENTOR_URL, form, {
+        maxBodyLength: Infinity,
+        maxContentLength: Infinity,
+        timeout: 120000, // 120s
+        headers: {
+          ...form.getHeaders(),
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Accept": "application/json, text/plain, */*",
+          "Accept-Language": "en-US,en;q=0.9",
+          "Origin": "https://tan-marten-361869.hostingersite.com",
+          "Referer": "https://tan-marten-361869.hostingersite.com/",
+          "X-Requested-With": "XMLHttpRequest",
+        },
+        validateStatus: (s) => s >= 200 && s < 500,
+      });
 
-        const response = await axios.post(process.env.UPLOADMENTOR_URL, form, {
-          maxBodyLength: Infinity,
-          maxContentLength: Infinity,
-          timeout: 60000, // 60s — Hostinger can be slow on shared hosting
-          headers: {
-            ...form.getHeaders(),
-            // ✅ Hostinger WAF sometimes blocks bare Axios UA
-            "User-Agent": "Mozilla/5.0 (compatible; MentorHub/1.0)",
-            "Accept": "application/json, text/plain, */*",
-          },
-          // ✅ Don't throw on 4xx — let us log the real body
-          validateStatus: (s) => s >= 200 && s < 500,
-        });
+      console.log("📡 Hostinger status:", response.status);
+      console.log("📡 Hostinger body:", response.data);
 
-        console.log("📡 Hostinger status:", response.status);
-        console.log("📡 Hostinger body:", response.data);
-
-        // ✅ If Hostinger returned 4xx, treat as failure with real message
-        if (response.status >= 400) {
-          const detail =
-            typeof response.data === "string"
-              ? response.data
-              : JSON.stringify(response.data);
-          throw new Error(
-            `Upload service returned ${response.status}: ${detail}`
-          );
-        }
-
-        // ✅ Parse response — supports all shapes your code already handled
-        let fileUrl = "";
-        let publicId = "";
-
-        if (response.data?.url) {
-          fileUrl = response.data.url;
-          publicId =
-            response.data.public_id ||
-            response.data.filename ||
-            req.file.originalname;
-        } else if (response.data?.success && response.data?.data) {
-          fileUrl = response.data.data.url;
-          publicId =
-            response.data.data.public_id || req.file.originalname;
-        } else if (response.data?.file) {
-          fileUrl = response.data.file;
-          publicId = req.file.originalname;
-        } else {
-          // Fallback — should not normally happen
-          fileUrl = `/temp-uploads/${req.file.originalname}`;
-          publicId = req.file.originalname;
-        }
-
-        fileData = {
-          fileUrl,
-          fileName: req.file.originalname,
-          publicId,
-          fileType: req.file.mimetype,
-          isPdf: req.file.mimetype === "application/pdf",
-        };
-
-        console.log("✅ Uploaded →", fileUrl);
-      } catch (err) {
-        console.error("❌ Upload Error:", err.message);
-        // ✅ No fs.unlinkSync here — memoryStorage has nothing to clean up
-        return res.status(500).json({
-          status: false,
-          message: "File upload failed",
-          error: err.message,
-        });
+      if (response.status >= 400) {
+        const detail =
+          typeof response.data === "string"
+            ? response.data
+            : JSON.stringify(response.data);
+        throw new Error(`Upload service returned ${response.status}: ${detail}`);
       }
+
+      if (response.data && response.data.success === false) {
+        throw new Error(
+          `Upload rejected: ${response.data.message || "unknown"} | debug: ${JSON.stringify(
+            response.data.debug || {}
+          )}`
+        );
+      }
+
+      let fileUrl = "";
+      let publicId = "";
+
+      if (response.data?.url) {
+        fileUrl = response.data.url;
+        publicId =
+          response.data.name ||
+          response.data.public_id ||
+          response.data.filename ||
+          req.file.originalname;
+      } else if (response.data?.success && response.data?.data) {
+        fileUrl = response.data.data.url;
+        publicId = response.data.data.public_id || req.file.originalname;
+      } else if (response.data?.file) {
+        fileUrl = response.data.file;
+        publicId = req.file.originalname;
+      } else {
+        throw new Error(
+          `Upload response has no URL. Body: ${JSON.stringify(response.data)}`
+        );
+      }
+
+      fileData = {
+        fileUrl,
+        fileName: req.file.originalname,
+        publicId,
+        fileType: req.file.mimetype,
+        isPdf: req.file.mimetype === "application/pdf",
+      };
+
+      console.log("✅ Uploaded →", fileUrl);
     }
 
     // ========================================================
@@ -2013,9 +2007,6 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
 
       await existing.save();
 
-      // ========================================================
-      // ✅ NOTIFICATION — REVISION
-      // ========================================================
       try {
         const revisionGroup = await Group.findById(existing.groupId).select("referralCode name");
         const revisionReferralCode = revisionGroup?.referralCode || null;
@@ -2026,9 +2017,7 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
           ...(Array.isArray(existing.assignedReviewers) ? existing.assignedReviewers : []),
         ].filter(Boolean);
 
-        const revisionRecipientIds = new Set(
-          revisionExtraIds.map((id) => id.toString())
-        );
+        const revisionRecipientIds = new Set(revisionExtraIds.map((id) => id.toString()));
 
         if (revisionReferralCode) {
           const subjectInstructors = await UserLoginSchema.find({
@@ -2036,20 +2025,8 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
             role: "subject_instructor",
             status: "Active",
           }).select("_id username first_name last_name");
-
-          console.log("────────────────────────────────────────");
-          console.log(`👨‍🏫 Subject Instructors matched: ${subjectInstructors.length}`);
-          subjectInstructors.forEach((u, i) => {
-            console.log(`   ${i + 1}. ${u._id} | ${u.username} | ${u.first_name} ${u.last_name}`);
-            revisionRecipientIds.add(u._id.toString());
-          });
-        } else {
-          console.log("⚠️  Walang referralCode — walang subject_instructor na na-add");
+          subjectInstructors.forEach((u) => revisionRecipientIds.add(u._id.toString()));
         }
-
-        console.log("────────────────────────────────────────");
-        console.log(`🎯 TOTAL SPECIFIC RECIPIENTS: ${revisionRecipientIds.size}`);
-        console.log("📋 Final IDs:", [...revisionRecipientIds]);
 
         if (revisionRecipientIds.size > 0) {
           const notifTitle = "Revision Submitted";
@@ -2080,7 +2057,6 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
           }));
 
           const saved = await NotificationSchema.insertMany(revisionNotifications);
-          console.log(`✅ [NOTIFY] Inserted ${saved.length} notifications`);
 
           try {
             if (io) {
@@ -2106,19 +2082,12 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
                   },
                   timestamp: new Date(),
                 });
-                console.log(`📡 [SOCKET] Emitted → ${targetRoom} | "${notifMessage}"`);
               });
-            } else {
-              console.warn("⚠️  Walang io instance — skip socket emit");
             }
           } catch (socketErr) {
             console.error("[SOCKET] revision emit error:", socketErr.message);
           }
-        } else {
-          console.log("⚠️  Walang recipients — walang notification na na-save");
         }
-
-        console.log("════════════════════════════════════════\n");
       } catch (notifyErr) {
         console.error("[NOTIFY] revision error:", notifyErr);
       }
@@ -2195,20 +2164,8 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
       rubric: rubric && typeof rubric === "object" ? rubric : undefined,
     });
 
-    // ========================================================
-    // ✅ NOTIFICATION — CREATE
-    // ========================================================
     try {
       const createReferralCode = group?.referralCode || null;
-
-      console.log("════════════════════════════════════════");
-      console.log("📬 [NOTIFY] CREATE DEBUG (SPECIFIC USER)");
-      console.log("────────────────────────────────────────");
-      console.log("🆔 groupId:", groupId);
-      console.log("📛 groupName:", group?.name || "(not found)");
-      console.log("🔑 referralCode:", createReferralCode);
-      console.log("📄 titleId:", proposedTitle._id);
-      console.log("📚 chapter:", chapter);
 
       const createExtraIds = [
         proposedTitle.adviserId,
@@ -2216,9 +2173,7 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
         ...(Array.isArray(proposedTitle.assignedReviewers) ? proposedTitle.assignedReviewers : []),
       ].filter(Boolean);
 
-      const createRecipientIds = new Set(
-        createExtraIds.map((id) => id.toString())
-      );
+      const createRecipientIds = new Set(createExtraIds.map((id) => id.toString()));
 
       if (createReferralCode) {
         const subjectInstructors = await UserLoginSchema.find({
@@ -2226,20 +2181,8 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
           role: "subject_instructor",
           status: "Active",
         }).select("_id username first_name last_name");
-
-        console.log("────────────────────────────────────────");
-        console.log(`👨‍🏫 Subject Instructors matched: ${subjectInstructors.length}`);
-        subjectInstructors.forEach((u, i) => {
-          console.log(`   ${i + 1}. ${u._id} | ${u.username} | ${u.first_name} ${u.last_name}`);
-          createRecipientIds.add(u._id.toString());
-        });
-      } else {
-        console.log("⚠️  Walang referralCode — walang subject_instructor na na-add");
+        subjectInstructors.forEach((u) => createRecipientIds.add(u._id.toString()));
       }
-
-      console.log("────────────────────────────────────────");
-      console.log(`🎯 TOTAL SPECIFIC RECIPIENTS: ${createRecipientIds.size}`);
-      console.log("📋 Final IDs:", [...createRecipientIds]);
 
       if (createRecipientIds.size > 0) {
         const notifTitle = "New Proposed Title";
@@ -2270,7 +2213,6 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
         }));
 
         const saved = await NotificationSchema.insertMany(createNotifications);
-        console.log(`✅ [NOTIFY] Inserted ${saved.length} notifications`);
 
         try {
           if (io) {
@@ -2296,19 +2238,12 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
                 },
                 timestamp: new Date(),
               });
-              console.log(`📡 [SOCKET] Emitted → ${targetRoom} | "${notifMessage}"`);
             });
-          } else {
-            console.warn("⚠️  Walang io instance — skip socket emit");
           }
         } catch (socketErr) {
           console.error("[SOCKET] create emit error:", socketErr.message);
         }
-      } else {
-        console.log("⚠️  Walang recipients — walang notification na na-save");
       }
-
-      console.log("════════════════════════════════════════\n");
     } catch (notifyErr) {
       console.error("[NOTIFY] created error:", notifyErr);
     }
@@ -2319,11 +2254,35 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
       data: proposedTitle,
     });
   } catch (error) {
-    console.error("Create Error:", error);
+    // ✅ Outer catch — dito dadating lahat ng error mula sa upload (dahil tinanggal ang inner try/catch)
+    console.error("════════════════════════════════════════");
+    console.error("❌ Create Error Full Details:");
+    console.error("  Message:       ", JSON.stringify(error.message));
+    console.error("  Code:          ", error.code);
+    console.error("  HTTP Status:   ", error.response?.status);
+    console.error("  Status Text:   ", error.response?.statusText);
+    console.error("  Server:        ", error.response?.headers?.server);
+    console.error("  CF-Ray:        ", error.response?.headers?.["cf-ray"]);
+    console.error("  Request URL:   ", error.config?.url);
+    console.error("  Request Method:", error.config?.method);
+    if (error.response?.data) {
+      const bodyStr =
+        typeof error.response.data === "string"
+          ? error.response.data.slice(0, 2000)
+          : JSON.stringify(error.response.data, null, 2);
+      console.error("  Response Body: ", bodyStr);
+    }
+    if (error.stack) {
+      console.error("  Stack:         ", error.stack.split("\n").slice(0, 5).join("\n"));
+    }
+    console.error("════════════════════════════════════════");
+
     return res.status(500).json({
       status: "error",
       message: "Failed to create",
-      error: error.message,
+      error: error.message || error.code || "Unknown error",
+      httpStatus: error.response?.status || null,
+      responseBody: error.response?.data || null,
     });
   }
 });
