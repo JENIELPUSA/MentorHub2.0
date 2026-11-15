@@ -1,31 +1,37 @@
+
 const nodemailer = require('nodemailer');
 
-const sendEmail = async (options, res) => {
-    // CREATE A TRANSPORTER USING GMAIL SMTP SETTINGS
-    const transporter = nodemailer.createTransport({
-        service: 'gmail',  // Use Gmail's service
-        pool:true,
-        //para marami ang ma send na message
-        maxMessages:Infinity,
-        maxConnections:500,
-        auth: {
-            user: process.env.EMAIL_USER,  // Gmail address
-            pass: process.env.EMAIL_PASSWORD  // Gmail app-specific password or regular password
-        }
-    });
+// Create Gmail OAuth2 transporter
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    pool: true,
+    maxMessages: 100,
+    maxConnections: 5,
 
-    // DEFINE EMAIL OPTIONS
-    const mailOptions = {
-        from: `BiPSU MentorHub 2.0 <${process.env.EMAIL_USER}>`,  // Gamitin ang Gmail address
-        to: options.email,
-        subject: options.subject,
-        text: options.text
-    };
+    auth: {
+        type: 'OAuth2',
+        user: process.env.EMAIL_USER,
+        clientId: process.env.GOOGLE_CLIENT_ID,
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+        refreshToken: process.env.GOOGLE_REFRESH_TOKEN
+    }
+});
 
+const sendEmail = async (options) => {
     try {
-        // SEND EMAIL
-        await transporter.sendMail(mailOptions);
-        console.log('Email sent successfully');
+        const mailOptions = {
+            from: `BiPSU MentorHub 2.0 <${process.env.EMAIL_USER}>`,
+            to: options.email,
+            subject: options.subject,
+            text: options.text
+        };
+
+        const info = await transporter.sendMail(mailOptions);
+
+        console.log('Email sent successfully:', info.messageId);
+
+        return info;
+
     } catch (error) {
         console.error('Error sending email:', error);
         throw new Error('There was an error sending the email');
