@@ -35,10 +35,6 @@ router.route('/forreadystatus')
 router.route('/Archived')
     .get(Proposal.DisplayArcivedtitle);
 
-// ============================================================
-// ⭐ CHAPTER PROGRESSION ROUTES (Subject Instructor / Admin)
-// ⚠️ IMPORTANT: MUST be BEFORE /:id/chapters route
-// ============================================================
 router.route('/:id/chapters/progression')
     .get(authController.protect, Proposal.getChapterProgression);
 
@@ -48,10 +44,6 @@ router.route('/:id/chapters/:chapter/proceed')
 router.route('/:id/chapters/:chapter/reject')
     .patch(authController.protect, Proposal.rejectChapter);
 
-// ============================================================
-// 📋 CHAPTER COMPLETION ROUTES
-// ⚠️ ORDER: 'complete-all' BEFORE generic ':id/chapters'
-// ============================================================
 router.route('/:id/chapters/complete-all')
     .patch(authController.protect, Proposal.MarkAllChaptersComplete);
 
@@ -61,9 +53,6 @@ router.route('/:id/chapters')
 router.route('/:id/tracking/:trackingId/complete')
     .patch(authController.protect, Proposal.MarkChapterComplete);
 
-// ============================================================
-// 🔧 GENERIC DYNAMIC ROUTE — MUST BE LAST
-// ============================================================
 router.route('/:id')
     .patch(authController.protect, Proposal.UpdateProposedTitle)
     .delete(authController.protect, Proposal.deleteProposedTitle);

@@ -23,7 +23,7 @@ const VALID_ANNOTATION_TYPES = [
     "wrong_size",
     "grammar",
     "other",
-    "proceedings",   // ⭐ valid pa rin — pero may dedicated endpoint
+    "proceedings",   // valid pa rin — pero may dedicated endpoint
 ];
 
 const VALID_SEVERITIES = ["info", "minor", "major", "critical"];
@@ -41,7 +41,7 @@ const VALID_ROLES = [
 const HEX_REGEX = /^#[0-9A-Fa-f]{6}$/;
 const USER_POPULATE = "first_name last_name id_number profilePicture role";
 
-// ⭐ Reusable filters
+// Reusable filters
 const PROCEEDINGS_TYPE = "proceedings";
 const NON_PROCEEDINGS_FILTER = { annotationType: { $ne: PROCEEDINGS_TYPE } };
 
@@ -205,8 +205,6 @@ exports.createComment = AsyncErrorHandler(async (req, res) => {
             parentCommentId,
         } = req.body;
 
-        console.log("📥 req.body", req.body);
-
         const userId = getAuthUserId(req);
 
         if (!proposedTitleId) {
@@ -310,7 +308,7 @@ exports.createComment = AsyncErrorHandler(async (req, res) => {
             documentUrl: latestTracking.url,
         });
 
-        // ⭐ Skip "Revision" status update if it's a proceedings entry
+        // Skip "Revision" status update if it's a proceedings entry
         let statusUpdated = false;
         try {
             const currentStatus = (proposedTitle.status || "").toLowerCase();
@@ -461,7 +459,7 @@ exports.bulkCreateComments = AsyncErrorHandler(async (req, res) => {
 
 // ============================================================
 // GET COMMENTS BY PROPOSED TITLE (paginated)
-// ⭐ INCLUDE proceedings by default — frontend ang mag-se-separate
+// INCLUDE proceedings by default — frontend ang mag-se-separate
 // ============================================================
 exports.getCommentsByProposedTitle = AsyncErrorHandler(async (req, res) => {
     try {
@@ -470,7 +468,7 @@ exports.getCommentsByProposedTitle = AsyncErrorHandler(async (req, res) => {
         console.log("🔍 Fetching comments for:", proposedTitleId);
 
         const page = Math.max(1, parseInt(req.query.page) || 1);
-        const limit = Math.min(1000, Math.max(1, parseInt(req.query.limit) || 200)); // ⭐ higher default
+        const limit = Math.min(1000, Math.max(1, parseInt(req.query.limit) || 200)); // higher default
         const skip = (page - 1) * limit;
 
         if (!mongoose.Types.ObjectId.isValid(proposedTitleId)) {
@@ -495,16 +493,16 @@ exports.getCommentsByProposedTitle = AsyncErrorHandler(async (req, res) => {
             );
         }
 
-        // ⭐ Base filter — INCLUDE LAHAT by default
+        // Base filter — INCLUDE LAHAT by default
         const filter = { proposedTitleId: latestTracking._id };
 
-        // ⭐ Optional filters (opt-in lang)
+        // Optional filters (opt-in lang)
         if (req.query.onlyProceedings === "true") {
             filter.annotationType = PROCEEDINGS_TYPE;
         } else if (req.query.excludeProceedings === "true") {
             filter.annotationType = { $ne: PROCEEDINGS_TYPE };
         }
-        // ⭐ Walang query → include LAHAT (feedback + proceedings)
+        // Walang query → include LAHAT (feedback + proceedings)
 
         if (req.query.pageNumber) {
             const p = parseInt(req.query.pageNumber);
@@ -550,7 +548,7 @@ exports.getCommentsByProposedTitle = AsyncErrorHandler(async (req, res) => {
 });
 
 // ============================================================
-// ⭐ GET PROCEEDINGS ONLY
+// GET PROCEEDINGS ONLY
 // GET /api/comments/:proposedTitleId/proceedings
 // ============================================================
 exports.getProceedingsByProposedTitle = AsyncErrorHandler(async (req, res) => {
@@ -599,7 +597,7 @@ exports.getProceedingsByProposedTitle = AsyncErrorHandler(async (req, res) => {
 
 // ============================================================
 // GET ALL ANNOTATIONS FOR THESIS (grouped + stats)
-// ⭐ EXCLUDES proceedings by default
+// EXCLUDES proceedings by default
 // ============================================================
 exports.getAllAnnotationsByThesis = AsyncErrorHandler(async (req, res) => {
     try {
@@ -618,7 +616,7 @@ exports.getAllAnnotationsByThesis = AsyncErrorHandler(async (req, res) => {
             );
         }
 
-        // ⭐ Exclude proceedings from annotation stats/list
+        // Exclude proceedings from annotation stats/list
         const comments = await Comment.find({
             proposedTitleId: proposedTitle._id,
             annotationType: { $ne: PROCEEDINGS_TYPE },
@@ -664,7 +662,7 @@ exports.getAllAnnotationsByThesis = AsyncErrorHandler(async (req, res) => {
 
 // ============================================================
 // GET ANNOTATIONS BY PAGE
-// ⭐ EXCLUDES proceedings (walang page ang proceedings)
+// EXCLUDES proceedings (walang page ang proceedings)
 // ============================================================
 exports.getAnnotationsByPage = AsyncErrorHandler(async (req, res) => {
     try {

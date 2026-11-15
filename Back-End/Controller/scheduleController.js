@@ -983,145 +983,301 @@ exports.getUpcomingDefenses = AsyncErrorHandler(async (req, res, next) => {
 // UPDATE
 // ============================================================
 exports.updateDefenseAssignment = AsyncErrorHandler(async (req, res, next) => {
-    const { id } = req.params;
-    const { date, location, startTime, endTime, groupIds, panelistIds, status, remarks } =
-        req.body;
+    try {
+        const { id } = req.params;
+        const {
+            date,
+            location,
+            startTime,
+            endTime,
+            groupIds,
+            panelistIds,
+            status,
+            remarks,
+        } = req.body;
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-        return res
-            .status(400)
-            .json({ success: false, message: "Invalid assignment ID format" });
-    }
-
-    const existingAssignment = await DefenseAssignmentModel.findById(id);
-    if (!existingAssignment) {
-        return res
-            .status(404)
-            .json({ success: false, message: "Defense assignment not found" });
-    }
-
-    const updateData = {};
-
-    if (date !== undefined) {
-        if (!isValidDate(date)) {
+        // ---- 1. Validate ID ----
+        if (!mongoose.Types.ObjectId.isValid(id)) {
             return res
                 .status(400)
-                .json({ success: false, message: "Invalid date format. Use YYYY-MM-DD" });
+                .json({ success: false, message: "Invalid assignment ID format" });
         }
-        updateData.date = date;
-    }
 
-    if (location !== undefined) {
-        if (!location || location.trim().length === 0) {
-            return res
-                .status(400)
-                .json({ success: false, message: "Location cannot be empty" });
-        }
-        updateData.location = location.trim();
-    }
-
-    if (startTime !== undefined) {
-        if (!isValidTime(startTime)) {
-            return res
-                .status(400)
-                .json({ success: false, message: "Invalid startTime format" });
-        }
-        updateData.startTime = startTime;
-    }
-    if (endTime !== undefined) {
-        if (!isValidTime(endTime)) {
-            return res
-                .status(400)
-                .json({ success: false, message: "Invalid endTime format" });
-        }
-        updateData.endTime = endTime;
-    }
-
-    // Validate final time range
-    const finalStart = updateData.startTime ?? existingAssignment.startTime;
-    const finalEnd = updateData.endTime ?? existingAssignment.endTime;
-    if (toMinutes(finalStart) >= toMinutes(finalEnd)) {
-        return res
-            .status(400)
-            .json({ success: false, message: "End time must be after start time" });
-    }
-
-    if (startTime !== undefined || endTime !== undefined) {
-        updateData.timeRange = { start: finalStart, end: finalEnd };
-    }
-
-    if (groupIds !== undefined) {
-        if (!Array.isArray(groupIds) || groupIds.length === 0) {
-            return res
-                .status(400)
-                .json({ success: false, message: "At least one group is required" });
-        }
-        const existingGroups = await GroupModel.find({ _id: { $in: groupIds } }).select(
-            "_id"
-        );
-        if (existingGroups.length !== groupIds.length) {
+        const existingAssignment = await DefenseAssignmentModel.findById(id);
+        if (!existingAssignment) {
             return res
                 .status(404)
-                .json({ success: false, message: "One or more groups not found" });
+                .json({ success: false, message: "Defense assignment not found" });
         }
-        updateData.groupIds = groupIds;
-    }
 
-    if (panelistIds !== undefined) {
-        if (!Array.isArray(panelistIds) || panelistIds.length === 0) {
+        const updateData = {};
+
+        // ---- 2. DATE ----
+        if (date !== undefined) {
+            if (!isValidDate(date)) {
+                return res
+                    .status(400)
+                    .json({ success: false, message: "Invalid date format. Use YYYY-MM-DD" });
+            }
+            updateData.date = date;
+        }
+
+        // ---- 3. LOCATION ----
+        if (location !== undefined) {
+            if (!location || String(location).trim().length === 0) {
+                return res
+                    .status(400)
+                    .json({ success: false, message: "Location cannot be empty" });
+            }
+            updateData.location = String(location).trim();
+        }
+
+        // ---- 4. START/END TIME ----
+        if (startTime !== undefined) {
+            if (!isValidTime(startTime)) {
+                return res
+                    .status(400)
+                    .json({ success: false, message: "Invalid startTime format. Use HH:mm (24-hour)" });
+            }
+            updateData.startTime = startTime;
+        }
+
+        if (endTime !== undefined) {
+            if (!isValidTime(endTime)) {
+                return res
+                    .status(400)
+                    .json({ success: false, message: "Invalid endTime format. Use HH:mm (24-hour)" });
+            }
+            updateData.endTime = endTime;
+        }
+
+        // ---- 5. Time range validation (final values) ----
+        const finalStart = updateData.startTime ?? existingAssignment.startTime;
+        const finalEnd = updateData.endTime ?? existingAssignment.endTime;
+
+        const startMin = toMinutes(finalStart);
+        const endMin = toMinutes(finalEnd);
+
+        if (isNaN(startMin) || isNaN(endMin)) {
             return res
                 .status(400)
-                .json({ success: false, message: "At least one panelist is required" });
+                .json({ success: false, message: "Invalid time values. Use HH:mm format" });
         }
-        const existingPanelists = await UserModel.find({
-            _id: { $in: panelistIds },
-        }).select("_id");
-        if (existingPanelists.length !== panelistIds.length) {
+
+        if (startMin >= endMin) {
+            return res
+                .status(400)
+                .json({ success: false, message: "End time must be after start time" });
+        }
+
+        // ⭐ Always update timeRange when start/end changed OR when missing
+        if (
+            startTime !== undefined ||
+            endTime !== undefined ||
+            !existingAssignment.timeRange
+        ) {
+            updateData.timeRange = { start: finalStart, end: finalEnd };
+        }
+
+        // ---- 6. GROUPS ----
+        if (groupIds !== undefined) {
+            if (!Array.isArray(groupIds) || groupIds.length === 0) {
+                return res
+                    .status(400)
+                    .json({ success: false, message: "At least one group is required" });
+            }
+
+            // ⭐ Dedupe (preserve order)
+            const uniqueGroupIds = [...new Set(groupIds.map(String))];
+
+            const existingGroups = await GroupModel.find({
+                _id: { $in: uniqueGroupIds },
+            }).select("_id");
+
+            if (existingGroups.length !== uniqueGroupIds.length) {
+                return res
+                    .status(404)
+                    .json({ success: false, message: "One or more groups not found" });
+            }
+
+            updateData.groupIds = uniqueGroupIds;
+        }
+
+        // ---- 7. PANELISTS ----
+        let panelistIdsChanged = false;
+        if (panelistIds !== undefined) {
+            if (!Array.isArray(panelistIds) || panelistIds.length === 0) {
+                return res
+                    .status(400)
+                    .json({ success: false, message: "At least one panelist is required" });
+            }
+
+            // ⭐ Dedupe (preserve order)
+            const uniquePanelistIds = [...new Set(panelistIds.map(String))];
+
+            const existingPanelists = await UserModel.find({
+                _id: { $in: uniquePanelistIds },
+            }).select("_id");
+
+            if (existingPanelists.length !== uniquePanelistIds.length) {
+                return res
+                    .status(404)
+                    .json({ success: false, message: "One or more panelists not found" });
+            }
+
+            // ⭐ Detect change
+            const currentIds = (existingAssignment.panelistIds || []).map(String);
+            panelistIdsChanged =
+                currentIds.length !== uniquePanelistIds.length ||
+                currentIds.some((cid, idx) => cid !== uniquePanelistIds[idx]);
+
+            updateData.panelistIds = uniquePanelistIds;
+        }
+
+        // ---- 8. STATUS / REMARKS ----
+        if (status !== undefined) {
+            const allowedStatuses = ["scheduled", "ongoing", "completed", "cancelled"];
+            if (!allowedStatuses.includes(status)) {
+                return res.status(400).json({
+                    success: false,
+                    message: `Invalid status. Allowed: ${allowedStatuses.join(", ")}`,
+                });
+            }
+            updateData.status = status;
+        }
+
+        if (remarks !== undefined) {
+            updateData.remarks = String(remarks).trim();
+        }
+
+        // ---- 9. No-op guard ----
+        if (Object.keys(updateData).length === 0) {
+            return res.status(200).json({
+                status: "Success",
+                message: "No changes to update",
+                data: existingAssignment,
+            });
+        }
+
+        // ---- 10. Conflict check ----
+        const finalDate = updateData.date ?? existingAssignment.date;
+        const finalGroupIds = updateData.groupIds ?? existingAssignment.groupIds;
+        const finalPanelistIds = updateData.panelistIds ?? existingAssignment.panelistIds;
+
+        let conflict = null;
+        try {
+            conflict = await findConflict({
+                date: finalDate,
+                startTime: finalStart,
+                endTime: finalEnd,
+                groupIds: finalGroupIds,
+                panelistIds: finalPanelistIds,
+                excludeId: id,
+            });
+        } catch (conflictErr) {
+            console.error("❌ findConflict error:", conflictErr);
+            return res.status(500).json({
+                success: false,
+                message: "Failed to check schedule conflict",
+                error: conflictErr.message,
+            });
+        }
+
+        if (conflict) {
+            return res.status(409).json({
+                success: false,
+                message: "Schedule conflict detected with another defense",
+                conflictWith: conflictPayload(conflict),
+            });
+        }
+
+        // ---- 11. Sync panelists sub-array if panelistIds changed ----
+        // ⭐ findByIdAndUpdate bypasses pre('save') middleware,
+        //    so we must sync panelists manually to preserve existing statuses.
+        if (panelistIdsChanged) {
+            const existingPanelistMap = new Map(
+                (existingAssignment.panelists || []).map((p) => [
+                    String(p.panelistId),
+                    p,
+                ])
+            );
+
+            updateData.panelists = updateData.panelistIds.map((pid) => {
+                const found = existingPanelistMap.get(String(pid));
+                return found
+                    ? {
+                        panelistId: pid,
+                        status: found.status || "pending",
+                        notes: found.notes || "",
+                        respondedAt: found.respondedAt || null,
+                    }
+                    : {
+                        panelistId: pid,
+                        status: "pending",
+                        notes: "",
+                        respondedAt: null,
+                    };
+            });
+        }
+
+        // ---- 12. Perform update ----
+        const updatedAssignment = await DefenseAssignmentModel.findByIdAndUpdate(
+            id,
+            { $set: updateData },
+            { new: true, runValidators: true, context: "query" }
+        ).populate(ASSIGNMENT_POPULATE);
+
+        if (!updatedAssignment) {
+            // Race condition: deleted between findById and findByIdAndUpdate
             return res
                 .status(404)
-                .json({ success: false, message: "One or more panelists not found" });
+                .json({ success: false, message: "Defense assignment no longer exists" });
         }
-        updateData.panelistIds = panelistIds;
-    }
 
-    if (status !== undefined) updateData.status = status;
-    if (remarks !== undefined) updateData.remarks = remarks;
+        return res.status(200).json({
+            status: "Success",
+            message: "Defense assignment updated successfully",
+            data: updatedAssignment,
+        });
+    } catch (error) {
+        console.error("❌ updateDefenseAssignment error:", error);
 
-    // ---- Conflict check ----
-    const finalDate = updateData.date ?? existingAssignment.date;
-    const finalGroupIds = updateData.groupIds ?? existingAssignment.groupIds;
-    const finalPanelistIds = updateData.panelistIds ?? existingAssignment.panelistIds;
+        // Mongoose validation errors → 400
+        if (error.name === "ValidationError") {
+            return res.status(400).json({
+                success: false,
+                message: "Validation failed",
+                errors: Object.keys(error.errors || {}).reduce((acc, key) => {
+                    acc[key] = error.errors[key].message;
+                    return acc;
+                }, {}),
+            });
+        }
 
-    const conflict = await findConflict({
-        date: finalDate,
-        startTime: finalStart,
-        endTime: finalEnd,
-        groupIds: finalGroupIds,
-        panelistIds: finalPanelistIds,
-        excludeId: id,
-    });
+        // CastError (e.g., invalid ObjectId inside array) → 400
+        if (error.name === "CastError") {
+            return res.status(400).json({
+                success: false,
+                message: `Invalid value for field '${error.path}': ${error.value}`,
+            });
+        }
 
-    if (conflict) {
-        return res.status(409).json({
+        // Duplicate key → 409
+        if (error.code === 11000) {
+            return res.status(409).json({
+                success: false,
+                message: "Duplicate key error",
+                fields: error.keyValue,
+            });
+        }
+
+        return res.status(500).json({
             success: false,
-            message: "Schedule conflict detected with another defense",
-            conflictWith: conflictPayload(conflict),
+            message: "Failed to update defense assignment",
+            error: error.message,
         });
     }
-
-    const updatedAssignment = await DefenseAssignmentModel.findByIdAndUpdate(
-        id,
-        updateData,
-        { new: true, runValidators: true }
-    ).populate(ASSIGNMENT_POPULATE);
-
-    return res.status(200).json({
-        status: "Success",
-        message: "Defense assignment updated successfully",
-        data: updatedAssignment,
-    });
 });
-
 // ============================================================
 // DELETE
 // ============================================================

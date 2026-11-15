@@ -4,21 +4,256 @@ const axios = require("axios");
 const FormData = require("form-data");
 const fs = require("fs");
 const sendEmail = require("../Utils/email");
+const mongoose = require('mongoose');
+
+
+const SectionModel = require('../Models/SectionSchema')
+const GroupModel = require("../Models/GroupName")
+const UserLoginSchema = require('../Models/LogInSchema')
+
+
+exports.DisplayFormats = AsyncErrorHandler(async (req, res) => {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    const userId = req.user?._id;
+    const role = (req.user?.role || '').toLowerCase().trim();
+
+    console.log('[DisplayFormats] userId=', userId, '| role=', role);
+
+    if (!userId) {
+        return res.status(401).json({
+            status: 'fail',
+            message: 'User ID not found in request. Please log in again.',
+        });
+    }
+
+    const { search, type, uploadedBy } = req.query;
+    const matchStage = {};
+
+    const safeObjectId = (val, label) => {
+        if (!val) return null;
+        const str = String(val).trim();
+        if (!/^[a-fA-F0-9]{24}$/.test(str)) {
+            console.warn(`[DisplayFormats] Invalid ObjectId for ${label}: "${str}"`);
+            return null;
+        }
+        return new mongoose.Types.ObjectId(str);
+    };
+
+    // ==========================================
+    // ⭐ STUDENT — SPECIAL PATH (single format only)
+    // ==========================================
+    if (role === 'student') {
+        console.log('[DisplayFormats] Student → resolving single format');
+
+        try {
+            // 1️⃣ Hanapin ang user
+            const user = await UserLoginSchema.findById(userId)
+                .select('referredBy role')
+                .lean();
+
+            if (!user) {
+                return res.status(200).json({
+                    status: 'success',
+                    currentPage: 1,
+                    totalPages: 0,
+                    totalCount: 0,
+                    results: 0,
+                    data: [],
+                    message: 'Student record not found',
+                });
+            }
+
+            // 2️⃣ Check referredBy
+            if (!user.referredBy || !user.referredBy.trim()) {
+                return res.status(200).json({
+                    status: 'success',
+                    currentPage: 1,
+                    totalPages: 0,
+                    totalCount: 0,
+                    results: 0,
+                    data: [],
+                    message: 'Student has no referral code — not yet in a group',
+                });
+            }
+
+            // 3️⃣ Hanapin ang Group
+            const group = await GroupModel.findOne({
+                referralCode: user.referredBy.trim().toUpperCase(),
+            })
+                .select('_id name referralCode sectionId')
+                .lean();
+
+            if (!group) {
+                return res.status(200).json({
+                    status: 'success',
+                    currentPage: 1,
+                    totalPages: 0,
+                    totalCount: 0,
+                    results: 0,
+                    data: [],
+                    message: `No group found for referral code: ${user.referredBy}`,
+                });
+            }
+
+            // 4️⃣ Hanapin ang Section
+            const section = await SectionModel.findById(group.sectionId)
+                .select('_id name formatID')
+                .lean();
+
+            if (!section) {
+                return res.status(200).json({
+                    status: 'success',
+                    currentPage: 1,
+                    totalPages: 0,
+                    totalCount: 0,
+                    results: 0,
+                    data: [],
+                    message: 'Section not found for this group',
+                });
+            }
+
+            // 5️⃣ Check formatID
+            if (!section.formatID) {
+                return res.status(200).json({
+                    status: 'success',
+                    currentPage: 1,
+                    totalPages: 0,
+                    totalCount: 0,
+                    results: 0,
+                    data: [],
+                    sectionName: section.name,
+                    message: 'No format assigned to your section yet',
+                });
+            }
+
+            // 6️⃣ ⭐ KUNIN ANG ISANG FORMAT LANG (hindi list)
+            const format = await FormatModel.findById(section.formatID)
+                .select('_id titleFormat description fileUrl isSelected type uploadedBy createdAt updatedAt')
+                .lean();
+
+            if (!format) {
+                return res.status(200).json({
+                    status: 'success',
+                    currentPage: 1,
+                    totalPages: 0,
+                    totalCount: 0,
+                    results: 0,
+                    data: [],
+                    sectionName: section.name,
+                    message: 'Format not found in database',
+                });
+            }
+
+            // ⭐ I-wrap sa array (para consistent sa ibang roles)
+            //    pero 1 lang talaga ang laman
+            const data = [format];
+
+            console.log(`[DisplayFormats] ✅ Student format: ${format.titleFormat} (section: ${section.name})`);
+
+            return res.status(200).json({
+                status: 'success',
+                currentPage: 1,
+                totalPages: 1,
+                totalCount: 1,          // ⭐ Exactly 1
+                results: 1,             // ⭐ Exactly 1
+                data,                   // ⭐ Array with 1 format
+                sectionName: section.name,
+                groupName: group.name,
+                referralCode: group.referralCode,
+            });
+
+        } catch (err) {
+            console.error('[DisplayFormats] Student resolution error:', err);
+            return res.status(500).json({
+                status: 'fail',
+                message: 'Failed to resolve student format',
+                error: err.message,
+            });
+        }
+    }
+
+    // ==========================================
+    // SUBJECT INSTRUCTOR — own uploads only
+    // ==========================================
+    if (role === 'subject_instructor') {
+        matchStage.uploadedBy = new mongoose.Types.ObjectId(userId);
+        console.log('[DisplayFormats] Subject Instructor → own uploads only');
+    } else {
+        // Admin / Organizer / Adviser / Co-Adviser / Panelist
+        console.log(`[DisplayFormats] Role "${role}" → showing all formats`);
+
+        if (uploadedBy) {
+            const ubId = safeObjectId(uploadedBy, 'uploadedBy');
+            if (ubId) {
+                matchStage.uploadedBy = ubId;
+            }
+        }
+    }
+
+    // ---------- SEARCH ----------
+    if (search) {
+        matchStage.$or = [
+            { titleFormat: { $regex: search.trim(), $options: 'i' } },
+            { description: { $regex: search.trim(), $options: 'i' } },
+        ];
+    }
+
+    // ---------- TYPE FILTER ----------
+    if (type) {
+        matchStage.type = type;
+    }
+
+    console.log('[DisplayFormats] final matchStage=', JSON.stringify(matchStage));
+
+    const result = await FormatModel.aggregate([
+        { $match: matchStage },
+        { $sort: { createdAt: -1 } },
+        {
+            $facet: {
+                data: [
+                    { $skip: skip },
+                    { $limit: limit },
+                    {
+                        $project: {
+                            _id: 1,
+                            titleFormat: 1,
+                            description: 1,
+                            fileUrl: 1,
+                            isSelected: 1,
+                            type: 1,
+                            uploadedBy: 1,
+                            createdAt: 1,
+                            updatedAt: 1,
+                        },
+                    },
+                ],
+                totalCount: [{ $count: 'count' }],
+            },
+        },
+    ]);
+
+    const formats = result[0].data || [];
+    const totalCount = result[0].totalCount[0]?.count || 0;
+
+    res.status(200).json({
+        status: 'success',
+        currentPage: page,
+        totalPages: Math.ceil(totalCount / limit),
+        totalCount,
+        results: formats.length,
+        data: formats,
+    });
+});
 
 // ==========================================
 // CREATE FORMAT (WITH FILE UPLOAD)
 // ==========================================
 exports.createFormat = AsyncErrorHandler(async (req, res) => {
-    console.log("Middleware Called");
-    console.log("req.body:", req.body);
-    console.log("req.file:", req.file);
 
-    // ==========================================
-    // USER ID FROM AUTH MIDDLEWARE
-    // ==========================================
     const userId = req.user?._id;
-
-    console.log("userId:", userId);
 
     const {
         titleFormat,
@@ -201,7 +436,7 @@ exports.createFormat = AsyncErrorHandler(async (req, res) => {
         };
 
         console.log(
-            "✅ File uploaded successfully:",
+            " File uploaded successfully:",
             fileData
         );
 
@@ -277,7 +512,7 @@ exports.createFormat = AsyncErrorHandler(async (req, res) => {
     });
 
     console.log(
-        "✅ Format created:",
+        " Format created:",
         format._id
     );
 
@@ -334,104 +569,8 @@ ${format.fileUrl}
         data: format,
     });
 });
-exports.DisplayFormats = AsyncErrorHandler(async (req, res) => {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const skip = (page - 1) * limit;
 
-    const userId = req.user?._id;
-    const role = (req.user?.role || '').toLowerCase().trim();
 
-    console.log('[DisplayFormats] userId=', userId, '| role=', role);
-
-    // ✅ Guard — kung walang userId, huwag ituloy (avoids ObjectId(undefined) crash)
-    if (!userId) {
-        return res.status(401).json({
-            status: 'fail',
-            message: 'User ID not found in request. Please log in again.',
-        });
-    }
-
-    const { search, type, uploadedBy } = req.query;
-    const matchStage = {};
-
-    // ✅ Safe ObjectId cast helper
-    const safeObjectId = (val, label) => {
-        if (!val) return null;
-        const str = String(val).trim();
-        if (!/^[a-fA-F0-9]{24}$/.test(str)) {
-            console.warn(`[DisplayFormats] Invalid ObjectId for ${label}: "${str}"`);
-            return null;
-        }
-        return new mongoose.Types.ObjectId(str);
-    };
-
-    // ---------- ROLE-BASED FILTER ----------
-    if (role === 'admin' || role === 'organizer') {
-        if (uploadedBy) {
-            const ubId = safeObjectId(uploadedBy, 'uploadedBy');
-            if (ubId) matchStage.uploadedBy = ubId;
-        }
-    } else if (role === 'subject_instructor') {
-        matchStage.uploadedBy = new mongoose.Types.ObjectId(userId);
-    } else {
-        matchStage.uploadedBy = new mongoose.Types.ObjectId(userId);
-    }
-
-    // ---------- SEARCH ----------
-    if (search) {
-        matchStage.$or = [
-            { titleFormat: { $regex: search.trim(), $options: 'i' } },
-            { description: { $regex: search.trim(), $options: 'i' } },
-        ];
-    }
-
-    // ---------- TYPE FILTER ----------
-    if (type) {
-        matchStage.type = type;
-    }
-
-    console.log('[DisplayFormats] matchStage=', JSON.stringify(matchStage));
-
-    const result = await FormatModel.aggregate([
-        { $match: matchStage },
-        { $sort: { createdAt: -1 } },
-        {
-            $facet: {
-                data: [
-                    { $skip: skip },
-                    { $limit: limit },
-                    {
-                        $project: {
-                            _id: 1,
-                            titleFormat: 1,
-                            description: 1,
-                            fileUrl: 1,
-                            isSelected: 1,
-                            type: 1,
-                            uploadedBy: 1,
-                            createdAt: 1,
-                            updatedAt: 1,
-                        },
-                    },
-                ],
-                totalCount: [{ $count: 'count' }],
-            },
-        },
-    ]);
-
-    const formats = result[0].data || [];
-    const totalCount = result[0].totalCount[0]?.count || 0;
-
-    res.status(200).json({
-        status: 'success',
-        currentPage: page,
-        totalPages: Math.ceil(totalCount / limit),
-        totalCount,
-        results: formats.length,
-        data: formats,
-    });
-});
 // ==========================================
 // GET SINGLE FORMAT
 // ==========================================
@@ -542,7 +681,7 @@ exports.updateFormat = AsyncErrorHandler(async (req, res) => {
                 isPdf: req.file.mimetype === "application/pdf",
             };
 
-            console.log("✅ File replaced successfully:", fileData);
+            console.log(" File replaced successfully:", fileData);
 
             if (fs.existsSync(req.file.path)) {
                 fs.unlinkSync(req.file.path);

@@ -88,7 +88,7 @@ router.patch(
 router
     .route("/:id")
     .get(authController.protect, scheduleController.getDefenseAssignmentById)
-    .put(authController.protect, scheduleController.updateDefenseAssignment)
+    .patch(authController.protect, scheduleController.updateDefenseAssignment)
     .delete(authController.protect, scheduleController.deleteDefenseAssignment);
 
 module.exports = router;

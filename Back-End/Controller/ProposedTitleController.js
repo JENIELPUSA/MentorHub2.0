@@ -2296,8 +2296,6 @@ exports.UpdateProposedTitle = AsyncErrorHandler(async (req, res) => {
   const { status } = req.body;
   const userId = req.user._id;
 
-  console.log("Req.body", req.body);
-
   const proposedTitle = await ProposedTitleModel.findById(req.params.id);
   if (!proposedTitle)
     return res.status(404).json({ status: "fail", message: "Proposed title not found" });

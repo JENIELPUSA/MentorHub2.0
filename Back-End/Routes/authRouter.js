@@ -2,14 +2,13 @@ const express = require("express");
 const authController = require("../Controller/authController");
 const router = express.Router();
 const upload = require("../middleware/fileUploader");
+
 router.route("/signup").post(
     upload.single("avatar"),
     authController.signup,
 );
 
-
 router.route("/login").post(authController.login);
-
 
 router.route("/forgotPassword").post(authController.forgotPassword);
 router.route("/switch-role").post(authController.switchRole);
@@ -21,5 +20,11 @@ router
     .route("/updatePassword")
     .patch(authController.protect, authController.updatePassword);
 
+// UPDATE USER — PATCH /api/v1/authentication/User/:id
+router.route("/User/:id").patch(
+    authController.protect,
+    upload.single("avatar"),
+    authController.updateUser,
+);
 
 module.exports = router;

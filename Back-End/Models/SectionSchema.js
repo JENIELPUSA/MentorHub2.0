@@ -12,6 +12,10 @@ const SectionSchema = new Schema(
       type: Schema.Types.ObjectId,
       ref: 'Subject',
       required: true
+    },
+    formatID: {
+      type: Schema.Types.ObjectId,
+      ref: 'Format'
     }
   },
   { timestamps: true }

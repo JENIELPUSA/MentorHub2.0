@@ -164,7 +164,8 @@ export default function DefenseSchedule({
         if (onMarkDone) {
           await onMarkDone(id);
         } else if (UpdateProposedTitle) {
-          await UpdateProposedTitle(id, { status: 'Done' });
+          const result = await UpdateProposedTitle(id, { status: 'Done' });
+          console.log("result",result)
         } else {
           await new Promise((r) => setTimeout(r, 1000));
           setLocalSchedules((prev) =>
@@ -188,7 +189,7 @@ export default function DefenseSchedule({
     [readyTotalPages, setReadyCurrentPage]
   );
 
-  const handleItemsPerPageChange = () => {};
+  const handleItemsPerPageChange = () => { };
 
   const indexOfFirstItem = (readyCurrentPage - 1) * limit + 1;
   const indexOfLastItem = Math.min(readyCurrentPage * limit, totalReadyTitles);
@@ -277,11 +278,10 @@ export default function DefenseSchedule({
                   return (
                     <tr
                       key={defense.id}
-                      className={`transition-colors ${
-                        isDone
+                      className={`transition-colors ${isDone
                           ? 'bg-emerald-50/40'
                           : 'odd:bg-white even:bg-blue-50/60 hover:bg-yellow-50'
-                      }`}
+                        }`}
                     >
                       <td className="py-4 px-6 font-bold text-blue-950">
                         <div className="flex items-center gap-2">
@@ -315,11 +315,10 @@ export default function DefenseSchedule({
                       </td>
                       <td className="py-4 px-6">
                         <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-lg border ${
-                            isDone
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-lg border ${isDone
                               ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                               : 'bg-yellow-100 text-yellow-900 border-yellow-300'
-                          }`}
+                            }`}
                         >
                           {isDone ? (
                             <>
@@ -395,11 +394,10 @@ export default function DefenseSchedule({
             <button
               onClick={() => goToPage(readyCurrentPage - 1)}
               disabled={readyCurrentPage === 1}
-              className={`p-2 rounded-lg border transition-all ${
-                readyCurrentPage === 1
+              className={`p-2 rounded-lg border transition-all ${readyCurrentPage === 1
                   ? 'border-blue-100 text-blue-200 cursor-not-allowed'
                   : 'border-blue-300 text-blue-900 bg-white hover:bg-yellow-100 hover:border-yellow-400'
-              }`}
+                }`}
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
@@ -417,11 +415,10 @@ export default function DefenseSchedule({
                   <button
                     key={i}
                     onClick={() => goToPage(pageNumber)}
-                    className={`w-9 h-9 rounded-lg text-sm font-semibold transition-all ${
-                      readyCurrentPage === pageNumber
+                    className={`w-9 h-9 rounded-lg text-sm font-semibold transition-all ${readyCurrentPage === pageNumber
                         ? 'bg-blue-900 text-yellow-300 shadow-sm'
                         : 'text-blue-900 hover:bg-yellow-100'
-                    }`}
+                      }`}
                   >
                     {pageNumber}
                   </button>
@@ -432,11 +429,10 @@ export default function DefenseSchedule({
             <button
               onClick={() => goToPage(readyCurrentPage + 1)}
               disabled={readyCurrentPage === readyTotalPages || readyTotalPages === 0}
-              className={`p-2 rounded-lg border transition-all ${
-                readyCurrentPage === readyTotalPages || readyTotalPages === 0
+              className={`p-2 rounded-lg border transition-all ${readyCurrentPage === readyTotalPages || readyTotalPages === 0
                   ? 'border-blue-100 text-blue-200 cursor-not-allowed'
                   : 'border-blue-300 text-blue-900 bg-white hover:bg-yellow-100 hover:border-yellow-400'
-              }`}
+                }`}
             >
               <ChevronRight className="w-4 h-4" />
             </button>

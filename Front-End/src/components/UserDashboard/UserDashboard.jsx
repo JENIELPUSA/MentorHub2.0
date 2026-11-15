@@ -2,25 +2,10 @@ import React, { useState, useMemo, useContext, useEffect, useRef, useCallback } 
 import {
     GraduationCap,
     Copy,
-    Code,
-    Moon,
-    Sun,
     CheckCircle2,
-    Lightbulb,
     UserPlus,
     FileSpreadsheet,
     Users,
-    BookOpen,
-    Server,
-    PenSquare,
-    Paperclip,
-    ListCheck,
-    Check,
-    RotateCcw,
-    X,
-    Search,
-    Eye,
-    Share2,
     FileText,
     MessageSquare,
     Download,
@@ -31,32 +16,30 @@ import {
     Loader2,
     UserCog,
     Mail,
-    Phone,
     Calendar,
     ChevronDown,
     Hourglass,
-    UserCheck,
     UserX,
     Shield,
-    User,
     BadgeCheck,
     UserCircle,
     PieChart as PieChartIcon,
     TrendingUp,
-    BarChart as BarChartIcon,
     Link as LinkIcon,
     CheckCircle,
     XCircle,
     Activity,
+    ExternalLink,
+    FileCog,
+    Eye,X
 } from 'lucide-react';
 import { ProposedTitleContext } from '../../contexts/ProposedTitleContext/ProposedTitleContext';
 import { AuthContext } from '../../contexts/AuthContext';
 import { GroupContext } from '../../contexts/GroupNameContext/GroupNameContext';
 import { UserDisplayContext } from '../../contexts/UserManagementContext/UserManagementContext';
+import { FormatContext } from '../../contexts/FormatContext/FormatContext';
 
 import UserDashboardBanner from './components/UserDashboardBanner';
-import ClassShareLink from './components/ClassShareLink';
-import FormatDetailsCard from './components/FormatDetailsCard';
 import { StatisticalContext } from '../../contexts/StatisticalContext/StatisticalContext';
 
 // ============================
@@ -93,9 +76,6 @@ const toLocalDateKey = (date) => {
     const day = String(d.getDate()).padStart(2, '0');
     return `${y}-${m}-${day}`;
 };
-
-const baseUrl = import.meta.env.VITE_FRONTEND_URL || window.location.origin;
-
 
 const getAdviserStatusDisplay = (status) => {
     const statusConfigs = {
@@ -138,7 +118,7 @@ const getAdviserStatusDisplay = (status) => {
 };
 
 // ============================
-// PIE CHART — NAVY/GOLD THEME
+// PIE CHART
 // ============================
 const PieChart = ({ data, size = 200, thickness = 44, title, subtitle }) => {
     const hasData = Array.isArray(data) && data.length > 0;
@@ -233,7 +213,7 @@ const PieChart = ({ data, size = 200, thickness = 44, title, subtitle }) => {
 };
 
 // ============================
-// MINI STAT — NAVY/GOLD THEME
+// MINI STAT
 // ============================
 const MiniStat = ({ label, value, sub, tone = 'blue', icon: Icon }) => {
     const tones = {
@@ -256,7 +236,7 @@ const MiniStat = ({ label, value, sub, tone = 'blue', icon: Icon }) => {
 };
 
 // ============================
-// STATISTICAL: REFERRED USERS CARD — NAVY/GOLD THEME
+// STATISTICAL: REFERRED USERS CARD
 // ============================
 const StatisticalReferredUsersCard = ({
     userCount,
@@ -316,7 +296,7 @@ const StatisticalReferredUsersCard = ({
                     {statisticsLoading ? (
                         <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading…</>
                     ) : (
-                        <><RotateCcw className="w-3.5 h-3.5" /> Refresh</>
+                        <><CheckCircle2 className="w-3.5 h-3.5" /> Refresh</>
                     )}
                 </button>
             </div>
@@ -379,7 +359,7 @@ const StatisticalReferredUsersCard = ({
                         <MiniStat label="Approved" value={statisticsCards.approved} tone="sky" icon={CheckCircle2} />
                         <MiniStat label="Pending" value={statisticsCards.pending} tone="yellow" icon={Hourglass} />
                         <MiniStat label="Rejected" value={statisticsCards.rejected} tone="red" icon={XCircle} />
-                        <MiniStat label="For Revision" value={statisticsCards.forRevision} tone="white" icon={PenSquare} />
+                        <MiniStat label="For Revision" value={statisticsCards.forRevision} tone="white" icon={FileText} />
                         <MiniStat label="Approval Rate" value={`${statisticsCards.approvalRate}%`} tone="blue" icon={TrendingUp} />
                     </div>
 
@@ -405,7 +385,7 @@ const StatisticalReferredUsersCard = ({
 };
 
 // ============================
-// COMMENTS LIST CARD — NAVY/GOLD THEME
+// COMMENTS LIST CARD
 // ============================
 const CommentsListCard = ({ comments = [] }) => {
     const getInitials = (author) => {
@@ -604,7 +584,7 @@ const CommentsListCard = ({ comments = [] }) => {
 };
 
 // ============================
-// TOP COMMENTED URLS CARD — NAVY/GOLD THEME
+// TOP COMMENTED URLS CARD
 // ============================
 const TopCommentedUrlsCard = ({ rows = [] }) => {
     if (!rows || rows.length === 0) return null;
@@ -667,7 +647,7 @@ const TopCommentedUrlsCard = ({ rows = [] }) => {
 };
 
 // ============================
-// ACTIVITY HEATMAP — NAVY/GOLD THEME (yellow default)
+// ACTIVITY HEATMAP
 // ============================
 const ActivityHeatmap = ({
     activityData = [],
@@ -745,39 +725,15 @@ const ActivityHeatmap = ({
 
     const levelColors = useMemo(() => {
         if (color === 'blue') {
-            return {
-                0: 'bg-blue-50',
-                1: 'bg-blue-200',
-                2: 'bg-blue-400',
-                3: 'bg-blue-600',
-                4: 'bg-blue-900',
-            };
+            return { 0: 'bg-blue-50', 1: 'bg-blue-200', 2: 'bg-blue-400', 3: 'bg-blue-600', 4: 'bg-blue-900' };
         }
         if (color === 'purple') {
-            return {
-                0: 'bg-blue-50',
-                1: 'bg-purple-200',
-                2: 'bg-purple-400',
-                3: 'bg-purple-600',
-                4: 'bg-purple-800',
-            };
+            return { 0: 'bg-blue-50', 1: 'bg-purple-200', 2: 'bg-purple-400', 3: 'bg-purple-600', 4: 'bg-purple-800' };
         }
         if (color === 'yellow') {
-            return {
-                0: 'bg-blue-50',
-                1: 'bg-yellow-100',
-                2: 'bg-yellow-300',
-                3: 'bg-yellow-400',
-                4: 'bg-yellow-500',
-            };
+            return { 0: 'bg-blue-50', 1: 'bg-yellow-100', 2: 'bg-yellow-300', 3: 'bg-yellow-400', 4: 'bg-yellow-500' };
         }
-        return {
-            0: 'bg-blue-50',
-            1: 'bg-emerald-200',
-            2: 'bg-emerald-400',
-            3: 'bg-emerald-600',
-            4: 'bg-emerald-800',
-        };
+        return { 0: 'bg-blue-50', 1: 'bg-emerald-200', 2: 'bg-emerald-400', 3: 'bg-emerald-600', 4: 'bg-emerald-800' };
     }, [color]);
 
     const dayLabels = ['Mon', '', 'Wed', '', 'Fri', '', ''];
@@ -849,10 +805,7 @@ const ActivityHeatmap = ({
                     <div className="flex items-center gap-1.5 text-[10px] text-blue-600">
                         <span>Less</span>
                         {[0, 1, 2, 3, 4].map((lvl) => (
-                            <span
-                                key={lvl}
-                                className={`w-3 h-3 rounded-sm border border-blue-100 ${levelColors[lvl]}`}
-                            />
+                            <span key={lvl} className={`w-3 h-3 rounded-sm border border-blue-100 ${levelColors[lvl]}`} />
                         ))}
                         <span>More</span>
                     </div>
@@ -878,10 +831,7 @@ const ActivityHeatmap = ({
                             {weeks.map((_, idx) => {
                                 const label = monthLabels.find((m) => m.index === idx);
                                 return (
-                                    <div
-                                        key={idx}
-                                        className="w-3 text-[9px] text-blue-600 font-medium whitespace-nowrap"
-                                    >
+                                    <div key={idx} className="w-3 text-[9px] text-blue-600 font-medium whitespace-nowrap">
                                         {label ? label.label : ''}
                                     </div>
                                 );
@@ -891,10 +841,7 @@ const ActivityHeatmap = ({
                         <div className="flex gap-1">
                             <div className="flex flex-col gap-1 w-7">
                                 {dayLabels.map((d, i) => (
-                                    <div
-                                        key={i}
-                                        className="h-3 text-[9px] text-blue-600 font-medium leading-3"
-                                    >
+                                    <div key={i} className="h-3 text-[9px] text-blue-600 font-medium leading-3">
                                         {d}
                                     </div>
                                 ))}
@@ -906,25 +853,14 @@ const ActivityHeatmap = ({
                                         const count = day.count;
                                         const level = getLevel(count);
                                         const tooltip = count > 0
-                                            ? `${count} ${count === 1 ? unit : `${unit}s`} on ${day.date.toLocaleDateString('en-US', {
-                                                weekday: 'short',
-                                                month: 'short',
-                                                day: 'numeric',
-                                                year: 'numeric',
-                                            })}`
-                                            : `No ${unit}s on ${day.date.toLocaleDateString('en-US', {
-                                                weekday: 'short',
-                                                month: 'short',
-                                                day: 'numeric',
-                                                year: 'numeric',
-                                            })}`;
+                                            ? `${count} ${count === 1 ? unit : `${unit}s`} on ${day.date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}`
+                                            : `No ${unit}s on ${day.date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}`;
 
                                         return (
                                             <div
                                                 key={day.key}
                                                 title={tooltip}
-                                                className={`w-3 h-3 rounded-sm border border-blue-100 ${day.isFuture ? 'bg-transparent border-transparent' : levelColors[level]
-                                                    } hover:ring-2 hover:ring-yellow-400 transition cursor-pointer`}
+                                                className={`w-3 h-3 rounded-sm border border-blue-100 ${day.isFuture ? 'bg-transparent border-transparent' : levelColors[level]} hover:ring-2 hover:ring-yellow-400 transition cursor-pointer`}
                                             />
                                         );
                                     })}
@@ -940,6 +876,44 @@ const ActivityHeatmap = ({
                     No {unitLabel} recorded yet.
                 </p>
             )}
+        </div>
+    );
+};
+
+// ============================
+// ⭐ FORMAT LINK — simpleng link na may Open Modal button
+// ============================
+const FormatLinkBar = ({ format, onOpen }) => {
+    if (!format || !format.fileUrl) return null;
+
+    return (
+        <div className="bg-gradient-to-r from-blue-50 to-sky-50 border border-blue-200 rounded-xl p-4 flex items-center justify-between gap-3 shadow-sm">
+            <div className="flex items-center gap-3 min-w-0">
+                <div className="p-2 bg-blue-900 rounded-lg shrink-0 shadow-sm">
+                    <FileCog className="w-4 h-4 text-yellow-300" />
+                </div>
+                <div className="min-w-0">
+                    <p className="text-[10px] uppercase font-bold text-blue-600 tracking-wider">
+                        Manuscript Format
+                    </p>
+                    <p className="text-sm font-semibold text-blue-950 truncate">
+                        {format.titleFormat || 'Format Document'}
+                        {format.type && (
+                            <span className="ml-2 text-[10px] font-medium text-blue-500">
+                                ({format.type})
+                            </span>
+                        )}
+                    </p>
+                </div>
+            </div>
+            <button
+                type="button"
+                onClick={onOpen}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-900 hover:bg-blue-950 text-white text-xs font-semibold rounded-lg transition shadow-sm shrink-0"
+            >
+                <Eye className="w-3.5 h-3.5" />
+                Open Format
+            </button>
         </div>
     );
 };
@@ -963,8 +937,10 @@ export default function UserDashboard() {
 
     const { advisers, advisersLoading } = useContext(UserDisplayContext);
     const { getGroupDetails, groupDetails, assignAdviserAndCoAdviser } = useContext(GroupContext);
+    const { formats } = useContext(FormatContext);
 
-    const [darkMode] = useState(false);
+    console.log('[UserDashboard] formats:', formats);
+
     const [toastMessage, setToastMessage] = useState(null);
     const [showQrModal, setShowQrModal] = useState(false);
     const [selectedUserModal, setSelectedUserModal] = useState(null);
@@ -1025,7 +1001,7 @@ export default function UserDashboard() {
                 _id: '',
                 name: 'Loading...',
                 referralCode: 'N/A',
-                section: { name: 'N/A', subject: { title: 'N/A', createdBy: 'N/A' } },
+                section: { name: 'N/A', subject: { title: 'N/A', createdBy: 'N/A' }, formatID: null },
                 memberCount: 0,
                 members: [],
                 createdAt: '',
@@ -1036,6 +1012,30 @@ export default function UserDashboard() {
             status: 'loading',
         };
     }, [groupDetails]);
+
+    // ⭐ FORMAT INFO — robust: section.formatID OR formats context fallback
+    const sectionFormat = useMemo(() => {
+        const section = displayData.group?.section;
+        const formatRef = section?.formatID;
+
+        if (formatRef) {
+            if (typeof formatRef === 'object' && formatRef._id) {
+                return formatRef;
+            }
+            if (typeof formatRef === 'string' && formats && formats.length > 0) {
+                const found = formats.find(f => f._id === formatRef);
+                if (found) return found;
+            }
+        }
+
+        if (Array.isArray(formats) && formats.length > 0) {
+            return formats[0];
+        }
+
+        return null;
+    }, [displayData.group?.section, formats]);
+
+    const sectionName = displayData.group?.section?.name || null;
 
     const commentsByTypeData = useMemo(() => {
         const raw = statisticsCharts?.commentsByType || [];
@@ -1124,6 +1124,20 @@ export default function UserDashboard() {
             return 'document.pdf';
         }
     };
+
+    // ⭐ HANDLE OPEN FORMAT — bukas modal viewer
+    const handleOpenFormat = useCallback((format) => {
+        if (!format?.fileUrl) {
+            triggerToast('No file URL available', 'error');
+            return;
+        }
+        setFileViewModal({
+            open: true,
+            url: format.fileUrl,
+            title: format.titleFormat || 'Manuscript Format',
+            fileName: getFileNameFromUrl(format.fileUrl),
+        });
+    }, []);
 
     const handleOpenAdviserModal = (type) => {
         setAdviserModalType(type);
@@ -1272,8 +1286,7 @@ export default function UserDashboard() {
         }
 
         const baseUrl = (
-            import.meta.env.VITE_FRONTEND_URL ||   // kung Vite
-            // process.env.REACT_APP_FRONTEND_URL || // kung CRA — gamitin ito imbes
+            import.meta.env.VITE_FRONTEND_URL ||
             window.location.origin
         ).replace(/\/$/, '');
 
@@ -1497,7 +1510,7 @@ export default function UserDashboard() {
                     onRefreshStatistics={() => RefreshStatistics()}
                 />
 
-                {/* ACTIVITY HEATMAP — NAVY/GOLD THEME */}
+                {/* ACTIVITY HEATMAP */}
                 {statisticsCards && (
                     <div className="space-y-3">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -1549,6 +1562,14 @@ export default function UserDashboard() {
                             color={heatmapMode === 'comments' ? 'yellow' : 'blue'}
                             unit={heatmapMode === 'comments' ? 'comment' : 'proposal'}
                         />
+
+                        {/* ⭐ FORMAT LINK — nasa ilalim ng heatmap */}
+                        {sectionFormat && sectionFormat.fileUrl && (
+                            <FormatLinkBar
+                                format={sectionFormat}
+                                onOpen={() => handleOpenFormat(sectionFormat)}
+                            />
+                        )}
                     </div>
                 )}
 
@@ -1680,6 +1701,14 @@ export default function UserDashboard() {
                                 </h3>
                             </div>
                             <div className="flex items-center gap-2 shrink-0">
+                                <a
+                                    href={fileViewModal.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="px-3 py-1 bg-blue-100 hover:bg-blue-200 text-blue-900 text-xs font-semibold rounded-lg transition flex items-center gap-1 shadow-sm"
+                                >
+                                    <ExternalLink className="w-3.5 h-3.5" /> Open Tab
+                                </a>
                                 <button
                                     onClick={() => {
                                         if (fileViewModal.url) {

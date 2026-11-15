@@ -11,9 +11,6 @@ const NotificationSchema = require("../Models/NotificationSchema");
 
 const Group = require("../Models/GroupName");
 
-// ==========================================
-// CREATE GROUP
-// ==========================================
 exports.createGroup = AsyncErrorHandler(async (req, res, next) => {
     console.log("Create Group Called");
     console.log(req.body);
@@ -107,9 +104,6 @@ exports.createGroup = AsyncErrorHandler(async (req, res, next) => {
     }
 });
 
-// ==========================================
-// DISPLAY ALL GROUPS (WITH PAGINATION + SEARCH + FILTERS)
-// ==========================================
 exports.DisplayGroups = AsyncErrorHandler(async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
@@ -600,11 +594,6 @@ exports.getgroupdetails = AsyncErrorHandler(async (req, res) => {
     });
 });
 
-
-
-// ==========================================
-// UPDATE GROUP
-// ==========================================
 exports.updateGroup = AsyncErrorHandler(async (req, res) => {
     const { name, referralCode, sectionId, members, assignedMentor, approvedTitleId } = req.body;
 

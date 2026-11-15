@@ -5,6 +5,9 @@ import axiosInstance from "../../components/ReusableFolder/axiosInstance";
 
 export const UserDisplayContext = createContext();
 
+// Roles that support switching (match backend enum)
+const SWITCHABLE_ROLES = ["panelist", "adviser"];
+
 export const UserDisplayProvider = ({ children }) => {
     const [customError, setCustomError] = useState("");
     const { authToken } = useContext(AuthContext);
@@ -16,12 +19,45 @@ export const UserDisplayProvider = ({ children }) => {
     const [currentPage, setCurrentPage] = useState(1);
     const [rowsPerPage, setRowsPerPage] = useState(10);
 
-    // ✅ MGA DAGDAG NA STATE PARA SA ADVISERS
+    // ── Extra state for advisers ──
     const [advisers, setAdvisers] = useState([]);
     const [advisersLoading, setAdvisersLoading] = useState(false);
     const [advisersError, setAdvisersError] = useState("");
 
-    // CREATE - Add User
+    // ── Filter state (optional, kung gusto mong controlled sa context) ──
+    const [roleFilter, setRoleFilter] = useState("");
+    const [departmentFilter, setDepartmentFilter] = useState("");
+    const [statusFilter, setStatusFilter] = useState("");
+
+    // ─────────────────────────────────────────────────────────────
+    // HELPER — clean selectedrole array
+    // ─────────────────────────────────────────────────────────────
+    const normalizeSelectedRoles = (rawSelected, currentRole) => {
+        const arr = Array.isArray(rawSelected)
+            ? rawSelected
+            : rawSelected
+            ? [rawSelected]
+            : [];
+
+        const clean = [
+            ...new Set(
+                arr
+                    .map((r) => String(r).trim().toLowerCase())
+                    .filter((r) => SWITCHABLE_ROLES.includes(r))
+            ),
+        ];
+
+        const role = String(currentRole || "").toLowerCase();
+        if (SWITCHABLE_ROLES.includes(role) && !clean.includes(role)) {
+            clean.push(role);
+        }
+
+        return clean;
+    };
+
+    // ─────────────────────────────────────────────────────────────
+    // CREATE — Add User
+    // ─────────────────────────────────────────────────────────────
     const AddUser = useCallback(
         async (values) => {
             console.log("Send Payloads", values);
@@ -34,47 +70,27 @@ export const UserDisplayProvider = ({ children }) => {
                 formData.append("last_name", values.last_name || "");
                 formData.append("middle_name", values.middle_name || "");
                 formData.append("suffix", values.suffix || "");
-                formData.append("username", values.email || values.username || "");
-                formData.append("role", values.role || ""); // current active role
+                formData.append("username", values.username || values.email || "");
+                formData.append("email", values.email || "");
+                formData.append("role", values.role || "");
                 formData.append("password", values.password || "");
                 formData.append("confirmPassword", values.confirmPassword || "");
-                formData.append("departmentId", values.department || values.departmentId || "");
+                formData.append("departmentId", values.departmentId || values.department || "");
 
                 // ── Optional fields ──
                 if (values.referralCode) formData.append("referralCode", values.referralCode);
                 if (values.address) formData.append("address", values.address);
                 if (values.contactNumber) formData.append("contactNumber", values.contactNumber);
                 if (values.avatar) formData.append("avatar", values.avatar);
-                const SWITCHABLE_ROLES = ["panelist", "adviser"];
+                if (values.statusAccount) formData.append("statusAccount", values.statusAccount);
+                if (values.status) formData.append("status", values.status);
 
-                const rawSelected = Array.isArray(values.selectedrole)
-                    ? values.selectedrole
-                    : values.selectedrole
-                        ? [values.selectedrole]
-                        : [];
-
-                const cleanSelected = [
-                    ...new Set(
-                        rawSelected
-                            .map((r) => String(r).trim().toLowerCase())
-                            .filter((r) => SWITCHABLE_ROLES.includes(r)),
-                    ),
-                ];
-
-                // Include current role if it's switchable and not already present
-                const currentRole = String(values.role || "").toLowerCase();
-                if (
-                    SWITCHABLE_ROLES.includes(currentRole) &&
-                    !cleanSelected.includes(currentRole)
-                ) {
-                    cleanSelected.push(currentRole);
-                }
-
-                // Send each role as its own "selectedrole" field
+                // ── Selected (switchable) roles ──
+                const cleanSelected = normalizeSelectedRoles(values.selectedrole, values.role);
                 cleanSelected.forEach((r) => formData.append("selectedrole", r));
 
                 // ── Debug log ──
-                console.log("FormData entries:");
+                console.log("FormData entries (AddUser):");
                 for (let pair of formData.entries()) {
                     console.log(`${pair[0]}: ${pair[1]}`);
                 }
@@ -88,10 +104,10 @@ export const UserDisplayProvider = ({ children }) => {
                             Authorization: `Bearer ${authToken}`,
                             "Content-Type": "multipart/form-data",
                         },
-                    },
+                    }
                 );
 
-                console.log("Response", response);
+                console.log("AddUser Response", response);
 
                 if (response.data?.success === true) {
                     return { success: true, data: response.data.data };
@@ -114,107 +130,164 @@ export const UserDisplayProvider = ({ children }) => {
                 return { success: false, error: message };
             }
         },
-        [authToken],
+        [authToken]
     );
 
-    // READ - Fetch Users Data
-    const FetchUsersData = useCallback(async () => {
-        if (!authToken) return;
+    // ─────────────────────────────────────────────────────────────
+    // READ — Fetch Users Data (with optional filters)
+    // ─────────────────────────────────────────────────────────────
+    const FetchUsersData = useCallback(
+        async (filters = {}) => {
+            if (!authToken) return;
 
-        try {
-            const params = {
-                page: currentPage,
-                limit: rowsPerPage,
-                search: searchQuery,
-            };
+            try {
+                const params = {
+                    page: filters.page || currentPage,
+                    limit: filters.limit || rowsPerPage,
+                };
 
-            const response = await axiosInstance.get(
-                `${import.meta.env.VITE_REACT_APP_BACKEND_BASEURL}/api/v1/userStudent`,
-                {
-                    params: params,
-                    withCredentials: true,
-                    headers: {
-                        Authorization: `Bearer ${authToken}`,
-                        "Cache-Control": "no-cache",
-                    },
+                if (filters.search || searchQuery) {
+                    params.search = filters.search || searchQuery;
                 }
-            );
-
-            const userData = response.data.data;
-            const pagination = response.data.pagination;
-
-            setUsers(userData);
-            setTotalUserCount(pagination.totalUser);
-            setTotalPages(pagination.totalPages);
-            setCurrentPage(pagination.currentPage);
-            setRowsPerPage(pagination.limit);
-        } catch (error) {
-            console.error("Error fetching users:", error);
-        } finally {
-            setLoading(false);
-        }
-    }, [authToken, currentPage, rowsPerPage, searchQuery]);
-
-    // ✅ FETCH ADVISERS - COMPLETE
-    const FetchAdvisers = useCallback(async (groupId = null) => {
-        if (!authToken) return;
-
-        setAdvisersLoading(true);
-        setAdvisersError("");
-
-        try {
-            const params = {};
-            if (groupId) {
-                params.groupId = groupId;
-            }
-
-            const response = await axiosInstance.get(
-                `${import.meta.env.VITE_REACT_APP_BACKEND_BASEURL}/api/v1/userStudent/userdropdown`,
-                {
-                    params: params,
-                    withCredentials: true,
-                    headers: {
-                        Authorization: `Bearer ${authToken}`,
-                    },
+                if (filters.role || roleFilter) {
+                    params.role = filters.role || roleFilter;
                 }
-            );
+                if (filters.departmentId || departmentFilter) {
+                    params.departmentId = filters.departmentId || departmentFilter;
+                }
+                if (filters.statusAccount || statusFilter) {
+                    params.statusAccount = filters.statusAccount || statusFilter;
+                }
 
-            if (response.data?.success === true) {
-                setAdvisers(response.data.data || []);
-                return { success: true, data: response.data.data };
-            } else {
-                setAdvisersError(response.data?.message || "Failed to fetch advisers");
-                return { success: false, error: response.data?.message || "Failed to fetch advisers" };
+                const response = await axiosInstance.get(
+                    `${import.meta.env.VITE_REACT_APP_BACKEND_BASEURL}/api/v1/userStudent`,
+                    {
+                        params,
+                        withCredentials: true,
+                        headers: {
+                            Authorization: `Bearer ${authToken}`,
+                            "Cache-Control": "no-cache",
+                        },
+                    }
+                );
+
+                const userData = response.data.data;
+                const pagination = response.data.pagination || {};
+
+                setUsers(userData || []);
+                setTotalUserCount(pagination.totalUser || 0);
+                setTotalPages(pagination.totalPages || 0);
+                setCurrentPage(pagination.currentPage || 1);
+                setRowsPerPage(pagination.limit || rowsPerPage);
+
+                return { success: true, data: userData };
+            } catch (error) {
+                console.error("Error fetching users:", error);
+                return { success: false, error: error.message };
+            } finally {
+                setLoading(false);
             }
-        } catch (error) {
-            const message = error.response?.data?.message ||
-                error.response?.data?.error ||
-                error.message ||
-                "Failed to fetch advisers";
+        },
+        [authToken, currentPage, rowsPerPage, searchQuery, roleFilter, departmentFilter, statusFilter]
+    );
 
-            console.error("Error fetching advisers:", error);
-            setAdvisersError(message);
-            return { success: false, error: message };
-        } finally {
-            setAdvisersLoading(false);
-        }
-    }, [authToken]);
+    // ─────────────────────────────────────────────────────────────
+    // FETCH ADVISERS
+    // ─────────────────────────────────────────────────────────────
+    const FetchAdvisers = useCallback(
+        async (groupId = null) => {
+            if (!authToken) return;
 
-    // UPDATE - Update User
+            setAdvisersLoading(true);
+            setAdvisersError("");
+
+            try {
+                const params = {};
+                if (groupId) params.groupId = groupId;
+
+                const response = await axiosInstance.get(
+                    `${import.meta.env.VITE_REACT_APP_BACKEND_BASEURL}/api/v1/userStudent/userdropdown`,
+                    {
+                        params,
+                        withCredentials: true,
+                        headers: {
+                            Authorization: `Bearer ${authToken}`,
+                        },
+                    }
+                );
+
+                if (response.data?.success === true) {
+                    setAdvisers(response.data.data || []);
+                    return { success: true, data: response.data.data };
+                } else {
+                    setAdvisersError(response.data?.message || "Failed to fetch advisers");
+                    return {
+                        success: false,
+                        error: response.data?.message || "Failed to fetch advisers",
+                    };
+                }
+            } catch (error) {
+                const message =
+                    error.response?.data?.message ||
+                    error.response?.data?.error ||
+                    error.message ||
+                    "Failed to fetch advisers";
+
+                console.error("Error fetching advisers:", error);
+                setAdvisersError(message);
+                return { success: false, error: message };
+            } finally {
+                setAdvisersLoading(false);
+            }
+        },
+        [authToken]
+    );
+
     const UpdateUser = useCallback(
         async (dataID, values) => {
             try {
                 const formData = new FormData();
+
+                // ── Basic fields ──
                 formData.append("first_name", values.first_name || "");
                 formData.append("last_name", values.last_name || "");
                 formData.append("middle_name", values.middle_name || "");
+                formData.append("suffix", values.suffix || "");
                 formData.append("email", values.email || "");
                 formData.append("role", values.role || "");
                 formData.append("laboratoryId", values.laboratoryId || "");
-                if (values.avatar) formData.append("avatar", values.avatar);
+
+                // ── Department ──
+                const deptId = values.departmentId || values.department || "";
+                if (deptId) formData.append("departmentId", deptId);
+
+                // ── Status ──
+                if (values.statusAccount) formData.append("statusAccount", values.statusAccount);
+                if (values.status) formData.append("status", values.status);
+
+                // ── Avatar (optional) ──
+                if (values.avatar && typeof values.avatar !== "string") {
+                    formData.append("avatar", values.avatar);
+                }
+
+                // ── Selected (switchable) roles ──
+                const cleanSelected = normalizeSelectedRoles(values.selectedrole, values.role);
+                cleanSelected.forEach((r) => formData.append("selectedrole", r));
+
+                // ── Optional password change ──
+                if (values.password) {
+                    formData.append("password", values.password);
+                    formData.append("confirmPassword", values.confirmPassword || "");
+                }
+
+                // ── Debug log ──
+                console.log("FormData entries (UpdateUser):");
+                for (let pair of formData.entries()) {
+                    console.log(`${pair[0]}: ${pair[1]}`);
+                }
 
                 const response = await axiosInstance.patch(
-                    `${import.meta.env.VITE_REACT_APP_BACKEND_BASEURL}/api/v1/User/${dataID}`,
+                    `${import.meta.env.VITE_REACT_APP_BACKEND_BASEURL}/api/v1/authentication/User/${dataID}`,
                     formData,
                     {
                         withCredentials: true,
@@ -225,15 +298,26 @@ export const UserDisplayProvider = ({ children }) => {
                     }
                 );
 
-                if (response.data?.status === "success") {
+                console.log("UpdateUser Response", response);
+
+                // ✅ Accept either `success: true` or `status: "success"`
+                const isSuccess =
+                    response.data?.success === true ||
+                    response.data?.status === "success";
+
+                if (isSuccess) {
                     await FetchUsersData();
                     return { success: true, data: response.data.data };
                 } else {
                     setCustomError(response.data?.message || "Failed to update user.");
-                    return { success: false, error: response.data?.message || "Failed to update user." };
+                    return {
+                        success: false,
+                        error: response.data?.message || "Failed to update user.",
+                    };
                 }
             } catch (error) {
-                const message = error.response?.data?.message ||
+                const message =
+                    error.response?.data?.message ||
                     error.response?.data?.error ||
                     error.message ||
                     "Something went wrong.";
@@ -246,7 +330,7 @@ export const UserDisplayProvider = ({ children }) => {
         [authToken, FetchUsersData]
     );
 
-    // DELETE - Delete User
+
     const DeleteUser = useCallback(
         async (userId) => {
             try {
@@ -260,15 +344,26 @@ export const UserDisplayProvider = ({ children }) => {
                     }
                 );
 
-                if (response.data.status === "success") {
+                const isSuccess =
+                    response.data?.success === true ||
+                    response.data?.status === "success";
+
+                if (isSuccess) {
+                    // Optimistic UI update
                     setUsers((prevUsers) => prevUsers.filter((user) => user._id !== userId));
+                    // Refresh to keep pagination/counts accurate
+                    await FetchUsersData();
                     return { success: true };
                 } else {
                     setCustomError(response.data?.message || "Failed to delete user.");
-                    return { success: false, error: response.data?.message || "Failed to delete user." };
+                    return {
+                        success: false,
+                        error: response.data?.message || "Failed to delete user.",
+                    };
                 }
             } catch (error) {
-                const message = error.response?.data?.message ||
+                const message =
+                    error.response?.data?.message ||
                     error.response?.data?.error ||
                     error.message ||
                     "Failed to delete user.";
@@ -278,21 +373,24 @@ export const UserDisplayProvider = ({ children }) => {
                 return { success: false, error: message };
             }
         },
-        [authToken]
+        [authToken, FetchUsersData]
     );
 
-    // Handle search
+    // ─────────────────────────────────────────────────────────────
+    // Search / Pagination handlers
+    // ─────────────────────────────────────────────────────────────
     const handleSearch = useCallback((query) => {
         setSearchQuery(query);
         setCurrentPage(1);
     }, []);
 
-    // Handle page change
     const handlePageChange = useCallback((page) => {
         setCurrentPage(page);
     }, []);
 
-    // Fetch all data on initial mount and when authToken changes
+    // ─────────────────────────────────────────────────────────────
+    // Initial fetch on mount / token change
+    // ─────────────────────────────────────────────────────────────
     useEffect(() => {
         if (!authToken) return;
 
@@ -308,21 +406,22 @@ export const UserDisplayProvider = ({ children }) => {
         };
 
         FetchAdvisers();
-
         fetchAllData();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [authToken]);
 
-    // Fetch data when pagination or search changes
+    // Refetch when pagination or search changes
     useEffect(() => {
         if (authToken) {
             FetchUsersData();
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentPage, searchQuery, authToken]);
 
     return (
         <UserDisplayContext.Provider
             value={{
-                // USER DATA
+                // ── USER DATA ──
                 userdata,
                 DeleteUser,
                 UpdateUser,
@@ -341,7 +440,15 @@ export const UserDisplayProvider = ({ children }) => {
                 handlePageChange,
                 customError,
 
-                // ✅ ADVISERS DATA
+                // ── FILTERS (optional) ──
+                roleFilter,
+                setRoleFilter,
+                departmentFilter,
+                setDepartmentFilter,
+                statusFilter,
+                setStatusFilter,
+
+                // ── ADVISERS DATA ──
                 advisers,
                 advisersLoading,
                 advisersError,

@@ -153,9 +153,6 @@ export const ProposedTitleProvider = ({ children }) => {
         }
     };
 
-    // ============================
-    // FETCH READY TITLES (unchanged)
-    // ============================
     const FetchReadyTitle = async (
         page = 1,
         limit = 5,
@@ -201,9 +198,6 @@ export const ProposedTitleProvider = ({ children }) => {
         }
     };
 
-    // ============================
-    // FETCH ARCHIVED TITLES (unchanged)
-    // ============================
     const FetchArchivedTitle = async (
         page = 1,
         limit = 5,
@@ -247,9 +241,6 @@ export const ProposedTitleProvider = ({ children }) => {
         }
     };
 
-    // ============================
-    // ✅ HELPER — Derive heatmap data from charts (unchanged)
-    // ============================
     const deriveHeatmapData = useCallback((charts, mode = "comment") => {
         if (!charts) return [];
 
@@ -292,9 +283,6 @@ export const ProposedTitleProvider = ({ children }) => {
             .sort((a, b) => (a.date < b.date ? -1 : 1));
     }, []);
 
-    // ============================
-    // ✅ FETCH STATISTICS (unchanged)
-    // ============================
     const FetchStatistics = useCallback(
         async ({ groupId = "", fromDate = "", toDate = "", force = false } = {}) => {
             if (!authToken) return null;
@@ -368,9 +356,6 @@ export const ProposedTitleProvider = ({ children }) => {
         [authToken, heatmapMode, deriveHeatmapData]
     );
 
-    // ============================
-    // ✅ REFRESH STATISTICS (unchanged)
-    // ============================
     const RefreshStatistics = useCallback(
         (opts = {}) =>
             FetchStatistics({
@@ -383,9 +368,7 @@ export const ProposedTitleProvider = ({ children }) => {
         [FetchStatistics, statisticsGroupIdFilter, statisticsDateFrom, statisticsDateTo]
     );
 
-    // ============================
-    // ✅ FETCH HEATMAP DATA (unchanged)
-    // ============================
+
     const FetchHeatmapData = useCallback(
         async ({ mode = heatmapMode, force = false } = {}) => {
             if (!authToken) return [];

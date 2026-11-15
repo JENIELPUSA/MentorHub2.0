@@ -1280,7 +1280,7 @@ export default function BiPSUMentoringHub() {
                             value={values.email}
                             onChange={handleInput}
                             disabled={isLoading}
-                            placeholder="mentorhub123@gmail.com"
+                            placeholder=""
                             required
                             style={{
                               width: "100%",
@@ -1488,48 +1488,6 @@ export default function BiPSUMentoringHub() {
                         gap: "0.625rem",
                       }}
                     >
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          fontSize: "0.75rem",
-                          gap: "0.375rem",
-                        }}
-                      >
-                        <span style={{ color: C.onSurfaceVariant }}>
-                          First time here?
-                        </span>
-                        <motion.a
-                          href="#"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            alert(
-                              "Please activate your student research portal account using your BiPSU Registrar credentials."
-                            );
-                          }}
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                          style={{
-                            fontWeight: 600,
-                            color: C.secondary,
-                            textDecoration: "none",
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: "0.25rem",
-                          }}
-                        >
-                          <span>Activate account</span>
-                          <span
-                            style={{
-                              ...iconFont,
-                              fontSize: "0.75rem",
-                            }}
-                          >
-                            north_east
-                          </span>
-                        </motion.a>
-                      </div>
                       <div
                         style={{
                           display: "flex",

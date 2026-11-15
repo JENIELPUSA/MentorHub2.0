@@ -390,8 +390,8 @@ export const ScheduleProvider = ({ children }) => {
                 setLoading(true);
                 setCustomError("");
 
-                // ✅ FIXED: PUT, not PATCH (backend uses router.route().put)
-                const res = await axios.put(
+                //  FIXED: PUT, not PATCH (backend uses router.route().put)
+                const res = await axios.patch(
                     `${scheduleUrl}/${id}`,
                     values,
                     axiosConfig(true)
@@ -594,9 +594,6 @@ export const ScheduleProvider = ({ children }) => {
         ]
     );
 
-    // ==========================================
-    // 🆕 CONFIRM PANELIST
-    // ==========================================
     const confirmPanelist = useCallback(
         async (scheduleId, panelistId, notes = "") => {
             if (!authToken) return { success: false, error: "No auth token" };

@@ -47,8 +47,205 @@ const SEMESTER_OPTIONS = ['1st Semester', '2nd Semester'];
 
 // ==================== YEAR OPTIONS ====================
 const getYearOptions = (count = 15) => {
-    const currentYear = new Date().getFullYear();
-    return Array.from({ length: count }, (_, i) => currentYear - i);
+    const startYear = 2025; // ✅ Simula sa 2025 pataas
+    return Array.from({ length: count }, (_, i) => startYear + i);
+};
+
+// ==================== EDIT SUBJECT MODAL (SEMESTER FORM STYLE) ====================
+const EditSubjectModal = ({
+    isOpen,
+    onClose,
+    subject,
+    onSubmit,
+    isLoading,
+}) => {
+    // Parse existing title into semester/year components
+    const parseTitle = (title) => {
+        if (!title) return { semester: '', yearFrom: '', yearTo: '' };
+        // Match pattern: SY-YYYY-YYYY (Semester)
+        const match = title.match(/^SY-(\d{4})-(\d{4})\s*\((.+)\)$/);
+        if (match) {
+            return {
+                semester: match[3] || '',
+                yearFrom: match[1] || '',
+                yearTo: match[2] || '',
+            };
+        }
+        // Fallback — put entire title in semester field
+        return { semester: title, yearFrom: '', yearTo: '' };
+    };
+
+    const initial = parseTitle(subject?.title);
+    const [semester, setSemester] = useState(initial.semester);
+    const [yearFrom, setYearFrom] = useState(initial.yearFrom);
+    const [yearTo, setYearTo] = useState(initial.yearTo);
+    const [error, setError] = useState('');
+
+    // Re-sync when modal opens with different subject
+    useEffect(() => {
+        if (isOpen && subject) {
+            const parsed = parseTitle(subject.title);
+            setSemester(parsed.semester);
+            setYearFrom(parsed.yearFrom);
+            setYearTo(parsed.yearTo);
+            setError('');
+        }
+    }, [isOpen, subject]);
+
+    if (!isOpen) return null;
+
+    const handleYearFromChange = (value) => {
+        setYearFrom(value);
+        if (value && !yearTo) setYearTo(String(parseInt(value) + 1));
+        if (value && yearTo && parseInt(yearTo) <= parseInt(value)) {
+            setYearTo(String(parseInt(value) + 1));
+        }
+    };
+
+    const buildTitle = () => {
+        if (semester && yearFrom && yearTo) {
+            return `SY-${yearFrom}-${yearTo} (${semester})`;
+        }
+        return semester; // fallback
+    };
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        setError('');
+
+        // If fields are filled, validate semester/year
+        if (yearFrom || yearTo) {
+            if (!semester) { setError('Please select a semester.'); return; }
+            if (!yearFrom) { setError('Please select Year From.'); return; }
+            if (!yearTo) { setError('Please select Year To.'); return; }
+            if (parseInt(yearTo) <= parseInt(yearFrom)) {
+                setError('Year To must be greater than Year From.');
+                return;
+            }
+        }
+
+        const title = buildTitle();
+        if (!title.trim()) {
+            setError('Please enter or select a title.');
+            return;
+        }
+
+        onSubmit(title.trim());
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-blue-950/60 backdrop-blur-sm animate-fadeIn">
+            <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-blue-200 relative max-h-[90vh] overflow-y-auto">
+                <button
+                    onClick={onClose}
+                    className="absolute top-4 right-4 p-2 text-blue-400 hover:text-blue-700 hover:bg-blue-50 rounded-xl transition"
+                >
+                    <X className="w-5 h-5" />
+                </button>
+
+                <div className="flex items-center gap-2 pb-3 border-b border-blue-100 mb-4">
+                    <div className="p-1.5 bg-blue-900 text-yellow-300 rounded-lg">
+                        <GraduationCap className="w-4 h-4" />
+                    </div>
+                    <div>
+                        <p className="text-sm font-bold text-blue-950">Edit Semester</p>
+                        <p className="text-[10px] text-blue-600">Pumili ng semester at school year</p>
+                    </div>
+                </div>
+
+                <form onSubmit={handleSubmit} className="space-y-3">
+                    <div>
+                        <label className="block text-xs font-semibold text-blue-800 mb-1.5">Semester</label>
+                        <select
+                            value={semester}
+                            onChange={(e) => setSemester(e.target.value)}
+                            className="w-full px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-900 outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400"
+                        >
+                            <option value="">Select Semester</option>
+                            {SEMESTER_OPTIONS.map((sem) => (
+                                <option key={sem} value={sem}>{sem}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                        <div>
+                            <label className="block text-xs font-semibold text-blue-800 mb-1.5">Year From</label>
+                            <select
+                                value={yearFrom}
+                                onChange={(e) => handleYearFromChange(e.target.value)}
+                                className="w-full px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-900 outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400"
+                            >
+                                <option value="">From</option>
+                                {getYearOptions(15).map((year) => (
+                                    <option key={year} value={year}>{year}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-semibold text-blue-800 mb-1.5">Year To</label>
+                            <select
+                                value={yearTo}
+                                onChange={(e) => setYearTo(e.target.value)}
+                                className="w-full px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-900 outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400"
+                            >
+                                <option value="">To</option>
+                                {getYearOptions(15).map((year) => (
+                                    <option key={year} value={year}>{year}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+
+                    {yearFrom && yearTo && parseInt(yearTo) <= parseInt(yearFrom) && (
+                        <p className="text-[10px] text-red-600 font-medium">
+                            ⚠️ Year To must be greater than Year From.
+                        </p>
+                    )}
+
+                    {error && (
+                        <p className="text-[10px] text-red-600 font-medium">⚠️ {error}</p>
+                    )}
+
+                    {semester && yearFrom && yearTo && parseInt(yearTo) > parseInt(yearFrom) && (
+                        <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-xl">
+                            <p className="text-[10px] text-blue-600 font-medium">Preview:</p>
+                            <p className="text-xs font-bold text-blue-900 break-all">
+                                {buildTitle()}
+                            </p>
+                        </div>
+                    )}
+
+                    <div className="flex justify-end gap-2 pt-2 border-t border-blue-100">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100 rounded-lg transition"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={isLoading}
+                            className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-blue-950 bg-yellow-400 hover:bg-yellow-300 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {isLoading ? (
+                                <>
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    Saving...
+                                </>
+                            ) : (
+                                <>
+                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                    Save Changes
+                                </>
+                            )}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
 };
 
 export default function SubjectManagement() {
@@ -79,6 +276,7 @@ export default function SubjectManagement() {
     const [selectedSubject, setSelectedSubject] = useState(null);
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [editingSubject, setEditingSubject] = useState(null);
     const [toastMessage, setToastMessage] = useState(null);
 
     // ✅ SUCCESS MODAL STATE
@@ -101,7 +299,6 @@ export default function SubjectManagement() {
     const [isConfirmLoading, setIsConfirmLoading] = useState(false);
 
     const [formData, setFormData] = useState({ title: '' });
-    const [editingId, setEditingId] = useState(null);
 
     // ==================== SEMESTER DROPDOWN STATE ====================
     const [isSemesterDropdownOpen, setIsSemesterDropdownOpen] = useState(false);
@@ -293,14 +490,16 @@ export default function SubjectManagement() {
         try {
             const result = await createSubject({ title });
             if (result.success === true) {
-                console.log("resultMessage", result);
                 setIsAddModalOpen(false);
                 resetForm();
+                resetSemesterForm();
                 await fetchFilteredSubjects();
                 showSuccessModal(
                     `Successfully added subject "${title}"!`,
                     'Subject Created!'
                 );
+            } else {
+                throw new Error(result?.message || 'Failed to create subject.');
             }
         } catch (error) {
             showErrorToast(`Failed to add subject: ${error.message}`);
@@ -314,9 +513,8 @@ export default function SubjectManagement() {
         try {
             const result = await updateSubject(id, { title });
 
-            console.log("resultUpdate", result);
             setIsEditModalOpen(false);
-            setEditingId(null);
+            setEditingSubject(null);
             resetForm();
             await fetchFilteredSubjects();
             if (selectedSubject && selectedSubject.id === id) {
@@ -398,19 +596,31 @@ export default function SubjectManagement() {
         }
     };
 
+    // ✅ FIXED: Validate and open add modal
     const handleOpenCreateSemesterModal = () => {
-        if (!selectedSemester || !yearFrom || !yearTo) {
-            showErrorToast('Please select semester, year from, and year to.');
+        if (!selectedSemester) {
+            showErrorToast('Please select a semester.');
+            return;
+        }
+        if (!yearFrom) {
+            showErrorToast('Please select Year From.');
+            return;
+        }
+        if (!yearTo) {
+            showErrorToast('Please select Year To.');
             return;
         }
         if (parseInt(yearTo) <= parseInt(yearFrom)) {
             showErrorToast('Year To must be greater than Year From.');
             return;
         }
+
         const title = buildSemesterTitle(selectedSemester, yearFrom, yearTo);
         setFormData({ title });
-        resetSemesterForm();
-        setIsAddModalOpen(true);
+        setIsSemesterDropdownOpen(false);
+        setTimeout(() => {
+            setIsAddModalOpen(true);
+        }, 0);
     };
 
     // ==================== ASSIGN FORMAT OPERATIONS ====================
@@ -494,7 +704,6 @@ export default function SubjectManagement() {
     // ==================== FORM HANDLERS ====================
     const resetForm = () => {
         setFormData({ title: '' });
-        setEditingId(null);
     };
 
     const handleAddSubmit = (e) => {
@@ -506,20 +715,31 @@ export default function SubjectManagement() {
         handleAddSubject(formData.title.trim());
     };
 
-    const handleEditSubmit = (e) => {
-        e.preventDefault();
-        if (!formData.title.trim()) {
-            showErrorToast('Please enter a subject title.');
-            return;
+    // ==================== EDIT MODAL ====================
+    const openEditModal = (subject, e) => {
+        if (e) {
+            e.stopPropagation();
+            e.preventDefault();
         }
-        if (editingId) handleUpdateSubject(editingId, formData.title.trim());
+        let subjectToEdit = subject;
+        if (!subject?.id && subject?._id) {
+            subjectToEdit = mapSubjectToDisplay(subject);
+        }
+        if (!subjectToEdit) return;
+
+        setEditingSubject(subjectToEdit);
+        setIsEditModalOpen(true);
     };
 
-    const openEditModal = (subject, e) => {
-        if (e) e.stopPropagation();
-        setEditingId(subject.id);
-        setFormData({ title: subject.title });
-        setIsEditModalOpen(true);
+    const closeEditModal = () => {
+        setIsEditModalOpen(false);
+        setEditingSubject(null);
+    };
+
+    const handleEditSubmit = (newTitle) => {
+        if (editingSubject) {
+            handleUpdateSubject(editingSubject.id, newTitle);
+        }
     };
 
     const openViewPage = (subject) => {
@@ -623,50 +843,6 @@ export default function SubjectManagement() {
                         </div>
                     )}
 
-                    {/* Header — hidden */}
-                    {false && (
-                        <header className="bg-white rounded-2xl border border-blue-200 shadow-md shadow-blue-900/10 p-6">
-                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                <div className="flex items-center gap-4">
-                                    <button
-                                        onClick={goBackToList}
-                                        className="p-2 bg-blue-50 hover:bg-yellow-100 rounded-xl transition text-blue-700 hover:text-blue-900 border border-blue-200"
-                                        title="Back to Subjects List"
-                                    >
-                                        <ArrowLeft className="w-5 h-5" />
-                                    </button>
-                                    <div className="p-3 bg-blue-900 text-yellow-300 rounded-xl shadow-sm">
-                                        <BookOpen className="w-7 h-7" />
-                                    </div>
-                                    <div>
-                                        <h1 className="text-2xl font-bold text-blue-950 tracking-tight">
-                                            {selectedSubject.title}
-                                        </h1>
-                                        <p className="text-sm text-blue-600">
-                                            Subject Details • Created {selectedSubject.formattedCreatedAt}
-                                        </p>
-                                    </div>
-                                </div>
-                                <div className="flex gap-2">
-                                    <button
-                                        onClick={() => openEditModal(selectedSubject)}
-                                        className="flex items-center gap-2 px-4 py-2.5 bg-yellow-400 hover:bg-yellow-300 text-blue-950 font-semibold text-sm rounded-xl transition shadow-sm"
-                                    >
-                                        <Edit className="w-4 h-4" />
-                                        Edit Subject
-                                    </button>
-                                    <button
-                                        onClick={() => handleDeleteSubject(selectedSubject.id)}
-                                        className="flex items-center gap-2 px-4 py-2.5 bg-rose-100 hover:bg-rose-200 text-rose-700 font-semibold text-sm rounded-xl transition"
-                                    >
-                                        <Trash2 className="w-4 h-4" />
-                                        Delete
-                                    </button>
-                                </div>
-                            </div>
-                        </header>
-                    )}
-
                     <SubjectSections
                         sections={sections}
                         subjectId={selectedSubject.id}
@@ -702,57 +878,14 @@ export default function SubjectManagement() {
                     isLoading={isConfirmLoading}
                 />
 
-                {/* Edit Modal */}
-                {isEditModalOpen && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-blue-950/60 backdrop-blur-sm animate-fadeIn">
-                        <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-blue-200 relative max-h-[90vh] overflow-y-auto">
-                            <button
-                                onClick={() => { setIsEditModalOpen(false); setEditingId(null); resetForm(); }}
-                                className="absolute top-4 right-4 p-2 text-blue-400 hover:text-blue-700 hover:bg-blue-50 rounded-xl transition"
-                            >
-                                <X className="w-5 h-5" />
-                            </button>
-                            <div className="flex items-center gap-3 border-b-2 border-yellow-400 pb-3 mb-4">
-                                <span className="p-2 bg-blue-900 text-yellow-300 rounded-xl shadow-sm">
-                                    <Edit className="w-5 h-5" />
-                                </span>
-                                <div>
-                                    <h3 className="text-lg font-bold text-blue-950">Edit Subject</h3>
-                                    <p className="text-xs text-blue-600">Update the subject title.</p>
-                                </div>
-                            </div>
-                            <form onSubmit={handleEditSubmit} className="space-y-4 text-sm">
-                                <div>
-                                    <label className="block font-semibold text-blue-800 mb-1.5">Subject Title *</label>
-                                    <textarea
-                                        required
-                                        rows={3}
-                                        placeholder="e.g. Advanced Web Systems & Technologies"
-                                        value={formData.title}
-                                        onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                                        className="w-full px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 placeholder:text-blue-400 outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 focus:bg-white resize-y min-h-[80px]"
-                                    />
-                                </div>
-                                <div className="flex justify-end gap-2 pt-3 border-t border-blue-100">
-                                    <button
-                                        type="button"
-                                        onClick={() => { setIsEditModalOpen(false); setEditingId(null); resetForm(); }}
-                                        className="px-4 py-2 font-medium text-blue-800 hover:bg-blue-100 rounded-xl transition"
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        type="submit"
-                                        disabled={isLoading}
-                                        className="px-5 py-2 font-semibold text-white bg-blue-900 hover:bg-blue-950 rounded-xl shadow-sm transition disabled:opacity-50"
-                                    >
-                                        {isLoading ? 'Updating...' : 'Update Subject'}
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                )}
+                {/* Edit Modal — semester form style */}
+                <EditSubjectModal
+                    isOpen={isEditModalOpen}
+                    onClose={closeEditModal}
+                    subject={editingSubject}
+                    onSubmit={handleEditSubmit}
+                    isLoading={isLoading}
+                />
             </div>
         );
     }
@@ -898,7 +1031,7 @@ export default function SubjectManagement() {
                                             className="px-3 py-1.5 text-xs font-semibold text-blue-950 bg-yellow-400 hover:bg-yellow-300 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
                                             Create
-                                                                               </button>
+                                        </button>
                                     </div>
                                 </div>
                             )}
@@ -1003,54 +1136,7 @@ export default function SubjectManagement() {
                                                     </div>
                                                 )}
 
-                                                {/* Assign Format */}
-                                                <div
-                                                    onClick={(e) => openAssignFormatModal(subject, e)}
-                                                    className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-xl cursor-pointer hover:bg-blue-100 hover:border-blue-300 transition-all group/assign"
-                                                >
-                                                    <div className="flex items-center justify-between">
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="p-1.5 bg-blue-900 rounded-lg shadow-sm">
-                                                                <FileCog className="w-3.5 h-3.5 text-yellow-300" />
-                                                            </div>
-                                                            <div>
-                                                                <p className="text-xs font-bold text-blue-900">
-                                                                    Assign Format
-                                                                </p>
-                                                                <p className="text-[10px] text-blue-600">
-                                                                    Manuscript format
-                                                                </p>
-                                                            </div>
-                                                        </div>
-                                                        <div className="flex items-center gap-1">
-                                                            <ChevronRight className="w-3.5 h-3.5 text-blue-700 group-hover/assign:translate-x-0.5 transition-transform" />
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="mt-2 pt-2 border-t border-blue-200">
-                                                        {subject.formatDetails ? (
-                                                            <div className="flex items-center gap-1.5 flex-wrap">
-                                                                <FormatIcon className={`w-3 h-3 ${typeColors.icon} shrink-0`} />
-                                                                <span className={`text-[10px] font-semibold ${typeColors.text} truncate`}>
-                                                                    {subject.formatTitle}
-                                                                </span>
-                                                                {subject.formatType && (
-                                                                    <span className={`text-[9px] font-medium ${typeColors.bg} ${typeColors.text} px-1.5 py-0.5 rounded-full`}>
-                                                                        {subject.formatType}
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                        ) : (
-                                                            <div className="flex items-center gap-1.5">
-                                                                <span className="text-[10px] text-blue-400 italic">
-                                                                    No format assigned — click to assign
-                                                                </span>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </div>
-
-                                                {/* Action Buttons */}
+                                                {/* Action Buttons — Edit lang, walang Delete */}
                                                 <div className="flex items-center gap-2 pt-2 border-t border-blue-100">
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); openViewPage(subject); }}
@@ -1063,12 +1149,6 @@ export default function SubjectManagement() {
                                                         className="flex-1 py-1.5 text-xs font-semibold text-yellow-700 hover:bg-yellow-50 rounded-lg transition"
                                                     >
                                                         Edit
-                                                    </button>
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); handleDeleteSubject(subject.id); }}
-                                                        className="flex-1 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-lg transition"
-                                                    >
-                                                        Delete
                                                     </button>
                                                 </div>
                                             </div>
@@ -1160,196 +1240,20 @@ export default function SubjectManagement() {
                 isLoading={isConfirmLoading}
             />
 
-            {/* Assign Format Modal */}
-            {isAssignFormatModalOpen && assignFormatSubject && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-blue-950/60 backdrop-blur-sm animate-fadeIn">
-                    <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-blue-200 relative max-h-[90vh] overflow-y-auto">
-                        <button
-                            onClick={closeAssignFormatModal}
-                            className="absolute top-4 right-4 p-2 text-blue-400 hover:text-blue-700 hover:bg-blue-50 rounded-xl transition"
-                        >
-                            <X className="w-5 h-5" />
-                        </button>
-
-                        <div className="flex items-center gap-3 border-b-2 border-yellow-400 pb-3 mb-4">
-                            <span className="p-2 bg-blue-900 text-yellow-300 rounded-xl shadow-sm">
-                                <FileCog className="w-5 h-5" />
-                            </span>
-                            <div>
-                                <h3 className="text-lg font-bold text-blue-950">Assign Manuscript Format</h3>
-                                <p className="text-xs text-blue-600">
-                                    Pumili ng format para sa "{assignFormatSubject.title}"
-                                </p>
-                            </div>
-                        </div>
-
-                        <form onSubmit={handleAssignFormatSubmit} className="space-y-4 text-sm">
-                            <div className="p-3 bg-blue-50 rounded-xl border border-blue-200">
-                                <div className="flex items-center gap-2">
-                                    <BookOpen className="w-4 h-4 text-blue-900" />
-                                    <span className="font-semibold text-blue-900">{assignFormatSubject.title}</span>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                <div className="relative">
-                                    <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-blue-400" />
-                                    <input
-                                        type="text"
-                                        placeholder="Search formats..."
-                                        value={assignFormatSearchTerm}
-                                        onChange={(e) => setAssignFormatSearchTerm(e.target.value)}
-                                        className="w-full pl-9 pr-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-900 placeholder:text-blue-400 outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400"
-                                    />
-                                </div>
-                                <select
-                                    value={assignFormatTypeFilter}
-                                    onChange={(e) => setAssignFormatTypeFilter(e.target.value)}
-                                    className="w-full px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-xs font-medium text-blue-900 outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400"
-                                >
-                                    {formatTypes.map((type) => (
-                                        <option key={type} value={type}>
-                                            {type === 'All' ? 'All Types' : type}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div>
-                                <label className="block font-semibold text-blue-800 mb-2">
-                                    Pumili ng Manuscript Format *
-                                    <span className="ml-2 text-xs font-normal text-blue-500">
-                                        ({filteredAssignFormats.length} available)
-                                    </span>
-                                </label>
-
-                                {formats && formats.length > 0 ? (
-                                    filteredAssignFormats.length > 0 ? (
-                                        <div className="grid grid-cols-1 gap-2 max-h-64 overflow-y-auto pr-1">
-                                            {filteredAssignFormats.map((format) => {
-                                                const typeColors = getFormatTypeColor(format.type);
-                                                const FormatIcon = getFormatIcon(format.type);
-                                                const isSelected = assignSelectedFormatId === format._id;
-
-                                                return (
-                                                    <label
-                                                        key={format._id}
-                                                        className={`flex items-start gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${isSelected
-                                                            ? `${typeColors.border} ${typeColors.bg} ring-2 ring-offset-1 ring-yellow-400`
-                                                            : 'border-blue-200 hover:border-blue-300 hover:bg-blue-50'
-                                                            }`}
-                                                    >
-                                                        <input
-                                                            type="radio"
-                                                            name="assignFormatID"
-                                                            value={format._id}
-                                                            checked={isSelected}
-                                                            onChange={(e) => setAssignSelectedFormatId(e.target.value)}
-                                                            className="mt-0.5 w-4 h-4 text-blue-900 focus:ring-yellow-400"
-                                                        />
-                                                        <div className={`p-1.5 ${typeColors.solid} rounded-lg shrink-0`}>
-                                                            <FormatIcon className="w-3.5 h-3.5 text-white" />
-                                                        </div>
-                                                        <div className="flex-1 min-w-0">
-                                                            <div className="flex items-center gap-2 flex-wrap">
-                                                                <span className="font-semibold text-blue-950 text-xs">
-                                                                    {format.titleFormat}
-                                                                </span>
-                                                                {format.type && (
-                                                                    <span className={`text-[9px] font-medium ${typeColors.bg} ${typeColors.text} px-1.5 py-0.5 rounded-full`}>
-                                                                        {format.type}
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                            {format.description && (
-                                                                <p className="text-[10px] text-blue-600 mt-0.5 leading-tight line-clamp-2">
-                                                                    {format.description}
-                                                                </p>
-                                                            )}
-                                                            {format.fileUrl && (
-                                                                <a
-                                                                    href={format.fileUrl}
-                                                                    target="_blank"
-                                                                    rel="noopener noreferrer"
-                                                                    onClick={(e) => e.stopPropagation()}
-                                                                    className="inline-flex items-center gap-1 text-[10px] text-blue-800 hover:text-blue-950 mt-1 font-semibold"
-                                                                >
-                                                                    <ExternalLink className="w-2.5 h-2.5" />
-                                                                    View file
-                                                                </a>
-                                                            )}
-                                                        </div>
-                                                    </label>
-                                                );
-                                            })}
-                                        </div>
-                                    ) : (
-                                        <div className="py-8 text-center bg-blue-50 rounded-xl border border-blue-200">
-                                            <Search className="w-8 h-8 text-blue-300 mx-auto mb-2" />
-                                            <p className="text-xs text-blue-600">
-                                                Walang format na tumutugma sa iyong search.
-                                            </p>
-                                        </div>
-                                    )
-                                ) : (
-                                    <div className="py-8 text-center bg-blue-50 rounded-xl border border-blue-200">
-                                        <FileCog className="w-8 h-8 text-blue-300 mx-auto mb-2" />
-                                        <p className="text-xs text-blue-600">
-                                            Walang available na format. Mag-upload muna ng format.
-                                        </p>
-                                    </div>
-                                )}
-                            </div>
-
-                            {assignFormatSubject.formatDetails && (
-                                <div className="p-3 bg-blue-50 rounded-xl border border-blue-200">
-                                    <p className="text-xs text-blue-800">
-                                        <span className="font-semibold">Kasalukuyang format:</span>{' '}
-                                        {assignFormatSubject.formatTitle}
-                                        {assignFormatSubject.formatType && (
-                                            <span className="ml-1">({assignFormatSubject.formatType})</span>
-                                        )}
-                                    </p>
-                                </div>
-                            )}
-
-                            <div className="flex justify-end gap-2 pt-3 border-t border-blue-100">
-                                <button
-                                    type="button"
-                                    onClick={closeAssignFormatModal}
-                                    className="px-4 py-2 font-medium text-blue-800 hover:bg-blue-100 rounded-xl transition"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={isLoading || !assignSelectedFormatId}
-                                    className="flex items-center gap-2 px-5 py-2 font-semibold text-white bg-blue-900 hover:bg-blue-950 rounded-xl shadow-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    {isLoading ? (
-                                        <>
-                                            <Loader2 className="w-4 h-4 animate-spin" />
-                                            Assigning...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <FileCog className="w-4 h-4" />
-                                            Assign Format
-                                        </>
-                                    )}
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
-
+            {/* ==================== EDIT MODAL (SEMESTER FORM STYLE) ==================== */}
+            <EditSubjectModal
+                isOpen={isEditModalOpen}
+                onClose={closeEditModal}
+                subject={editingSubject}
+                onSubmit={handleEditSubmit}
+                isLoading={isLoading}
+            />
             {/* Add Modal — Confirmation Only */}
             {isAddModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-blue-950/60 backdrop-blur-sm animate-fadeIn">
                     <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-blue-200 relative max-h-[90vh] overflow-y-auto">
                         <button
-                            onClick={() => { setIsAddModalOpen(false); resetForm(); }}
+                            onClick={() => { setIsAddModalOpen(false); resetForm(); resetSemesterForm(); }}
                             className="absolute top-4 right-4 p-2 text-blue-400 hover:text-blue-700 hover:bg-blue-50 rounded-xl transition"
                         >
                             <X className="w-5 h-5" />
@@ -1379,7 +1283,7 @@ export default function SubjectManagement() {
                             <div className="flex justify-end gap-2 pt-3 border-t border-blue-100">
                                 <button
                                     type="button"
-                                    onClick={() => { setIsAddModalOpen(false); resetForm(); }}
+                                    onClick={() => { setIsAddModalOpen(false); resetForm(); resetSemesterForm(); }}
                                     className="px-4 py-2 font-medium text-blue-800 hover:bg-blue-100 rounded-xl transition"
                                 >
                                     Cancel
@@ -1409,4 +1313,3 @@ export default function SubjectManagement() {
         </div>
     );
 }
-                                   

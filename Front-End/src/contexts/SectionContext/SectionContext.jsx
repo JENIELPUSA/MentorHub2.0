@@ -34,9 +34,9 @@ export const SectionProvider = ({ children }) => {
 
     // ==========================================
     // FETCH SECTIONS BY SUBJECT ID
+    // (includes formatID populate via backend)
     // ==========================================
     const fetchSections = useCallback(async (params = {}) => {
-        // Prevent multiple simultaneous fetches
         if (fetchInProgress.current) {
             console.log("⏳ Fetch already in progress, skipping...");
             return;
@@ -53,13 +53,11 @@ export const SectionProvider = ({ children }) => {
             setLoading(true);
             setCustomError("");
 
-            // Extract params with defaults
             const page = params.page || currentPage;
             const limit = params.limit || rowsPerPage;
             const search = params.search || searchQuery;
             const subjectId = params.subjectId || selectedSubjectId;
 
-            // Validate required subjectId
             if (!subjectId) {
                 setCustomError("Subject ID is required");
                 setSections([]);
@@ -68,22 +66,17 @@ export const SectionProvider = ({ children }) => {
                 return;
             }
 
-            // Build query parameters (search and pagination only)
             const queryParams = new URLSearchParams({
                 page: page.toString(),
                 limit: limit.toString(),
             });
 
-            // Add optional search filter
             if (search) {
                 queryParams.append('search', search);
             }
 
-            // Use route parameter for subjectId (not query param)
             const fullUrl = `${BASE_URL}/api/v1/sections/${subjectId}?${queryParams}`;
             console.log("🔗 FULL URL:", fullUrl);
-            console.log("📋 Subject ID:", subjectId);
-            console.log("📋 Query Params:", queryParams.toString());
 
             const res = await axios.get(fullUrl, {
                 withCredentials: true,
@@ -96,35 +89,28 @@ export const SectionProvider = ({ children }) => {
             console.log("📊 Response Data:", res.data);
 
             if (res.data?.status === "success") {
-                console.log("✅ Success! Setting sections...");
+                //  Sections already include populated formatID from backend
                 setSections(res.data.data || []);
                 setTotalCount(res.data.totalCount || 0);
                 setTotalPages(res.data.totalPages || 1);
                 setCurrentPage(res.data.currentPage || page);
 
-                // Only update rowsPerPage if it's different and provided
                 if (params.limit && params.limit !== rowsPerPage) {
                     setRowsPerPage(params.limit);
                 }
-
-                // Only update searchQuery if it's provided
                 if (params.search !== undefined) {
                     setSearchQuery(params.search);
                 }
-
-                // Only update selectedSubjectId if it's provided
                 if (params.subjectId !== undefined) {
                     setSelectedSubjectId(params.subjectId);
                 }
             } else {
-                console.log("❌ Response status not success");
                 setCustomError(res.data?.message || "Failed to fetch sections");
                 setSections([]);
             }
         } catch (error) {
             console.error("❌ Fetch Sections Error:", error);
 
-            // Handle 404 or other errors
             if (error.response?.status === 404) {
                 setCustomError("Subject not found or has no sections");
             } else {
@@ -136,6 +122,7 @@ export const SectionProvider = ({ children }) => {
             fetchInProgress.current = false;
         }
     }, [BASE_URL, authToken, currentPage, rowsPerPage, searchQuery, selectedSubjectId]);
+
     // ==========================================
     // GET SECTIONS BY SUBJECT
     // ==========================================
@@ -201,6 +188,7 @@ export const SectionProvider = ({ children }) => {
 
     // ==========================================
     // GET SINGLE SECTION
+    // (includes populated formatID)
     // ==========================================
     const getSectionById = useCallback(async (id) => {
         if (!authToken) return { success: false, error: "No authentication token" };
@@ -238,6 +226,7 @@ export const SectionProvider = ({ children }) => {
 
     // ==========================================
     // CREATE SECTION
+    //  Supports optional formatID
     // ==========================================
     const createSection = useCallback(async (values) => {
         if (!authToken) return { success: false, error: "No authentication token" };
@@ -246,9 +235,18 @@ export const SectionProvider = ({ children }) => {
             setLoading(true);
             setCustomError("");
 
+            //  Ensure formatID is included if provided
+            const payload = {
+                name: values.name,
+                subjectId: values.subjectId,
+            };
+            if (values.formatID !== undefined) {
+                payload.formatID = values.formatID;
+            }
+
             const res = await axios.post(
                 `${BASE_URL}/api/v1/sections`,
-                values,
+                payload,
                 {
                     withCredentials: true,
                     headers: {
@@ -259,7 +257,6 @@ export const SectionProvider = ({ children }) => {
             );
 
             if (isSuccess(res.data?.status)) {
-                // Refresh the list - stay on current page
                 await fetchSections({
                     page: currentPage,
                     limit: rowsPerPage,
@@ -316,7 +313,6 @@ export const SectionProvider = ({ children }) => {
             );
 
             if (isSuccess(res.data?.status)) {
-                // Refresh the list
                 await fetchSections({
                     page: currentPage,
                     limit: rowsPerPage,
@@ -354,6 +350,7 @@ export const SectionProvider = ({ children }) => {
 
     // ==========================================
     // UPDATE SECTION
+    //  Supports name, subjectId, formatID
     // ==========================================
     const updateSection = useCallback(async (id, values) => {
         if (!authToken) return { success: false, error: "No authentication token" };
@@ -362,9 +359,21 @@ export const SectionProvider = ({ children }) => {
             setLoading(true);
             setCustomError("");
 
+            //  Build payload — only include provided fields
+            const payload = {};
+            if (values.name !== undefined) payload.name = values.name;
+            if (values.subjectId !== undefined) payload.subjectId = values.subjectId;
+            
+            //  formatID — can be null (unassign) or ObjectId (assign)
+            if (values.formatID !== undefined) {
+                payload.formatID = values.formatID;
+            }
+
+            console.log("📤 updateSection payload:", payload);
+
             const res = await axios.patch(
                 `${BASE_URL}/api/v1/sections/${id}`,
-                values,
+                payload,
                 {
                     withCredentials: true,
                     headers: {
@@ -375,7 +384,6 @@ export const SectionProvider = ({ children }) => {
             );
 
             if (isSuccess(res.data?.status)) {
-                // Refresh the list
                 await fetchSections({
                     page: currentPage,
                     limit: rowsPerPage,
@@ -410,6 +418,22 @@ export const SectionProvider = ({ children }) => {
     }, [BASE_URL, authToken, fetchSections, currentPage, rowsPerPage, searchQuery, selectedSubjectId]);
 
     // ==========================================
+    //  ASSIGN FORMAT TO SECTION
+    // Convenience wrapper for updateSection
+    // ==========================================
+    const assignFormatToSection = useCallback(async (sectionId, formatId) => {
+        return updateSection(sectionId, { formatID: formatId });
+    }, [updateSection]);
+
+    // ==========================================
+    //  CLEAR FORMAT FROM SECTION
+    // Sets formatID to null
+    // ==========================================
+    const clearSectionFormat = useCallback(async (sectionId) => {
+        return updateSection(sectionId, { formatID: null });
+    }, [updateSection]);
+
+    // ==========================================
     // DELETE SECTION
     // ==========================================
     const deleteSection = useCallback(async (id) => {
@@ -430,10 +454,8 @@ export const SectionProvider = ({ children }) => {
             );
 
             if (isSuccess(res.data?.status)) {
-                // Optimistic update - remove from list immediately
                 setSections(prevSections => prevSections.filter(section => section._id !== id));
 
-                // Then refresh to get updated pagination
                 await fetchSections({
                     page: currentPage,
                     limit: rowsPerPage,
@@ -467,7 +489,7 @@ export const SectionProvider = ({ children }) => {
     }, [BASE_URL, authToken, fetchSections, currentPage, rowsPerPage, searchQuery, selectedSubjectId]);
 
     // ==========================================
-    // GET SECTIONS BY USER (FOR ADMIN/SUPER ADMIN)
+    // GET SECTIONS BY USER
     // ==========================================
     const getSectionsByUser = useCallback(async (userId) => {
         if (!authToken) return { success: false, data: [] };
@@ -496,6 +518,49 @@ export const SectionProvider = ({ children }) => {
             };
         }
     }, [BASE_URL, authToken]);
+
+    // ==========================================
+    //  GET SECTIONS WITH FORMAT BY SUBJECT
+    // Returns array of { section, format } for quick access
+    // ==========================================
+    const getSectionsWithFormatsBySubject = useCallback(async (subjectId) => {
+        if (!authToken) return { success: false, data: [] };
+
+        try {
+            const result = await getSectionsBySubject(subjectId);
+            if (!result.success) return result;
+
+            // Sections already have populated formatID from backend
+            const formatted = (result.data || []).map(section => ({
+                section,
+                format: section.formatID || null,
+                hasFormat: !!section.formatID,
+            }));
+
+            return { success: true, data: formatted };
+        } catch (error) {
+            console.error("Get Sections with Formats Error:", error);
+            return {
+                success: false,
+                error: error.message,
+                data: [],
+            };
+        }
+    }, [getSectionsBySubject]);
+
+    // ==========================================
+    //  GET FORMAT BY SECTION ID
+    // Directly returns the format attached to a section
+    // ==========================================
+    const getFormatBySectionId = useCallback(async (sectionId) => {
+        const result = await getSectionById(sectionId);
+        if (!result.success) return result;
+        return {
+            success: true,
+            data: result.data?.formatID || null,
+            section: result.data,
+        };
+    }, [getSectionById]);
 
     // ==========================================
     // SEARCH SECTIONS
@@ -550,7 +615,6 @@ export const SectionProvider = ({ children }) => {
     // FETCH WHEN PAGINATION, SEARCH, OR FILTER CHANGES
     // ==========================================
     useEffect(() => {
-        // Skip initial mount
         if (isInitialMount.current) {
             return;
         }
@@ -586,6 +650,12 @@ export const SectionProvider = ({ children }) => {
         deleteSection,
         getSectionsByUser,
 
+        //  Format-specific helpers (NEW)
+        assignFormatToSection,
+        clearSectionFormat,
+        getSectionsWithFormatsBySubject,
+        getFormatBySectionId,
+
         // Utility Functions
         handleSearch,
         handleFilterBySubject,
@@ -612,6 +682,10 @@ export const SectionProvider = ({ children }) => {
         updateSection,
         deleteSection,
         getSectionsByUser,
+        assignFormatToSection,
+        clearSectionFormat,
+        getSectionsWithFormatsBySubject,
+        getFormatBySectionId,
         handleSearch,
         handleFilterBySubject,
         handlePageChange,

@@ -5,7 +5,7 @@ import {
   Globe, Trash2, X, Loader2, Copy, Lock, ArrowLeft, GraduationCap,
   ZoomIn, ZoomOut, ChevronLeft, ChevronRight, RefreshCw, XCircle,
   ArrowRight, ArrowLeft as ArrowLeftIcon, ArrowUp, ArrowDown,
-  ClipboardList, Send,
+  ClipboardList, Send, AlertTriangle,
 } from 'lucide-react';
 
 import { Document, Page, pdfjs } from 'react-pdf';
@@ -58,6 +58,55 @@ const computeAnnotationNumbers = (allAnnots) => {
   const numberMap = {};
   flat.forEach((a, i) => { numberMap[a.id] = i + 1; });
   return numberMap;
+};
+
+// ============================================================
+// ⭐ CUSTOM CONFIRM MODAL (replaces window.confirm)
+// ============================================================
+const DeleteConfirmModal = ({ isOpen, title, message, confirmLabel, cancelLabel, isLoading, onConfirm, onCancel }) => {
+  useEffect(() => {
+    if (!isOpen) return;
+    const handler = (e) => {
+      if (e.key === 'Escape' && !isLoading) onCancel?.();
+      if (e.key === 'Enter' && !isLoading) onConfirm?.();
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [isOpen, isLoading, onConfirm, onCancel]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-blue-950/60 backdrop-blur-sm" onClick={isLoading ? undefined : onCancel} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md border border-blue-200 overflow-hidden">
+        <div className="bg-rose-600 px-5 py-3 border-b-4 border-rose-300 flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-white" />
+          <h3 className="text-sm font-bold text-white">{title || 'Confirm Delete'}</h3>
+        </div>
+        <div className="p-5">
+          <p className="text-xs text-slate-700 whitespace-pre-line leading-relaxed">{message}</p>
+        </div>
+        <div className="px-5 pb-4 flex items-center justify-end gap-2">
+          <button
+            onClick={onCancel}
+            disabled={isLoading}
+            className="px-3 py-1.5 text-xs font-medium text-blue-900 bg-blue-100 hover:bg-blue-200 rounded-lg transition disabled:opacity-50"
+          >
+            {cancelLabel || 'Cancel'}
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={isLoading}
+            className="px-3 py-1.5 text-xs font-medium text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition disabled:opacity-50 inline-flex items-center gap-1"
+          >
+            {isLoading && <Loader2 className="w-3 h-3 animate-spin" />}
+            {confirmLabel || 'Delete'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 // ============================================================
@@ -270,6 +319,9 @@ const PdfAnnotationOverlay = ({
   const [isPosting, setIsPosting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // ⭐ Custom confirm modal state (replaces window.confirm)
+  const [deleteConfirm, setDeleteConfirm] = useState({ isOpen: false, target: null });
+
   const { CreateComment, DeleteComment } = useContext(CommentContext);
 
   const pageAnnots = [
@@ -304,11 +356,18 @@ const PdfAnnotationOverlay = ({
     };
   };
 
-  const handleErase = async (target) => {
+  // ⭐ Open custom confirm modal instead of window.confirm
+  const handleErase = (target) => {
     if (readOnly || !target) return;
+    setDeleteConfirm({ isOpen: true, target });
+  };
+
+  // ⭐ Actual deletion logic (called from custom modal confirm)
+  const performErase = async () => {
+    const target = deleteConfirm.target;
+    if (!target) return;
     const isBackend = target.__fromBackend === true || !!target.backendId;
     const backendId = target.backendId || (target.__fromBackend ? target.id : null);
-    if (!window.confirm('Delete this feedback?')) return;
 
     try {
       setIsDeleting(true);
@@ -326,6 +385,7 @@ const PdfAnnotationOverlay = ({
       showNotification?.(`❌ Delete failed: ${err.message}`, true);
     } finally {
       setIsDeleting(false);
+      setDeleteConfirm({ isOpen: false, target: null });
     }
   };
 
@@ -476,7 +536,6 @@ const PdfAnnotationOverlay = ({
   const registerAnchor = (id, node) => { if (onAnchorRef) onAnchorRef(id, node); };
   const globalColor = byType.global[0]?.color || '#f87171';
 
-  // 👇 If hiding annotations, render an empty overlay (still allows cursor style but no visuals)
   if (hideAnnotations) {
     return <div ref={overlayRef} className="absolute inset-0" style={{ zIndex: 10, pointerEvents: 'none' }} />;
   }
@@ -653,6 +712,18 @@ const PdfAnnotationOverlay = ({
           </div>
         </div>
       )}
+
+      {/* ⭐ CUSTOM DELETE CONFIRM MODAL — replaces window.confirm */}
+      <DeleteConfirmModal
+        isOpen={deleteConfirm.isOpen}
+        title="Delete Feedback"
+        message="Are you sure you want to delete this feedback? This action cannot be undone."
+        confirmLabel="Yes, Delete"
+        cancelLabel="Cancel"
+        isLoading={isDeleting}
+        onConfirm={performErase}
+        onCancel={() => setDeleteConfirm({ isOpen: false, target: null })}
+      />
     </div>
   );
 };
@@ -879,13 +950,16 @@ const SidebarProceedingsPanel = ({
   onDeleted,
   showNotification,
   userRole,
-  pageNum,              // 👈 NEW
-  pdfNumPages,          // 👈 NEW
-  setAnnotationPageNum, // 👈 NEW
+  pageNum,
+  pdfNumPages,
+  setAnnotationPageNum,
 }) => {
   const [text, setText] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(null);
+
+  // ⭐ Custom confirm modal state (replaces window.confirm)
+  const [deleteConfirm, setDeleteConfirm] = useState({ isOpen: false, target: null });
 
   const { CreateComment, DeleteComment } = useContext(CommentContext);
 
@@ -918,8 +992,16 @@ const SidebarProceedingsPanel = ({
     }
   };
 
-  const handleDelete = async (comment) => {
-    if (!window.confirm('Delete this proceedings entry?')) return;
+  // ⭐ Open custom confirm modal
+  const handleDelete = (comment) => {
+    if (!comment) return;
+    setDeleteConfirm({ isOpen: true, target: comment });
+  };
+
+  // ⭐ Actual delete (called from custom modal confirm)
+  const performDelete = async () => {
+    const comment = deleteConfirm.target;
+    if (!comment) return;
     const id = comment.backendId || comment._id || comment.id;
     setIsDeleting(id);
     try {
@@ -932,6 +1014,7 @@ const SidebarProceedingsPanel = ({
       }
     } finally {
       setIsDeleting(null);
+      setDeleteConfirm({ isOpen: false, target: null });
     }
   };
 
@@ -1033,7 +1116,6 @@ const SidebarProceedingsPanel = ({
         )}
       </div>
 
-      {/* 👇 Page navigation — always visible so panelists can navigate the PDF */}
       <div className="px-3 py-2 border-t border-blue-200 bg-blue-50 flex items-center justify-center gap-2 flex-shrink-0">
         <button disabled={pageNum <= 1} onClick={() => setAnnotationPageNum?.(p => Math.max(1, p - 1))}
           className="p-1.5 bg-white border border-blue-200 text-blue-900 rounded hover:bg-yellow-50 hover:border-yellow-400 disabled:opacity-40 transition"
@@ -1049,6 +1131,18 @@ const SidebarProceedingsPanel = ({
           <ChevronRight className="w-4 h-4" />
         </button>
       </div>
+
+      {/* ⭐ CUSTOM DELETE CONFIRM MODAL — replaces window.confirm */}
+      <DeleteConfirmModal
+        isOpen={deleteConfirm.isOpen}
+        title="Delete Proceedings"
+        message="Delete this proceedings entry? This action cannot be undone."
+        confirmLabel="Yes, Delete"
+        cancelLabel="Cancel"
+        isLoading={!!isDeleting}
+        onConfirm={performDelete}
+        onCancel={() => setDeleteConfirm({ isOpen: false, target: null })}
+      />
     </>
   );
 };
@@ -1100,9 +1194,9 @@ const SidebarPanel = ({
           onDeleted={onProceedingsDeleted}
           showNotification={showNotification}
           userRole={userRole}
-          pageNum={pageNum}                    // 👈 PASS DOWN
-          pdfNumPages={pdfNumPages}            // 👈 PASS DOWN
-          setAnnotationPageNum={setAnnotationPageNum}  // 👈 PASS DOWN
+          pageNum={pageNum}
+          pdfNumPages={pdfNumPages}
+          setAnnotationPageNum={setAnnotationPageNum}
         />
       ) : (
         <SidebarFeedbackPanel
@@ -1249,7 +1343,6 @@ export default function PdfViewer({
     }
   }, [isPanelist, sidebarTab]);
 
-  // ⭐ PROCEEDINGS — defensive derive
   const proceedings = useMemo(() => {
     const all = [];
     const seen = new Set();
@@ -1272,7 +1365,6 @@ export default function PdfViewer({
     return all.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   }, [pdfAnnotations]);
 
-  // ⭐ FEEDBACK count
   const feedbackCount = useMemo(() => {
     let count = 0;
     Object.values(pdfAnnotations || {}).forEach(list => {
@@ -1286,7 +1378,6 @@ export default function PdfViewer({
     return count;
   }, [pdfAnnotations]);
 
-  // ⭐ DEBUG
   useEffect(() => {
     console.log('═══════════════════════════════════════════');
     console.log('📦 pdfAnnotations keys:', Object.keys(pdfAnnotations || {}));
@@ -1333,7 +1424,6 @@ export default function PdfViewer({
 
   return (
     <div className="h-screen bg-gradient-to-b from-blue-100 via-blue-50 to-sky-50 flex flex-col overflow-hidden font-sans">
-      {/* HEADER */}
       <div className="bg-blue-900 border-b-4 border-yellow-400 px-4 sm:px-6 py-3 flex items-center justify-between gap-3 flex-wrap flex-shrink-0 shadow-md shadow-blue-900/20">
         <div className="flex items-center gap-3">
           <button onClick={onBack}
@@ -1362,7 +1452,6 @@ export default function PdfViewer({
         </button>
       </div>
 
-      {/* Toolbar: hidden for panelists */}
       {showAnnotationToolbar ? (
         <PdfAnnotationBar
           activeTool={annotationTool} setActiveTool={setAnnotationTool}
@@ -1385,7 +1474,6 @@ export default function PdfViewer({
       )}
 
       <div ref={splitContainerRef} className="flex-1 flex overflow-hidden relative min-h-0">
-        {/* 👇 Hide leader lines for panelists — they can't see annotations */}
         {!isPanelist && (
           <LeaderLineLayer containerRef={splitContainerRef} anchorRefs={anchorRefs} cardRefs={cardRefs}
             annotations={currentPageAnnots} hoveredId={hoveredAnnotationId} />
@@ -1449,7 +1537,7 @@ export default function PdfViewer({
                     refreshComments={refreshComments}
                     showNotification={showNotification}
                     readOnly={overlayReadOnly}
-                    hideAnnotations={isPanelist}   // 👈 HIDE annotations for panelists
+                    hideAnnotations={isPanelist}
                     onAnchorHover={setHoveredAnnotationId}
                     onAnchorRef={(id, node) => {
                       if (node) anchorRefs.current[id] = node;

@@ -409,12 +409,11 @@ exports.getSingleSection = AsyncErrorHandler(async (req, res) => {
 
 // ==========================================
 // UPDATE SECTION
+//Added formatID handling (now lives in Section)
 // ==========================================
 exports.updateSection = AsyncErrorHandler(async (req, res) => {
-    const { name, subjectId } = req.body;
+    const { name, subjectId, formatID } = req.body; 
     const sectionId = req.params.id;
-
-    console.log("Update Section Called:", req.body);
 
     // Find the section first
     const existingSection = await SectionModel.findById(sectionId);
@@ -443,10 +442,40 @@ exports.updateSection = AsyncErrorHandler(async (req, res) => {
         }
     }
 
-    // Update section
+    // ==========================================
+    //VALIDATE formatID (kung binigay)
+    // ==========================================
+    if (formatID !== undefined && formatID !== null && formatID !== '') {
+        // Check kung valid ObjectId
+        if (!require('mongoose').Types.ObjectId.isValid(formatID)) {
+            return res.status(400).json({
+                status: "fail",
+                message: "Invalid formatID",
+            });
+        }
+
+        // Check kung existing ang Format
+        const FormatModel = require('../Models/FormatSchema');
+        const formatExists = await FormatModel.findById(formatID);
+        if (!formatExists) {
+            return res.status(404).json({
+                status: "fail",
+                message: "Format not found",
+            });
+        }
+    }
+
+    // ==========================================
+    // BUILD UPDATE PAYLOAD
+    // ==========================================
     const updateData = {};
     if (name) updateData.name = name;
     if (subjectId) updateData.subjectId = subjectId;
+    
+    // ⭐ formatID — pwede null (para i-unassign), pwede valid ObjectId
+    if (formatID !== undefined) {
+        updateData.formatID = formatID || null;
+    }
 
     const section = await SectionModel.findByIdAndUpdate(
         sectionId,
@@ -457,9 +486,12 @@ exports.updateSection = AsyncErrorHandler(async (req, res) => {
         }
     );
 
-    // Populate the updated section
+    // ==========================================
+    // POPULATE — subjectId + formatID
+    // ==========================================
     const populatedResult = await SectionModel.aggregate([
         { $match: { _id: section._id } },
+        // ⭐ Lookup subject
         {
             $lookup: {
                 from: "subjects",
@@ -468,14 +500,25 @@ exports.updateSection = AsyncErrorHandler(async (req, res) => {
                 as: "subjectDetails"
             }
         },
+        // ⭐ Lookup format (bagong field)
+        {
+            $lookup: {
+                from: "formats",
+                localField: "formatID",
+                foreignField: "_id",
+                as: "formatDetails"
+            }
+        },
         {
             $addFields: {
-                subjectId: { $arrayElemAt: ["$subjectDetails", 0] }
+                subjectId: { $arrayElemAt: ["$subjectDetails", 0] },
+                formatID: { $arrayElemAt: ["$formatDetails", 0] }
             }
         },
         {
             $project: {
                 subjectDetails: 0,
+                formatDetails: 0,
                 "subjectId.__v": 0
             }
         }

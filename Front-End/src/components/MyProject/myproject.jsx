@@ -10,19 +10,20 @@ import bipsuimage from "../../assets/bipsubg.jpg"
 
 import PdfViewer from '../ReusablePDFviewer/PDFViewer';
 
-const PROJECT_IMG =bipsuimage;
+const PROJECT_IMG = bipsuimage;
 
 const GLOBAL_KEY = '__global__';
+const PROCEEDINGS_KEY = '__proceedings__';   // ⭐
+const API_BASE = (import.meta.env?.VITE_API_URL || '').replace(/\/$/, '');
 
 //SAME sequential chapters as ProposedTitle.jsx
+// ⭐ REMOVED: 'Preliminary Pages' at 'Appendices'
 const SEQUENTIAL_CHAPTERS = [
-  'Preliminary Pages',
   'Chapter 1',
   'Chapter 2',
   'Chapter 3',
   'Chapter 4',
   'Chapter 5',
-  'Appendices',
   'Full Manuscript',
 ];
 
@@ -154,6 +155,9 @@ const formatMilestoneDate = (d) => {
   }
 };
 
+// ============================
+// ⭐ Backend comment → local annotation (with proceedings support)
+// ============================
 const backendCommentToAnnotation = (comment) => {
   const pos = comment.position || {};
   const x = pos.x ?? 0.1;
@@ -161,13 +165,16 @@ const backendCommentToAnnotation = (comment) => {
   const w = pos.width ?? pos.w ?? 0.03;
   const h = pos.height ?? pos.h ?? 0.03;
 
-  let localType = 'comment';
+  // ⭐ Preserve exact annotationType
   const backendType = comment.annotationType || 'text';
+
+  let localType = 'comment';
   if (backendType === 'highlight') localType = 'highlight';
   else if (backendType === 'margin') localType = 'margin';
   else if (backendType === 'page') localType = 'page';
   else if (backendType === 'region') localType = 'region';
   else if (backendType === 'global') localType = 'global';
+  else if (backendType === 'proceedings') localType = 'proceedings';   // ⭐
 
   const author = comment.userId
     ? `${comment.userId.first_name || ''} ${comment.userId.last_name || ''}`.trim() || 'Mentor'
@@ -177,6 +184,7 @@ const backendCommentToAnnotation = (comment) => {
     id: comment._id,
     backendId: comment._id,
     type: localType,
+    annotationType: backendType,   // ⭐ preserve exact
     shape: comment.shape || pos.shape || 'rectangle',
     x, y, w, h,
     text: comment.text || '',
@@ -189,6 +197,9 @@ const backendCommentToAnnotation = (comment) => {
   };
 };
 
+// ============================
+// ⭐ Merge — preserves proceedings in dedicated key
+// ============================
 const mergeBackendCommentsIntoAnnotations = (existing, backendComments) => {
   if (!Array.isArray(backendComments) || backendComments.length === 0) return existing;
   const next = { ...existing };
@@ -202,7 +213,12 @@ const mergeBackendCommentsIntoAnnotations = (existing, backendComments) => {
     if (seenIds.has(cid)) return;
     const ann = backendCommentToAnnotation(c);
     seenIds.add(cid);
-    const key = ann.type === 'global' ? GLOBAL_KEY : `page_${ann.pageNum || 1}`;
+
+    // ⭐ Proceedings → dedicated key; otherwise page_*
+    const key = ann.annotationType === 'proceedings'
+      ? PROCEEDINGS_KEY
+      : (ann.type === 'global' ? GLOBAL_KEY : `page_${ann.pageNum || 1}`);
+
     if (!next[key]) next[key] = [];
     next[key].push(ann);
   });
@@ -549,7 +565,7 @@ export default function App() {
   const handleViewLatestUpload = async () => {
     const tracking = currentTitle?.titleUrlTracking || [];
     if (!Array.isArray(tracking) || tracking.length === 0) {
-      showNotification('⚠️ Walang upload na naka-attach sa title na ito.', true);
+      showNotification('⚠️ No upload is attached to this title.', true);
       return;
     }
 
@@ -561,7 +577,7 @@ export default function App() {
     const latest = sorted[0];
 
     if (!latest?._id) {
-      showNotification('❌ Walang valid tracking ID sa latest upload.', true);
+      showNotification('❌ No valid tracking ID found for the latest upload.', true);
       return;
     }
 
@@ -608,10 +624,11 @@ export default function App() {
       showNotification('❌ No PDF to generate', true);
       return;
     }
+    // ⭐ Exclude proceedings sa annotation count
     const total =
       (pdfAnnotations[GLOBAL_KEY] || []).length +
       Object.entries(pdfAnnotations)
-        .filter(([k]) => k !== GLOBAL_KEY)
+        .filter(([k]) => k !== GLOBAL_KEY && k !== PROCEEDINGS_KEY)
         .reduce((s, [, l]) => s + (l?.length || 0), 0);
 
     if (total === 0) {
@@ -632,8 +649,9 @@ export default function App() {
       };
 
       const globals = (pdfAnnotations[GLOBAL_KEY] || []).map(a => ({ ...a, isGlobal: true }));
+      // ⭐ Exclude proceedings sa page-specific extraction
       const pageSpecific = Object.entries(pdfAnnotations)
-        .filter(([k]) => k !== GLOBAL_KEY)
+        .filter(([k]) => k !== GLOBAL_KEY && k !== PROCEEDINGS_KEY)
         .flatMap(([key, list]) => {
           const pageNum = parseInt(key.replace('page_', ''), 10);
           return (list || []).map(a => ({ ...a, pageNum }));
@@ -703,19 +721,19 @@ export default function App() {
   };
 
   const handleAddPageComment = () => {
-    showNotification('⚠️ View-only — hindi ka pwedeng mag-add ng feedback.', true);
+    showNotification('⚠️ View-only — you cannot add feedback.', true);
   };
   const handleAddGlobalComment = () => {
-    showNotification('⚠️ View-only — hindi ka pwedeng mag-add ng feedback.', true);
+    showNotification('⚠️ View-only — you cannot add feedback.', true);
   };
   const handleClearPageViaContext = () => {
-    showNotification('⚠️ View-only — hindi ka pwedeng mag-clear ng annotations.', true);
+    showNotification('⚠️ View-only — you cannot clear annotations.', true);
   };
   const handleClearGlobalAnnotations = () => {
-    showNotification('⚠️ View-only — hindi ka pwedeng mag-clear ng annotations.', true);
+    showNotification('⚠️ View-only — you cannot clear annotations.', true);
   };
   const handleEraseFromSidebar = () => {
-    showNotification('⚠️ View-only — hindi ka pwedeng mag-delete ng feedback.', true);
+    showNotification('⚠️ View-only — you cannot delete feedback.', true);
   };
   const handleContextAction = (action) => {
     if (!textMenu) return;
@@ -724,22 +742,107 @@ export default function App() {
       setTextMenu(null);
       return;
     }
-    showNotification('⚠️ View-only — hindi ka pwedeng mag-add ng annotations.', true);
+    showNotification('⚠️ View-only — you cannot add annotations.', true);
     setTextMenu(null);
   };
+
+  // ============================================================
+  // ⭐ refreshComments — DOUBLE FETCH (feedback + proceedings)
+  // ============================================================
   const refreshComments = useCallback(async () => {
-    if (!FetchCommentsByProposedTitle || !proposedTitleId) return;
-    try { await FetchCommentsByProposedTitle(proposedTitleId, 1, 100); } catch (err) { console.warn(err); }
+    if (!proposedTitleId) return;
+
+    try {
+      // 1️⃣ Feedback (exclude proceedings sa backend)
+      if (FetchCommentsByProposedTitle) {
+        await FetchCommentsByProposedTitle(proposedTitleId, 1, 100);
+      }
+
+      // 2️⃣ Proceedings (dedicated endpoint)
+      let procRes = { data: [] };
+      try {
+        const r = await fetch(
+          `${API_BASE}/api/comments/${proposedTitleId}/proceedings`,
+          { credentials: 'include' }
+        );
+        if (r.ok) procRes = await r.json();
+      } catch (e) {
+        console.warn('⚠️ Proceedings fetch failed:', e);
+      }
+
+      console.log('═══════════════════════════════════════════');
+      console.log('📥 Proceedings fetched:', procRes?.data?.length || 0);
+      console.log('═══════════════════════════════════════════');
+
+      // 3️⃣ Merge proceedings sa pdfAnnotations
+      if ((procRes?.data || []).length > 0) {
+        setPdfAnnotations(prev => {
+          const next = { ...prev };
+          const seen = new Set();
+          Object.values(next).forEach(list => (list || []).forEach(a => {
+            if (a.id) seen.add(String(a.id));
+            if (a.backendId) seen.add(String(a.backendId));
+          }));
+
+          const procAnnots = [];
+          procRes.data.forEach(c => {
+            const cid = String(c._id);
+            if (seen.has(cid)) return;
+            seen.add(cid);
+
+            procAnnots.push({
+              id: c._id,
+              backendId: c._id,
+              type: 'proceedings',
+              annotationType: 'proceedings',
+              shape: 'rectangle',
+              x: 0, y: 0, w: 0, h: 0,
+              text: c.text || '',
+              quoted: null,
+              color: c.color || '#fbbf24',
+              author: c.userId
+                ? `${c.userId.first_name || ''} ${c.userId.last_name || ''}`.trim() || 'Mentor'
+                : 'Mentor',
+              pageNum: null,
+              createdAt: c.createdAt || new Date().toISOString(),
+              __fromBackend: true,
+            });
+          });
+
+          if (procAnnots.length > 0) {
+            next[PROCEEDINGS_KEY] = [
+              ...(next[PROCEEDINGS_KEY] || []),
+              ...procAnnots,
+            ];
+          }
+
+          console.log('📦 After merge keys:', Object.keys(next));
+          console.log('📋 Proceedings count:', next[PROCEEDINGS_KEY]?.length || 0);
+
+          return next;
+        });
+      }
+    } catch (err) {
+      console.warn('❌ refreshComments error:', err);
+    }
   }, [FetchCommentsByProposedTitle, proposedTitleId]);
+
+  // ⭐ Auto-fetch comments + proceedings kapag nag-open ng PDF viewer
+  useEffect(() => {
+    if (isViewMode && activeTrackingId) {
+      refreshComments();
+    }
+  }, [isViewMode, activeTrackingId, refreshComments]);
 
   // ============================================================
   // 🔥 RENDER: PDF VIEWER MODE
   // ============================================================
   if (isViewMode && viewSubmission) {
+    // ⭐ Exclude proceedings sa total count badge
     const totalAnnotationCount =
       (pdfAnnotations[GLOBAL_KEY] || []).length +
       Object.entries(pdfAnnotations)
-        .filter(([k]) => k !== GLOBAL_KEY)
+        .filter(([k]) => k !== GLOBAL_KEY && k !== PROCEEDINGS_KEY)
         .reduce((s, [, l]) => s + (l?.length || 0), 0);
 
     return (
@@ -1140,7 +1243,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* ⭐ Chapter Tracking — SEQUENTIAL CHAPTERS (Defense Gate Banner REMOVED) */}
+          {/* ⭐ Chapter Tracking — SEQUENTIAL CHAPTERS */}
           <div className="mt-4 bg-white rounded-xl p-6 shadow-sm">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-4">
               <div>
@@ -1238,7 +1341,7 @@ export default function App() {
             <div className="space-y-1">
               {visibleMilestones.length === 0 && (
                 <div className="text-center py-8 text-slate-500 text-xs">
-                  Walang chapter progression pa para sa title na ito.
+                  No chapter progression available for this title yet.
                 </div>
               )}
               {visibleMilestones.map((m) => (

@@ -1,7 +1,36 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { FileSpreadsheet, FileText, Download, Eye, Calendar, User } from 'lucide-react';
 
-const FormatDetailsCard = ({ formatDetails, onViewFile, onDownloadFile }) => {
+const FormatDetailsCard = ({ format, formats, onViewFile, onDownloadFile }) => {
+    // ==========================================
+    // ⭐ RESOLVE ACTIVE FORMAT
+    // Supports BOTH:
+    //   - `format` = single object (legacy)
+    //   - `formats` = array (from API response)
+    // ==========================================
+    const activeFormat = useMemo(() => {
+        // 1️⃣ If `format` is a valid object (not array) → use directly
+        if (format && typeof format === 'object' && !Array.isArray(format)) {
+            return format;
+        }
+
+        // 2️⃣ If `formats` is an array with items → get first
+        if (Array.isArray(formats) && formats.length > 0) {
+            return formats[0];
+        }
+
+        // 3️⃣ If `format` is an array → get first
+        if (Array.isArray(format) && format.length > 0) {
+            return format[0];
+        }
+
+        // 4️⃣ Nothing valid
+        return null;
+    }, [format, formats]);
+
+    // ==========================================
+    // HELPERS
+    // ==========================================
     const formatDate = (dateStr) => {
         if (!dateStr) return 'N/A';
         const d = new Date(dateStr);
@@ -14,8 +43,6 @@ const FormatDetailsCard = ({ formatDetails, onViewFile, onDownloadFile }) => {
         });
     };
 
-    console.log("formatDetails", formatDetails)
-
     const getFileNameFromUrl = (url) => {
         try {
             const parts = url.split('/');
@@ -26,8 +53,17 @@ const FormatDetailsCard = ({ formatDetails, onViewFile, onDownloadFile }) => {
         }
     };
 
+    // ==========================================
+    // DEBUG (remove in production)
+    // ==========================================
+    console.log('[FormatDetailsCard] format:', format);
+    console.log('[FormatDetailsCard] formats:', formats);
+    console.log('[FormatDetailsCard] activeFormat:', activeFormat);
+
+    // ==========================================
     // EMPTY STATE
-    if (!formatDetails) {
+    // ==========================================
+    if (!activeFormat) {
         return (
             <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 shadow-sm h-full">
                 <div className="flex items-center gap-2 mb-4">
@@ -51,8 +87,31 @@ const FormatDetailsCard = ({ formatDetails, onViewFile, onDownloadFile }) => {
         );
     }
 
-    const { titleFormat, description, type, fileUrl, createdAt, uploadedBy } = formatDetails;
+    // ==========================================
+    // EXTRACT FIELDS
+    // ==========================================
+    const {
+        titleFormat,
+        description,
+        type,
+        fileUrl,
+        createdAt,
+        uploadedBy,
+    } = activeFormat;
 
+    // Handle uploadedBy — pwedeng object (populated) o string (raw ObjectId)
+    const uploadedByName = useMemo(() => {
+        if (!uploadedBy) return 'Admin';
+        if (typeof uploadedBy === 'string') return 'Admin';  // raw ObjectId
+        return uploadedBy.username
+            || uploadedBy.email
+            || `${uploadedBy.first_name || ''} ${uploadedBy.last_name || ''}`.trim()
+            || 'Admin';
+    }, [uploadedBy]);
+
+    // ==========================================
+    // MAIN CARD
+    // ==========================================
     return (
         <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 shadow-sm h-full">
             {/* Header */}
@@ -105,7 +164,7 @@ const FormatDetailsCard = ({ formatDetails, onViewFile, onDownloadFile }) => {
                 <div className="flex items-center gap-2 text-xs">
                     <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                     <span className="text-slate-500 dark:text-slate-400 truncate">
-                        {uploadedBy?.username || uploadedBy?.email || 'Admin'}
+                        {uploadedByName}
                     </span>
                 </div>
             </div>
@@ -120,7 +179,13 @@ const FormatDetailsCard = ({ formatDetails, onViewFile, onDownloadFile }) => {
                         </span>
                     </div>
                     <button
-                        onClick={() => onViewFile?.(fileUrl, titleFormat || 'Format Document', getFileNameFromUrl(fileUrl))}
+                        onClick={() =>
+                            onViewFile?.(
+                                fileUrl,
+                                titleFormat || 'Format Document',
+                                getFileNameFromUrl(fileUrl)
+                            )
+                        }
                         className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition"
                         title="View File"
                     >

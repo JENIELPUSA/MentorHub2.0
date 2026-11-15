@@ -19,6 +19,31 @@ const signToken = (id, role, linkId) => {
 
 const SWITCHABLE_ROLES = ["panelist", "adviser"];
 
+// ==========================================
+// HELPER — normalize switchable roles array
+// ==========================================
+const normalizeSelectedRoles = (rawSelected, currentRole) => {
+  const arr = Array.isArray(rawSelected)
+    ? rawSelected
+    : rawSelected
+    ? [rawSelected]
+    : [];
+
+  const clean = [
+    ...new Set(
+      arr
+        .map((r) => String(r).trim().toLowerCase())
+        .filter((r) => SWITCHABLE_ROLES.includes(r))
+    ),
+  ];
+
+  const role = String(currentRole || "").toLowerCase();
+  if (SWITCHABLE_ROLES.includes(role) && !clean.includes(role)) {
+    clean.push(role);
+  }
+
+  return clean;
+};
 
 // ==========================================
 // SIGNUP — Create new user
@@ -103,9 +128,9 @@ exports.signup = async (req, res) => {
       suffix: suffix || "",
       username: username || "",
       password: defaultPassword,
-      confirmPassword: confirmPassword || defaultPassword, // ✅ now passed
+      confirmPassword: confirmPassword || defaultPassword,
       role: currentRole,
-      multiplerole, // ✅ array of switchable roles
+      multiplerole,
 
       departmentId: departmentId || null,
       groupId: groupId || null,
@@ -153,12 +178,8 @@ Your Referral Code: ${newUser.referralCode}
       });
     } catch (emailErr) {
       console.error("❌ Email sending failed:", emailErr);
-      // Don't cancel signup even if email fails
     }
 
-    // =========================================================
-    // REMOVE SENSITIVE DATA BEFORE RESPONDING
-    // =========================================================
     const userResponse = newUser.toObject();
     delete userResponse.password;
     delete userResponse.confirmPassword;
@@ -180,7 +201,6 @@ Your Referral Code: ${newUser.referralCode}
   } catch (error) {
     console.error("❌ Signup failed:", error);
 
-    // Duplicate key (username)
     if (error.code === 11000) {
       const field = Object.keys(error.keyPattern)[0];
       return res.status(400).json({
@@ -189,7 +209,6 @@ Your Referral Code: ${newUser.referralCode}
       });
     }
 
-    // Mongoose validation error — show which field failed
     if (error.name === "ValidationError") {
       const fields = Object.keys(error.errors);
       return res.status(400).json({
@@ -206,12 +225,146 @@ Your Referral Code: ${newUser.referralCode}
   }
 };
 
+exports.updateUser = AsyncErrorHandler(async (req, res, next) => {
+  const { id } = req.params;
 
+  if (!id) {
+    return next(new CustomError("User ID is required.", 400));
+  }
+
+  const user = await UserLogin.findById(id);
+
+  if (!user) {
+    return next(new CustomError("User not found.", 404));
+  }
+
+  // ─────────────────────────────────────────────
+  // Pull incoming fields (multipart or JSON)
+  // ─────────────────────────────────────────────
+  const {
+    first_name,
+    middle_name,
+    last_name,
+    suffix,
+    email,        // NOTE: email is immutable after creation
+    role,
+    departmentId,
+    laboratoryId,
+    statusAccount,
+    status,
+    password,
+    confirmPassword,
+    selectedrole,
+  } = req.body;
+
+  // ── Basic name fields ──
+  if (first_name !== undefined) user.first_name = first_name;
+  if (middle_name !== undefined) user.middle_name = middle_name;
+  if (last_name !== undefined) user.last_name = last_name;
+  if (suffix !== undefined) user.suffix = suffix;
+
+  // ── Email is immutable — reject kung magkaiba ──
+  if (email !== undefined && email !== "" && email !== user.username) {
+    // Optional: kung email ang ginagamit na username, huwag hayaang baguhin
+    // Kung gusto mong payagan, alisin ang block na ito.
+    return next(
+      new CustomError(
+        "Email/username cannot be changed once the account is created.",
+        400
+      )
+    );
+  }
+
+  // ── Role + switchable roles ──
+  const currentRole = (role || user.role || "student").toLowerCase();
+
+  let multiplerole = Array.isArray(user.multiplerole) ? [...user.multiplerole] : [];
+
+  if (role !== undefined) {
+    if (SWITCHABLE_ROLES.includes(currentRole)) {
+      const cleanSelected = normalizeSelectedRoles(selectedrole, currentRole);
+      multiplerole = cleanSelected;
+    } else {
+      // Non-switchable role → clear multiplerole
+      multiplerole = [];
+    }
+    user.role = currentRole;
+  } else if (selectedrole !== undefined) {
+    // Role unchanged pero may selectedrole update
+    if (SWITCHABLE_ROLES.includes(user.role)) {
+      multiplerole = normalizeSelectedRoles(selectedrole, user.role);
+    }
+  }
+
+  user.multiplerole = multiplerole;
+
+  // ── Department / lab ──
+  if (departmentId !== undefined && departmentId !== "") {
+    user.departmentId = departmentId;
+  }
+  if (laboratoryId !== undefined) {
+    user.laboratoryId = laboratoryId;
+  }
+
+  // ── Status ──
+  if (statusAccount !== undefined && statusAccount !== "") {
+    user.statusAccount = statusAccount;
+    // Sync isActive flag
+    user.isActive = statusAccount === "approved";
+  }
+  if (status !== undefined && status !== "") {
+    user.status = status;
+  }
+
+  // ── Avatar (file upload) ──
+  if (req.file) {
+    user.avatar = {
+      url: req.file.path || req.file.secure_url || "",
+      public_id: req.file.filename || req.file.public_id || "",
+    };
+  }
+
+  // ── Optional password change ──
+  if (password && password !== "") {
+    if (password.length < 8) {
+      return next(
+        new CustomError("Password must be at least 8 characters long.", 400)
+      );
+    }
+    if (confirmPassword !== undefined && confirmPassword !== password) {
+      return next(new CustomError("Passwords do not match.", 400));
+    }
+    user.password = password;
+    user.confirmPassword = password;
+    user.passwordChangedAt = Date.now();
+  }
+
+  user.updatedAt = Date.now();
+
+  await user.save();
+
+  // ─────────────────────────────────────────────
+  // Strip sensitive fields before responding
+  // ─────────────────────────────────────────────
+  const userResponse = user.toObject();
+  delete userResponse.password;
+  delete userResponse.confirmPassword;
+  delete userResponse.passwordResetToken;
+  delete userResponse.passwordResetTokenExpires;
+  delete userResponse.__v;
+
+  return res.status(200).json({
+    success: true,
+    status: "success",
+    message: "User updated successfully.",
+    data: userResponse,
+  });
+});
+
+// ============ SWITCH ROLE ============
 exports.switchRole = AsyncErrorHandler(async (req, res, next) => {
   try {
     const { userId: bodyUserId, targetRole } = req.body || {};
-
-    // ✅ Primary: userId from body
     const userId = bodyUserId || req.user?._id || req.user?.id;
 
     if (!userId) {
@@ -322,11 +475,10 @@ exports.switchRole = AsyncErrorHandler(async (req, res, next) => {
   }
 });
 
-// ============ LOGIN FUNCTION ============
+// ============ LOGIN ============
 exports.login = AsyncErrorHandler(async (req, res, next) => {
   const { email, password } = req.body;
 
-  // Include 'status' field (if not selected by default, add '+status')
   const user = await UserLogin.findOne({ username: email }).select(
     "+password +status",
   );
@@ -335,7 +487,6 @@ exports.login = AsyncErrorHandler(async (req, res, next) => {
     return next(new CustomError("Incorrect email or password", 400));
   }
 
-  // 🔒 New check: Do not allow login if status is 'In-Active'
   if (user.status === "In-Active") {
     return next(
       new CustomError("Account is inactive. Please contact support.", 403),
@@ -382,15 +533,13 @@ exports.login = AsyncErrorHandler(async (req, res, next) => {
   });
 });
 
-// ============ PROTECT MIDDLEWARE ============
+// ============ PROTECT ============
 exports.protect = AsyncErrorHandler(async (req, res, next) => {
-  // Check if user is logged in via session
   if (req.session && req.session.isLoggedIn && req.session.user) {
     req.user = req.session.user;
     return next();
   }
 
-  // Check for Bearer token in Authorization header
   const authHeader = req.headers.authorization;
   let token;
 
@@ -402,20 +551,17 @@ exports.protect = AsyncErrorHandler(async (req, res, next) => {
     return next(new CustomError("You are not logged in!", 401));
   }
 
-  // Verify JWT token
   const decoded = await util.promisify(jwt.verify)(
     token,
     process.env.SECRET_STR,
   );
 
-  // Find user by ID from token
   const user = await UserLogin.findById(decoded.id);
 
   if (!user) {
     return next(new CustomError("User no longer exists", 401));
   }
 
-  // Check if password was changed after token was issued
   const isPasswordChanged = await user.isPasswordChanged(decoded.iat);
 
   if (isPasswordChanged) {
@@ -424,7 +570,6 @@ exports.protect = AsyncErrorHandler(async (req, res, next) => {
 
   const linkId = user.linkedId || user._id;
 
-  // Attach user to request object
   req.user = {
     _id: user._id,
     username: user.username,
@@ -441,6 +586,7 @@ exports.protect = AsyncErrorHandler(async (req, res, next) => {
   next();
 });
 
+// ============ LOGOUT ============
 exports.logout = AsyncErrorHandler((req, res) => {
   req.session.destroy((err) => {
     if (err) return res.status(500).send("Logout failed.");
@@ -449,14 +595,7 @@ exports.logout = AsyncErrorHandler((req, res) => {
   });
 });
 
-exports.logout = AsyncErrorHandler((req, res) => {
-  req.session.destroy((err) => {
-    if (err) return res.status(500).send("Logout failed.");
-    res.clearCookie("connect.sid");
-    res.send("Logged out successfully!");
-  });
-});
-
+// ============ VERIFY OTP ============
 exports.verifyOtp = AsyncErrorHandler(async (req, res) => {
   const { otp, userId } = req.body;
 
@@ -497,7 +636,7 @@ exports.verifyOtp = AsyncErrorHandler(async (req, res) => {
   });
 });
 
-
+// ============ RESTRICT ============
 exports.restrict = (...roles) => {
   return (req, res, next) => {
     if (!req.user || !roles.includes(req.user.role)) {
@@ -509,43 +648,36 @@ exports.restrict = (...roles) => {
   };
 };
 
-
+// ============ FORGOT PASSWORD ============
 exports.forgotPassword = AsyncErrorHandler(async (req, res, next) => {
   const { email } = req.body;
 
-  // 🔁 Look for the user by username (which stores email in your case)
   const user = await UserLogin.findOne({ username: email });
 
-  // If user doesn't exist, return 404
   if (!user) {
     return next(
       new CustomError("We could  not find the user with given email", 404),
     );
   }
 
-  // Generate a password reset token
   const resetToken = user.createResetTokenPassword();
   await user.save({ validateBeforeSave: false });
 
-  // Generate reset URL
   const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
   const message = `We have received a password reset request. Please use the below link to reset your password:\n\n${resetUrl}\n\nThis link will expire in 10 minutes.`;
 
   try {
-    // Send password reset email
     await sendEmail({
-      email: user.username, // use username field since it holds the email
+      email: user.username,
       subject: "Password change request received",
       text: message,
     });
 
-    // Respond with success
     res.status(200).json({
       status: "Success",
       message: "Password reset link sent to the user email",
     });
   } catch (err) {
-    // Clean up if sending fails
     user.passwordResetToken = undefined;
     user.passwordResetTokenExpires = undefined;
     await user.save({ validateBeforeSave: false });
@@ -559,9 +691,7 @@ exports.forgotPassword = AsyncErrorHandler(async (req, res, next) => {
   }
 });
 
-
-
-
+// ============ RESET PASSWORD ============
 exports.resetPassword = AsyncErrorHandler(async (req, res, next) => {
   const hashedToken = crypto
     .createHash("sha256")
@@ -589,6 +719,7 @@ exports.resetPassword = AsyncErrorHandler(async (req, res, next) => {
   });
 });
 
+// ============ UPDATE PASSWORD (logged-in) ============
 exports.updatePassword = AsyncErrorHandler(async (req, res, next) => {
   const user = await UserLogin.findById(req.user._id).select("+password");
 
@@ -623,6 +754,7 @@ exports.updatePassword = AsyncErrorHandler(async (req, res, next) => {
   });
 });
 
+// ============ SELECT ACTIVE ROLE ============
 exports.selectActiveRole = AsyncErrorHandler(async (req, res, next) => {
   const { activeRole } = req.body;
   const userId = req.user._id;
@@ -643,7 +775,6 @@ exports.selectActiveRole = AsyncErrorHandler(async (req, res, next) => {
     });
   }
 
-  // Check if role is valid for this user
   const userRoles = Array.isArray(user.role) ? user.role : [user.role];
   if (!userRoles.includes(activeRole)) {
     return res.status(400).json({
@@ -653,11 +784,9 @@ exports.selectActiveRole = AsyncErrorHandler(async (req, res, next) => {
     });
   }
 
-  // Update active role
   user.activeRole = activeRole;
   await user.save();
 
-  // Update session
   if (req.session) {
     req.session.user.activeRole = activeRole;
     req.session.user.requiresRoleSelection = false;

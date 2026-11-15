@@ -189,7 +189,7 @@ const backendCommentToAnnotation = (comment) => {
   else if (backendType === 'page') localType = 'page';
   else if (backendType === 'region') localType = 'region';
   else if (backendType === 'global') localType = 'global';
-  else if (backendType === 'proceedings') localType = 'proceedings';   // ⭐ ADD
+  else if (backendType === 'proceedings') localType = 'proceedings';
 
   const author = comment.userId
     ? `${comment.userId.first_name || ''} ${comment.userId.last_name || ''}`.trim() || 'Mentor'
@@ -227,7 +227,6 @@ const mergeBackendCommentsIntoAnnotations = (existing, backendComments) => {
     const ann = backendCommentToAnnotation(c);
     seenIds.add(cid);
 
-    // ⭐ Proceedings → dedicated key; never go to page_* or __global__
     let key;
     if (isProceedings(ann)) {
       key = PROCEEDINGS_KEY;
@@ -302,6 +301,144 @@ const StatusStepper = ({ status, compact = false }) => {
   );
 };
 
+// ============================================================
+// CUSTOM PROMPT MODAL (replaces window.prompt / window.confirm)
+// ============================================================
+const PromptModal = ({ isOpen, title, message, placeholder, defaultValue, requireDelete, onConfirm, onCancel }) => {
+  const [value, setValue] = useState(defaultValue || '');
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setValue(defaultValue || '');
+      setTimeout(() => inputRef.current?.focus(), 100);
+    }
+  }, [isOpen, defaultValue]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handler = (e) => {
+      if (e.key === 'Escape') onCancel?.();
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        if (requireDelete) {
+          if (value.trim().toUpperCase() === 'DELETE') onConfirm?.(value);
+        } else {
+          if (value.trim()) onConfirm?.(value);
+        }
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [isOpen, value, requireDelete, onConfirm, onCancel]);
+
+  if (!isOpen) return null;
+
+  const canSubmit = requireDelete ? value.trim().toUpperCase() === 'DELETE' : value.trim().length > 0;
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-blue-950/60 backdrop-blur-sm" onClick={onCancel} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md border border-blue-200 overflow-hidden">
+        <div className="bg-blue-900 px-5 py-3 border-b-4 border-yellow-400">
+          <h3 className="text-sm font-bold text-white flex items-center gap-2">
+            <MessageSquare className="w-4 h-4 text-yellow-300" />
+            {title || 'Input'}
+          </h3>
+        </div>
+        <div className="p-5 space-y-3">
+          {message && (
+            <p className="text-xs text-slate-600 whitespace-pre-line leading-relaxed">{message}</p>
+          )}
+          <textarea
+            ref={inputRef}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder={placeholder || (requireDelete ? 'Type DELETE to confirm' : 'Type here...')}
+            rows={requireDelete ? 1 : 3}
+            className="w-full px-3 py-2 text-xs bg-blue-50 border border-blue-200 rounded-xl text-slate-800 placeholder:text-blue-400 outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 resize-none"
+          />
+          {requireDelete && value.length > 0 && value.trim().toUpperCase() !== 'DELETE' && (
+            <p className="text-[10px] text-rose-600 font-medium">Type DELETE exactly to confirm</p>
+          )}
+        </div>
+        <div className="px-5 pb-4 flex items-center justify-end gap-2">
+          <button
+            onClick={onCancel}
+            className="px-3 py-1.5 text-xs font-medium text-blue-900 bg-blue-100 hover:bg-blue-200 rounded-lg transition"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => onConfirm?.(value)}
+            disabled={!canSubmit}
+            className={`px-3 py-1.5 text-xs font-medium text-white rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed ${
+              requireDelete ? 'bg-rose-600 hover:bg-rose-700' : 'bg-blue-900 hover:bg-blue-950'
+            }`}
+          >
+            {requireDelete ? 'Delete' : 'Confirm'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ============================================================
+// CUSTOM CONFIRM MODAL (replaces window.confirm for simple yes/no)
+// ============================================================
+const SimpleConfirmModal = ({ isOpen, title, message, confirmLabel, cancelLabel, color, icon: Icon, onConfirm, onCancel }) => {
+  useEffect(() => {
+    if (!isOpen) return;
+    const handler = (e) => {
+      if (e.key === 'Escape') onCancel?.();
+      if (e.key === 'Enter') onConfirm?.();
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [isOpen, onConfirm, onCancel]);
+
+  if (!isOpen) return null;
+
+  const colorMap = {
+    blue: { header: 'bg-blue-900', accent: 'border-yellow-400', btn: 'bg-blue-900 hover:bg-blue-950 text-white' },
+    yellow: { header: 'bg-blue-900', accent: 'border-yellow-400', btn: 'bg-yellow-400 hover:bg-yellow-300 text-blue-950' },
+    rose: { header: 'bg-rose-600', accent: 'border-rose-300', btn: 'bg-rose-600 hover:bg-rose-700 text-white' },
+    emerald: { header: 'bg-blue-900', accent: 'border-yellow-400', btn: 'bg-blue-900 hover:bg-blue-950 text-white' },
+    cyan: { header: 'bg-blue-900', accent: 'border-yellow-400', btn: 'bg-cyan-600 hover:bg-cyan-700 text-white' },
+    purple: { header: 'bg-purple-600', accent: 'border-purple-300', btn: 'bg-purple-600 hover:bg-purple-700 text-white' },
+  };
+  const c = colorMap[color] || colorMap.blue;
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-blue-950/60 backdrop-blur-sm" onClick={onCancel} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md border border-blue-200 overflow-hidden">
+        <div className={`${c.header} px-5 py-3 border-b-4 ${c.accent} flex items-center gap-2`}>
+          {Icon && <Icon className="w-4 h-4 text-yellow-300" />}
+          <h3 className="text-sm font-bold text-white">{title || 'Confirm'}</h3>
+        </div>
+        <div className="p-5">
+          <p className="text-xs text-slate-700 whitespace-pre-line leading-relaxed">{message}</p>
+        </div>
+        <div className="px-5 pb-4 flex items-center justify-end gap-2">
+          <button
+            onClick={onCancel}
+            className="px-3 py-1.5 text-xs font-medium text-blue-900 bg-blue-100 hover:bg-blue-200 rounded-lg transition"
+          >
+            {cancelLabel || 'Cancel'}
+          </button>
+          <button
+            onClick={onConfirm}
+            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition ${c.btn}`}
+          >
+            {confirmLabel || 'Confirm'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // ============================================================
 // MAIN COMPONENT
@@ -380,6 +517,90 @@ export default function ProposedTitle() {
 
   const [isSavingPdf, setIsSavingPdf] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
+
+  // ============================================================
+  // CUSTOM PROMPT MODAL STATE (replaces window.prompt)
+  // ============================================================
+  const [promptModal, setPromptModal] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    placeholder: '',
+    defaultValue: '',
+    requireDelete: false,
+    onConfirm: null,
+    onCancel: null,
+  });
+
+  const openPrompt = useCallback((config) => {
+    setPromptModal({
+      isOpen: true,
+      title: config.title || 'Input',
+      message: config.message || '',
+      placeholder: config.placeholder || '',
+      defaultValue: config.defaultValue || '',
+      requireDelete: config.requireDelete || false,
+      onConfirm: config.onConfirm || null,
+      onCancel: config.onCancel || null,
+    });
+  }, []);
+
+  const closePrompt = useCallback(() => {
+    setPromptModal(prev => {
+      if (prev.onCancel) prev.onCancel();
+      return { isOpen: false, title: '', message: '', placeholder: '', defaultValue: '', requireDelete: false, onConfirm: null, onCancel: null };
+    });
+  }, []);
+
+  const confirmPrompt = useCallback((value) => {
+    setPromptModal(prev => {
+      if (prev.onConfirm) prev.onConfirm(value);
+      return { isOpen: false, title: '', message: '', placeholder: '', defaultValue: '', requireDelete: false, onConfirm: null, onCancel: null };
+    });
+  }, []);
+
+  // ============================================================
+  // CUSTOM SIMPLE CONFIRM MODAL STATE (replaces window.confirm)
+  // ============================================================
+  const [simpleConfirm, setSimpleConfirm] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmLabel: 'Confirm',
+    cancelLabel: 'Cancel',
+    color: 'blue',
+    icon: null,
+    onConfirm: null,
+    onCancel: null,
+  });
+
+  const openSimpleConfirm = useCallback((config) => {
+    setSimpleConfirm({
+      isOpen: true,
+      title: config.title || 'Confirm',
+      message: config.message || '',
+      confirmLabel: config.confirmLabel || 'Confirm',
+      cancelLabel: config.cancelLabel || 'Cancel',
+      color: config.color || 'blue',
+      icon: config.icon || null,
+      onConfirm: config.onConfirm || null,
+      onCancel: config.onCancel || null,
+    });
+  }, []);
+
+  const closeSimpleConfirm = useCallback(() => {
+    setSimpleConfirm(prev => {
+      if (prev.onCancel) prev.onCancel();
+      return { isOpen: false, title: '', message: '', confirmLabel: 'Confirm', cancelLabel: 'Cancel', color: 'blue', icon: null, onConfirm: null, onCancel: null };
+    });
+  }, []);
+
+  const acceptSimpleConfirm = useCallback(() => {
+    setSimpleConfirm(prev => {
+      if (prev.onConfirm) prev.onConfirm();
+      return { isOpen: false, title: '', message: '', confirmLabel: 'Confirm', cancelLabel: 'Cancel', color: 'blue', icon: null, onConfirm: null, onCancel: null };
+    });
+  }, []);
 
   const proposedTitleId = useMemo(() => {
     if (!viewSubmission) return activeTrackingId || null;
@@ -598,29 +819,35 @@ export default function ProposedTitle() {
     }
 
     const isFinal = nextChapter === 'Full Manuscript';
-    const confirmed = window.confirm(
-      isFinal
-        ? `🎓 Proceed FULL MANUSCRIPT?\n\nThis will UNLOCK the Defense buttons for:\n"${item.title}"`
-        : `Proceed "${nextChapter}" for:\n"${item.title}"?\n\nThis will unlock the next chapter for the student.`
-    );
-    if (!confirmed) return;
 
-    setRowProceedingId(item._id);
-    try {
-      const result = await ProceedChapter(item._id, nextChapter, '');
-      if (result.success) {
-        showNotification(
-          isFinal
-            ? `🎓 Full Manuscript proceeded! Defense button UNLOCKED!`
-            : ` ${nextChapter} proceeded! ${result.nextChapter ? `${result.nextChapter} unlocked.` : 'All chapters complete!'}`
-        );
-        await FetchProposedTitles(contextCurrentPage, rowsPerPage, search, dateFrom, dateTo, statusFilter, groupIdFilter);
-      } else {
-        showNotification(`❌ Failed: ${result.error}`, true);
-      }
-    } finally {
-      setRowProceedingId(null);
-    }
+    openSimpleConfirm({
+      title: isFinal ? '🎓 Proceed Full Manuscript?' : `Proceed ${nextChapter}?`,
+      message: isFinal
+        ? `This will UNLOCK the Defense buttons for:\n"${item.title}"`
+        : `Proceed "${nextChapter}" for:\n"${item.title}"?\n\nThis will unlock the next chapter for the student.`,
+      confirmLabel: isFinal ? 'Yes, Proceed & Unlock' : `Proceed ${nextChapter}`,
+      cancelLabel: 'Cancel',
+      color: isFinal ? 'yellow' : 'blue',
+      icon: isFinal ? Award : ArrowRight,
+      onConfirm: async () => {
+        setRowProceedingId(item._id);
+        try {
+          const result = await ProceedChapter(item._id, nextChapter, '');
+          if (result.success) {
+            showNotification(
+              isFinal
+                ? `🎓 Full Manuscript proceeded! Defense button UNLOCKED!`
+                : ` ${nextChapter} proceeded! ${result.nextChapter ? `${result.nextChapter} unlocked.` : 'All chapters complete!'}`
+            );
+            await FetchProposedTitles(contextCurrentPage, rowsPerPage, search, dateFrom, dateTo, statusFilter, groupIdFilter);
+          } else {
+            showNotification(`❌ Failed: ${result.error}`, true);
+          }
+        } finally {
+          setRowProceedingId(null);
+        }
+      },
+    });
   };
 
   // ============================================================
@@ -796,7 +1023,6 @@ export default function ProposedTitle() {
 
     const itemCheck = currentRows.find(r => String(r._id) === String(id));
 
-    // ⭐ Ready for Defense can only be set once the proposal is in Defense Scheduling
     if (itemCheck && itemCheck.status !== 'for_schedule') {
       showNotification('⚠️ Ready for Defense can only be set once the proposal is in Defense Scheduling', true);
       return;
@@ -811,17 +1037,26 @@ export default function ProposedTitle() {
       return;
     }
 
-    if (!window.confirm('Mark this thesis/capstone as Ready for Defense?')) return;
-    try {
-      const item = currentRows.find(r => String(r._id) === String(id));
-      if (!item) { showNotification('❌ Proposal not found', true); return; }
-      if (!(item.adviser === true && item.coAdviser === true)) { showNotification('⚠️ Both adviser and co-adviser must approve first', true); return; }
-      const result = await UpdateProposedTitle(id, { status: 'Ready for Defense' });
-      if (result.success) {
-        showNotification('🛡️ Marked as Ready for Defense!');
-        FetchProposedTitles(contextCurrentPage, rowsPerPage, search, dateFrom, dateTo, statusFilter, groupIdFilter);
-      } else { showNotification(`❌ Failed: ${result.error}`, true); }
-    } catch (error) { showNotification(`❌ Failed: ${error.message}`, true); }
+    openSimpleConfirm({
+      title: 'Mark Ready for Defense',
+      message: 'Mark this thesis/capstone as Ready for Defense?',
+      confirmLabel: 'Yes, Mark Ready',
+      cancelLabel: 'Cancel',
+      color: 'yellow',
+      icon: Shield,
+      onConfirm: async () => {
+        try {
+          const item = currentRows.find(r => String(r._id) === String(id));
+          if (!item) { showNotification('❌ Proposal not found', true); return; }
+          if (!(item.adviser === true && item.coAdviser === true)) { showNotification('⚠️ Both adviser and co-adviser must approve first', true); return; }
+          const result = await UpdateProposedTitle(id, { status: 'Ready for Defense' });
+          if (result.success) {
+            showNotification('🛡️ Marked as Ready for Defense!');
+            FetchProposedTitles(contextCurrentPage, rowsPerPage, search, dateFrom, dateTo, statusFilter, groupIdFilter);
+          } else { showNotification(`❌ Failed: ${result.error}`, true); }
+        } catch (error) { showNotification(`❌ Failed: ${error.message}`, true); }
+      },
+    });
   };
 
   const showNotification = (msg, isError = false) => {
@@ -884,104 +1119,154 @@ export default function ProposedTitle() {
     if (!canAnnotate) { showNotification('⚠️ View-only — you cannot clear annotations.', true); return; }
     const annotations = pdfAnnotations[`page_${annotationPageNum}`] || [];
     if (annotations.length === 0) { showNotification('⚠️ No annotations on this page', true); return; }
-    if (!window.confirm(`Delete all ${annotations.length} annotation(s) on page ${annotationPageNum}?`)) return;
-    try {
-      setIsClearing(true);
-      const res = await ClearPageAnnotations(proposedTitleId, annotationPageNum);
-      if (!res?.success) { showNotification(`❌ Clear failed: ${res?.error || 'Unknown'}`, true); return; }
-      setPdfAnnotations(prev => ({ ...prev, [`page_${annotationPageNum}`]: [] }));
-      await refreshComments();
-      showNotification(` Cleared ${res.deletedCount || annotations.length} annotation(s)`);
-    } catch (err) {
-      showNotification(`❌ Failed: ${err.message}`, true);
-    } finally {
-      setIsClearing(false);
-    }
+
+    openPrompt({
+      title: 'Clear Page Annotations',
+      message: `Delete all ${annotations.length} annotation(s) on page ${annotationPageNum}? This cannot be undone.\n\nType DELETE to confirm.`,
+      placeholder: 'Type DELETE to confirm',
+      requireDelete: true,
+      onConfirm: async (typed) => {
+        if (typed.trim().toUpperCase() !== 'DELETE') {
+          showNotification('❌ Type DELETE exactly to confirm', true);
+          return;
+        }
+        try {
+          setIsClearing(true);
+          const res = await ClearPageAnnotations(proposedTitleId, annotationPageNum);
+          if (!res?.success) { showNotification(`❌ Clear failed: ${res?.error || 'Unknown'}`, true); return; }
+          setPdfAnnotations(prev => ({ ...prev, [`page_${annotationPageNum}`]: [] }));
+          await refreshComments();
+          showNotification(` Cleared ${res.deletedCount || annotations.length} annotation(s)`);
+        } catch (err) {
+          showNotification(`❌ Failed: ${err.message}`, true);
+        } finally {
+          setIsClearing(false);
+        }
+      },
+    });
   };
 
   const handleAddPageComment = async (pageNum) => {
     if (!canAnnotate) { showNotification('⚠️ View-only — you cannot add feedback.', true); return; }
-    const value = window.prompt(`Page ${pageNum} — Describe the issue (e.g., "Wrong font", "Formatting issue"):`);
-    if (!value?.trim()) return;
     if (!proposedTitleId) { showNotification('❌ Missing proposedTitleId', true); return; }
-    try {
-      const res = await CreateComment(proposedTitleId, {
-        text: value.trim(), pageNumber: pageNum, position: null,
-        selectedText: null, color: annotationColor,
-        annotationType: 'page', annotationLabel: 'Page Feedback', shape: 'pin',
-      });
-      if (res?.success) await refreshComments();
-      else if (res?.error) showNotification(`❌ ${res.error}`, true);
-    } catch (err) {
-      showNotification(`❌ Failed: ${err.message}`, true);
-    }
+
+    openPrompt({
+      title: `Page ${pageNum} Feedback`,
+      message: 'Describe the issue (e.g., "Wrong font", "Formatting issue").',
+      placeholder: 'Type your page feedback...',
+      onConfirm: async (value) => {
+        if (!value?.trim()) return;
+        try {
+          const res = await CreateComment(proposedTitleId, {
+            text: value.trim(), pageNumber: pageNum, position: null,
+            selectedText: null, color: annotationColor,
+            annotationType: 'page', annotationLabel: 'Page Feedback', shape: 'pin',
+          });
+          if (res?.success) await refreshComments();
+          else if (res?.error) showNotification(`❌ ${res.error}`, true);
+        } catch (err) {
+          showNotification(`❌ Failed: ${err.message}`, true);
+        }
+      },
+    });
   };
 
   const handleAddGlobalComment = async () => {
     if (!canAnnotate) { showNotification('⚠️ View-only — you cannot add feedback.', true); return; }
-    const value = window.prompt('🌐 Applies to ALL pages — Describe the issue (e.g., "Wrong font used throughout"):');
-    if (!value?.trim()) return;
     if (!proposedTitleId) { showNotification('❌ Missing proposedTitleId', true); return; }
-    try {
-      const res = await CreateComment(proposedTitleId, {
-        text: value.trim(), pageNumber: null, position: null,
-        selectedText: null, color: '#f87171',
-        annotationType: 'global', annotationLabel: 'All Pages Feedback', shape: 'pin',
-      });
-      if (res?.success) await refreshComments();
-      else if (res?.error) showNotification(`❌ ${res.error}`, true);
-    } catch (err) {
-      showNotification(`❌ Failed: ${err.message}`, true);
-    }
+
+    openPrompt({
+      title: '🌐 All Pages Feedback',
+      message: 'Applies to ALL pages — Describe the issue (e.g., "Wrong font used throughout").',
+      placeholder: 'Type your all-pages feedback...',
+      onConfirm: async (value) => {
+        if (!value?.trim()) return;
+        try {
+          const res = await CreateComment(proposedTitleId, {
+            text: value.trim(), pageNumber: null, position: null,
+            selectedText: null, color: '#f87171',
+            annotationType: 'global', annotationLabel: 'All Pages Feedback', shape: 'pin',
+          });
+          if (res?.success) await refreshComments();
+          else if (res?.error) showNotification(`❌ ${res.error}`, true);
+        } catch (err) {
+          showNotification(`❌ Failed: ${err.message}`, true);
+        }
+      },
+    });
   };
 
   const handleClearGlobalAnnotations = async () => {
     if (!canAnnotate) { showNotification('⚠️ View-only — you cannot clear annotations.', true); return; }
     const globals = pdfAnnotations[GLOBAL_KEY] || [];
     if (globals.length === 0) return;
-    if (!window.confirm(`Delete all ${globals.length} "All Pages" feedback?`)) return;
-    try {
-      setIsClearing(true);
-      for (const g of globals) {
-        const backendId = g.backendId || (g.__fromBackend ? g.id : null);
-        if (backendId && DeleteComment) {
-          try { await DeleteComment(backendId); } catch (err) { console.warn(err); }
+
+    openPrompt({
+      title: 'Clear All-Pages Feedback',
+      message: `Delete all ${globals.length} "All Pages" feedback? This cannot be undone.\n\nType DELETE to confirm.`,
+      placeholder: 'Type DELETE to confirm',
+      requireDelete: true,
+      onConfirm: async (typed) => {
+        if (typed.trim().toUpperCase() !== 'DELETE') {
+          showNotification('❌ Type DELETE exactly to confirm', true);
+          return;
         }
-      }
-      setPdfAnnotations(prev => {
-        const next = { ...prev };
-        delete next[GLOBAL_KEY];
-        return next;
-      });
-      await refreshComments();
-      showNotification(' All global feedback removed');
-    } catch (err) {
-      showNotification(`❌ Failed: ${err.message}`, true);
-    } finally {
-      setIsClearing(false);
-    }
+        try {
+          setIsClearing(true);
+          for (const g of globals) {
+            const backendId = g.backendId || (g.__fromBackend ? g.id : null);
+            if (backendId && DeleteComment) {
+              try { await DeleteComment(backendId); } catch (err) { console.warn(err); }
+            }
+          }
+          setPdfAnnotations(prev => {
+            const next = { ...prev };
+            delete next[GLOBAL_KEY];
+            return next;
+          });
+          await refreshComments();
+          showNotification(' All global feedback removed');
+        } catch (err) {
+          showNotification(`❌ Failed: ${err.message}`, true);
+        } finally {
+          setIsClearing(false);
+        }
+      },
+    });
   };
 
   const handleEraseFromSidebar = async (target) => {
     if (!canAnnotate || !target) return;
     const isBackend = target.__fromBackend === true || !!target.backendId;
     const backendId = target.backendId || (target.__fromBackend ? target.id : null);
-    if (!window.confirm('Delete this feedback?')) return;
-    try {
-      if (isBackend && backendId && DeleteComment) {
-        const res = await DeleteComment(backendId);
-        if (!res?.success) { showNotification(`❌ Delete failed: ${res?.error || 'Unknown error'}`, true); return; }
-      }
-      const pageKey = target.type === 'global' ? 'global' : (target.pageNum || annotationPageNum);
-      setPdfAnnotations(prev => {
-        const key = pageKey === 'global' ? GLOBAL_KEY : `page_${pageKey}`;
-        return { ...prev, [key]: (prev[key] || []).filter(a => a.id !== target.id) };
-      });
-      await refreshComments();
-      showNotification(' Feedback deleted');
-    } catch (err) {
-      showNotification(`❌ Failed: ${err.message}`, true);
-    }
+
+    openPrompt({
+      title: 'Delete Feedback',
+      message: 'Are you sure you want to delete this feedback? This cannot be undone.\n\nType DELETE to confirm.',
+      placeholder: 'Type DELETE to confirm',
+      requireDelete: true,
+      onConfirm: async (typed) => {
+        if (typed.trim().toUpperCase() !== 'DELETE') {
+          showNotification('❌ Type DELETE exactly to confirm', true);
+          return;
+        }
+        try {
+          if (isBackend && backendId && DeleteComment) {
+            const res = await DeleteComment(backendId);
+            if (!res?.success) { showNotification(`❌ Delete failed: ${res?.error || 'Unknown error'}`, true); return; }
+          }
+          const pageKey = target.type === 'global' ? 'global' : (target.pageNum || annotationPageNum);
+          setPdfAnnotations(prev => {
+            const key = pageKey === 'global' ? GLOBAL_KEY : `page_${pageKey}`;
+            return { ...prev, [key]: (prev[key] || []).filter(a => a.id !== target.id) };
+          });
+          await refreshComments();
+          showNotification(' Feedback deleted');
+        } catch (err) {
+          showNotification(`❌ Failed: ${err.message}`, true);
+        }
+      },
+    });
   };
 
   // ============================================================
@@ -990,7 +1275,6 @@ export default function ProposedTitle() {
   const handleSaveAnnotatedPdf = async () => {
     if (!pdfBlobUrl || !activeTrackingId) { showNotification('❌ No PDF to generate', true); return; }
 
-    // ⭐ Exclude proceedings — hindi dapat i-bake sa PDF
     const globals = (pdfAnnotations[GLOBAL_KEY] || [])
       .filter(a => !isProceedings(a))
       .map(a => ({ ...a, isGlobal: true }));
@@ -1404,7 +1688,6 @@ export default function ProposedTitle() {
       }
     };
 
-    // ⭐ Exclude proceedings — hindi dapat bilangin bilang feedback
     const totalAnnotationCount =
       (pdfAnnotations[GLOBAL_KEY] || []).filter(a => !isProceedings(a)).length +
       Object.entries(pdfAnnotations)
@@ -1412,60 +1695,85 @@ export default function ProposedTitle() {
         .reduce((s, [, l]) => s + (l || []).filter(a => !isProceedings(a)).length, 0);
 
     return (
-      <PdfViewer
-        viewSubmission={viewSubmission}
-        activeTrackingId={activeTrackingId}
-        proposedTitleId={proposedTitleId}
-        pdfBlobUrl={pdfBlobUrl}
-        pdfBlobLoading={pdfBlobLoading}
-        pdfBlobError={pdfBlobError}
-        pdfAnnotations={pdfAnnotations}
-        setPdfAnnotations={setPdfAnnotations}
-        annotationTool={annotationTool}
-        setAnnotationTool={setAnnotationTool}
-        annotationColor={annotationColor}
-        setAnnotationColor={setAnnotationColor}
-        annotationPageNum={annotationPageNum}
-        setAnnotationPageNum={setAnnotationPageNum}
-        pdfNumPages={pdfNumPages}
-        setPdfNumPages={setPdfNumPages}
-        pdfScale={pdfScale}
-        setPdfScale={setPdfScale}
-        pdfPageSize={pdfPageSize}
-        setPdfPageSize={setPdfPageSize}
-        textMenu={textMenu}
-        setTextMenu={setTextMenu}
-        externalComment={externalComment}
-        setExternalComment={setExternalComment}
-        hoveredAnnotationId={hoveredAnnotationId}
-        setHoveredAnnotationId={setHoveredAnnotationId}
-        canAnnotate={canAnnotate}
-        effectiveReadOnly={effectiveReadOnly}
-        splitContainerRef={splitContainerRef}
-        anchorRefs={anchorRefs}
-        cardRefs={cardRefs}
-        isSavingPdf={isSavingPdf}
-        totalAnnotationCount={totalAnnotationCount}
-        onBack={handleBackToList}
-        onSavePdf={handleSaveAnnotatedPdf}
-        onRetryFetch={() => {
-          setPdfBlobError(null);
-          setPdfBlobLoading(true);
-          GetPdfBlobUrl(activeTrackingId).then(url => {
-            if (url) setPdfBlobUrl(url);
-            else setPdfBlobError('Failed to load PDF');
-            setPdfBlobLoading(false);
-          });
-        }}
-        onAddPageComment={handleAddPageComment}
-        onAddGlobalComment={handleAddGlobalComment}
-        onClearPage={handleClearPageViaContext}
-        onClearGlobalAnnotations={handleClearGlobalAnnotations}
-        onEraseFromSidebar={handleEraseFromSidebar}
-        onContextAction={handleContextAction}
-        refreshComments={refreshComments}
-        showNotification={showNotification}
-      />
+      <>
+        <PdfViewer
+          viewSubmission={viewSubmission}
+          activeTrackingId={activeTrackingId}
+          proposedTitleId={proposedTitleId}
+          pdfBlobUrl={pdfBlobUrl}
+          pdfBlobLoading={pdfBlobLoading}
+          pdfBlobError={pdfBlobError}
+          pdfAnnotations={pdfAnnotations}
+          setPdfAnnotations={setPdfAnnotations}
+          annotationTool={annotationTool}
+          setAnnotationTool={setAnnotationTool}
+          annotationColor={annotationColor}
+          setAnnotationColor={setAnnotationColor}
+          annotationPageNum={annotationPageNum}
+          setAnnotationPageNum={setAnnotationPageNum}
+          pdfNumPages={pdfNumPages}
+          setPdfNumPages={setPdfNumPages}
+          pdfScale={pdfScale}
+          setPdfScale={setPdfScale}
+          pdfPageSize={pdfPageSize}
+          setPdfPageSize={setPdfPageSize}
+          textMenu={textMenu}
+          setTextMenu={setTextMenu}
+          externalComment={externalComment}
+          setExternalComment={setExternalComment}
+          hoveredAnnotationId={hoveredAnnotationId}
+          setHoveredAnnotationId={setHoveredAnnotationId}
+          canAnnotate={canAnnotate}
+          effectiveReadOnly={effectiveReadOnly}
+          splitContainerRef={splitContainerRef}
+          anchorRefs={anchorRefs}
+          cardRefs={cardRefs}
+          isSavingPdf={isSavingPdf}
+          totalAnnotationCount={totalAnnotationCount}
+          onBack={handleBackToList}
+          onSavePdf={handleSaveAnnotatedPdf}
+          onRetryFetch={() => {
+            setPdfBlobError(null);
+            setPdfBlobLoading(true);
+            GetPdfBlobUrl(activeTrackingId).then(url => {
+              if (url) setPdfBlobUrl(url);
+              else setPdfBlobError('Failed to load PDF');
+              setPdfBlobLoading(false);
+            });
+          }}
+          onAddPageComment={handleAddPageComment}
+          onAddGlobalComment={handleAddGlobalComment}
+          onClearPage={handleClearPageViaContext}
+          onClearGlobalAnnotations={handleClearGlobalAnnotations}
+          onEraseFromSidebar={handleEraseFromSidebar}
+          onContextAction={handleContextAction}
+          refreshComments={refreshComments}
+          showNotification={showNotification}
+        />
+
+        <PromptModal
+          isOpen={promptModal.isOpen}
+          title={promptModal.title}
+          message={promptModal.message}
+          placeholder={promptModal.placeholder}
+          defaultValue={promptModal.defaultValue}
+          requireDelete={promptModal.requireDelete}
+          onConfirm={confirmPrompt}
+          onCancel={closePrompt}
+        />
+
+        <SimpleConfirmModal
+          isOpen={simpleConfirm.isOpen}
+          title={simpleConfirm.title}
+          message={simpleConfirm.message}
+          confirmLabel={simpleConfirm.confirmLabel}
+          cancelLabel={simpleConfirm.cancelLabel}
+          color={simpleConfirm.color}
+          icon={simpleConfirm.icon}
+          onConfirm={acceptSimpleConfirm}
+          onCancel={closeSimpleConfirm}
+        />
+      </>
     );
   }
 
@@ -1484,7 +1792,29 @@ export default function ProposedTitle() {
 
         <ConfirmModal isOpen={confirmModal.isOpen} config={confirmModal.config} onConfirm={handleConfirmModal} onCancel={handleCancelConfirm} isLoading={isProcessing} />
 
-        {/* Progression Modal */}
+        <PromptModal
+          isOpen={promptModal.isOpen}
+          title={promptModal.title}
+          message={promptModal.message}
+          placeholder={promptModal.placeholder}
+          defaultValue={promptModal.defaultValue}
+          requireDelete={promptModal.requireDelete}
+          onConfirm={confirmPrompt}
+          onCancel={closePrompt}
+        />
+
+        <SimpleConfirmModal
+          isOpen={simpleConfirm.isOpen}
+          title={simpleConfirm.title}
+          message={simpleConfirm.message}
+          confirmLabel={simpleConfirm.confirmLabel}
+          cancelLabel={simpleConfirm.cancelLabel}
+          color={simpleConfirm.color}
+          icon={simpleConfirm.icon}
+          onConfirm={acceptSimpleConfirm}
+          onCancel={closeSimpleConfirm}
+        />
+
         {progressionModalItem && (
           <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-blue-950/60 backdrop-blur-sm" onClick={isProceedingChapter ? undefined : handleCloseProgressionModal} />
@@ -1529,7 +1859,6 @@ export default function ProposedTitle() {
 
         {customError && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">{customError}</div>}
 
-        {/* HEADER — navy blue with yellow accent */}
         <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-blue-900 p-6 rounded-2xl shadow-md border-b-4 border-yellow-400">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-blue-800 text-yellow-300 rounded-xl"><BookOpen className="w-6 h-6" /></div>
@@ -1543,7 +1872,6 @@ export default function ProposedTitle() {
           </div>
         </header>
 
-        {/* ⭐ FILTER BAR — white card with blue inputs */}
         <div className="bg-white p-4 rounded-2xl border border-blue-200 shadow-md shadow-blue-900/10">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div className="relative md:col-span-1">
@@ -1574,7 +1902,6 @@ export default function ProposedTitle() {
           </div>
         </div>
 
-        {/* ⭐ TABLE CARD */}
         <div className="bg-white rounded-2xl border border-blue-200 shadow-md shadow-blue-900/10 overflow-hidden">
           {isLoading ? (
             <div className="flex items-center justify-center py-12">

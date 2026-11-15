@@ -209,13 +209,16 @@ export const Header = () => {
 
     const getPriorityColor = (priority) => {
         const colors = {
-            High: "text-rose-600",
-            Normal: "text-blue-600",
             Low: "text-slate-500",
             Urgent: "text-rose-700",
         };
         return colors[priority] || "text-slate-500";
     };
+
+    // ✅ Only render priority badge when it's Low or Urgent
+    const HIDDEN_PRIORITIES = ["Normal", "High"];
+    const shouldShowPriority = (priority) =>
+        Boolean(priority) && !HIDDEN_PRIORITIES.includes(priority);
 
     const getTimeAgo = (dateString) => {
         if (!dateString) return "Just now";
@@ -424,7 +427,8 @@ export const Header = () => {
                                                             <span className="text-[10px] font-medium text-slate-400">
                                                                 {getTimeAgo(notif.createdAt)}
                                                             </span>
-                                                            {notif.priority && (
+                                                            {/* ✅ Priority hidden when Normal or High */}
+                                                            {shouldShowPriority(notif.priority) && (
                                                                 <span
                                                                     className={`text-[10px] font-semibold ${getPriorityColor(
                                                                         notif.priority
