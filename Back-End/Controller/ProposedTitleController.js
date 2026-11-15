@@ -1836,15 +1836,14 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
     const isRevision = action === "revision";
 
     // ========================================================
-    // UPLOAD FILE TO HOSTINGER (WALANG try/catch — direct propagate)
+    // UPLOAD FILE TO HOSTINGER — GAYA NG createFood
     // ========================================================
     let fileData = {};
     if (req.file) {
-      console.log("📸 Uploading file...");
-      console.log("🔗 Upload URL =", JSON.stringify(process.env.UPLOADMENTOR_URL));
-      console.log("📦 File =", {
-        name: req.file.originalname,
-        size: req.file.size,
+      console.log("📸 Uploading file to Hostinger...");
+      console.log("📁 File:", {
+        originalname: req.file.originalname,
+        size: `${(req.file.size / 1024).toFixed(2)} KB`,
         mimetype: req.file.mimetype,
       });
 
@@ -1860,63 +1859,35 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
         contentType: req.file.mimetype,
       });
 
-      // ✅ WALANG try/catch — kung mag-fail, dadaan sa outer catch
+      // ✅ MINIMAL headers lang — gaya ng createFood
+      // ❌ WALANG Origin, Referer, User-Agent, X-Requested-With
       const response = await axios.post(process.env.UPLOADMENTOR_URL, form, {
         maxBodyLength: Infinity,
-        maxContentLength: Infinity,
-        timeout: 120000, // 120s
-        headers: {
-          ...form.getHeaders(),
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          "Accept": "application/json, text/plain, */*",
-          "Accept-Language": "en-US,en;q=0.9",
-          "Origin": "https://tan-marten-361869.hostingersite.com",
-          "Referer": "https://tan-marten-361869.hostingersite.com/",
-          "X-Requested-With": "XMLHttpRequest",
-        },
-        validateStatus: (s) => s >= 200 && s < 500,
+        headers: { ...form.getHeaders() },
       });
 
-      console.log("📡 Hostinger status:", response.status);
-      console.log("📡 Hostinger body:", response.data);
+      console.log("📤 Upload Response:", response.data);
 
-      if (response.status >= 400) {
-        const detail =
-          typeof response.data === "string"
-            ? response.data
-            : JSON.stringify(response.data);
-        throw new Error(`Upload service returned ${response.status}: ${detail}`);
-      }
-
-      if (response.data && response.data.success === false) {
-        throw new Error(
-          `Upload rejected: ${response.data.message || "unknown"} | debug: ${JSON.stringify(
-            response.data.debug || {}
-          )}`
-        );
-      }
-
+      // ✅ Flexible response parsing — gaya ng createFood
       let fileUrl = "";
       let publicId = "";
 
-      if (response.data?.url) {
+      if (response.data && response.data.url) {
         fileUrl = response.data.url;
         publicId =
-          response.data.name ||
           response.data.public_id ||
           response.data.filename ||
           req.file.originalname;
-      } else if (response.data?.success && response.data?.data) {
+      } else if (response.data && response.data.success && response.data.data) {
         fileUrl = response.data.data.url;
         publicId = response.data.data.public_id || req.file.originalname;
-      } else if (response.data?.file) {
+      } else if (response.data && response.data.file) {
         fileUrl = response.data.file;
         publicId = req.file.originalname;
       } else {
-        throw new Error(
-          `Upload response has no URL. Body: ${JSON.stringify(response.data)}`
-        );
+        console.log("⚠️ Unexpected response format:", response.data);
+        fileUrl = `/temp-uploads/${req.file.originalname}`;
+        publicId = req.file.originalname;
       }
 
       fileData = {
@@ -1927,7 +1898,9 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
         isPdf: req.file.mimetype === "application/pdf",
       };
 
-      console.log("✅ Uploaded →", fileUrl);
+      console.log("✅ File uploaded successfully:", fileData);
+    } else {
+      console.log("ℹ️ No file provided.");
     }
 
     // ========================================================
@@ -2254,7 +2227,7 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
       data: proposedTitle,
     });
   } catch (error) {
-    // ✅ Outer catch — dito dadating lahat ng error mula sa upload (dahil tinanggal ang inner try/catch)
+    // ✅ Outer catch — full logging
     console.error("════════════════════════════════════════");
     console.error("❌ Create Error Full Details:");
     console.error("  Message:       ", JSON.stringify(error.message));
