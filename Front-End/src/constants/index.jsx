@@ -58,6 +58,11 @@ export const navbarLinks = [
                 icon: FileText,
                 path: "/dashboard/propose-title",
             },
+            {
+                label: "Department Management",
+                icon: FileText,
+                path: "/dashboard/department",
+            },
         ],
     },
     {

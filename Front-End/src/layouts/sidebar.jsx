@@ -32,8 +32,8 @@ export const Sidebar = forwardRef(({ collapsed, onLogout }, ref) => {
             "/dashboard/Add-User",
             "/dashboard/Add-Subject",
             "/dashboard/archived",
-            "/dashboard/logs-audit", "/dashboard/my-researchGroups", "/dashboard/defense-calendar","/dashboard/propose-title",
-            
+            "/dashboard/logs-audit", "/dashboard/my-researchGroups", "/dashboard/defense-calendar", "/dashboard/propose-title", "/dashboard/department"
+
         ],
         panelist: [
             "/dashboard",
@@ -54,8 +54,8 @@ export const Sidebar = forwardRef(({ collapsed, onLogout }, ref) => {
         adviser: [
             "/dashboard",
             "/dashboard/defense_schedule",
-            "/dashboard/archived","/dashboard/propose-title"
-          
+            "/dashboard/archived", "/dashboard/propose-title"
+
         ],
     };
 

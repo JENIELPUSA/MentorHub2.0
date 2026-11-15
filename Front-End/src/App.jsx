@@ -19,6 +19,7 @@ import ManuscriptUpload from "./components/ManuscriptUpload/manuscriptupload"
 import MyResearchGroups from "./components/PanelistDashboard/MyResearchGroups";
 import DefenseCalendar from "./components/Subject_InstructorDashboard/DefenseCalendar";
 import ProposedTopics from "./components/PanelistDashboard/ProposedTopics";
+import DepartmentManager from "./components/DepartmentManager/departmentmanager";
 
 function App() {
     const router = createBrowserRouter([
@@ -94,8 +95,10 @@ function App() {
                             path: "/dashboard/proposedTopics",
                             element: <ProposedTopics />,
                         },
-
-
+                        {
+                            path: "/dashboard/department",
+                            element: <DepartmentManager />,
+                        }
                     ],
                 },
             ],

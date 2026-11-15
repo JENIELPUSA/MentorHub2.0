@@ -1,10 +1,12 @@
 const AsyncErrorHandler = require("../Utils/AsyncErrorHandler");
 const ProposedTitleModel = require("./../Models/ProposedTitle");
+const GroupModel = require("../Models/GroupName")
 const path = require("path");
 const mongoose = require("mongoose");
 const axios = require("axios");
 const FormData = require("form-data");
 const fs = require("fs");
+const UserLoginModel = require("../Models/LogInSchema")
 
 
 const { pdf } = require("pdf-to-img");
@@ -1087,9 +1089,6 @@ exports.GetProposedTitleStatistics = AsyncErrorHandler(async (req, res) => {
   });
 });
 
-// ============================================================
-// GET BY TRACKING ID — robust role check (panelist included)
-// ============================================================
 exports.GetByTrackingID = AsyncErrorHandler(async (req, res) => {
   const { trackingId } = req.params;
 
@@ -1097,13 +1096,9 @@ exports.GetByTrackingID = AsyncErrorHandler(async (req, res) => {
     return res.status(400).json({ status: "fail", message: "trackingId is required" });
   }
 
-  // FIX: Trim at tanggalin ang extra characters (::, spaces, quotes)
   const cleanedTrackingId = String(trackingId)
     .trim()
     .replace(/[:"'\s]+/g, "");
-
-  console.log("🔍 Original trackingId:", JSON.stringify(trackingId));
-  console.log("🔍 Cleaned trackingId:", JSON.stringify(cleanedTrackingId));
 
   if (!mongoose.Types.ObjectId.isValid(cleanedTrackingId)) {
     return res.status(400).json({
@@ -1114,102 +1109,201 @@ exports.GetByTrackingID = AsyncErrorHandler(async (req, res) => {
 
   const role = (req.user.role || "").toLowerCase().trim();
   const userId = req.user._id;
-  const userObjectId = new mongoose.Types.ObjectId(userId);
   const userIdStr = String(userId);
   const trackingObjectId = new mongoose.Types.ObjectId(cleanedTrackingId);
 
-  //  ALWAYS match the tracking first
-  const matchStage = { "titleUrlTracking._id": trackingObjectId };
-  if (role === "student") matchStage.uploadedBy = userObjectId;
-
-  const result = await ProposedTitleModel.aggregate([
-    { $match: matchStage },
-    {
-      $lookup: {
-        from: "groups",
-        localField: "groupId",
-        foreignField: "_id",
-        as: "groupInfo",
-      },
-    },
-    { $unwind: { path: "$groupInfo", preserveNullAndEmptyArrays: true } },
-    { $limit: 1 },
-  ]);
-
-  const submission = result[0];
-  if (!submission) {
-    return res.status(404).json({
+  // ============================================================
+  // STEP 1: FETCH ProposedTitle
+  // ============================================================
+  let submission;
+  try {
+    submission = await ProposedTitleModel.findOne({
+      "titleUrlTracking._id": trackingObjectId,
+    }).lean();
+  } catch (err) {
+    console.error("❌ [STEP 1] Error:", err);
+    return res.status(500).json({
       status: "fail",
-      message: "Submission not found",
+      message: "Error fetching submission",
+      detail: err.message,
+    });
+  }
+
+  if (!submission) {
+    return res.status(404).json({ status: "fail", message: "Submission not found" });
+  }
+
+  console.log("📄 ProposedTitle found:", {
+    _id: String(submission._id),
+    groupId: String(submission.groupId || ""),
+    uploadedBy: String(submission.uploadedBy || ""),
+  });
+
+  // ============================================================
+  // STEP 2: FETCH Group
+  // ============================================================
+  const groupId = submission.groupId;
+  let group = null;
+
+  if (groupId) {
+    try {
+      group = await GroupModel.findById(groupId).lean();
+    } catch (err) {
+      console.error("❌ [STEP 2] Error fetching Group:", err);
+    }
+  }
+
+  if (!group) {
+    console.warn("⚠️ Group not found for groupId:", String(groupId || ""));
+  } else {
+    console.log("📦 Group found:", {
+      _id: String(group._id),
+      name: group.name,
+      referralCode: group.referralCode,
+      membersCount: (group.members || []).length,
     });
   }
 
   // ============================================================
-  //  POST-QUERY ROLE CHECK (JS-based — handles ALL formats)
+  // STEP 3: ROLE-SPECIFIC ACCESS CHECK
   // ============================================================
-  const groupInfo = submission.groupInfo || {};
+  const groupInfo = group || {};
   const toStrArr = (v) => {
     if (!v) return [];
     const arr = Array.isArray(v) ? v : [v];
-    return arr.map((x) => String(x?._id || x?.userId || x?.user?._id || x)).filter(Boolean);
+    return arr
+      .map((x) => {
+        if (x == null) return null;
+        if (typeof x === "object" && x._id) return String(x._id);
+        if (typeof x === "object" && x.userId) return String(x.userId);
+        if (typeof x === "object" && x.user && x.user._id) return String(x.user._id);
+        return String(x);
+      })
+      .filter(Boolean);
   };
 
-  const isAdviser = [
-    groupInfo.adviserId,
-    groupInfo.adviser?._id,
-    groupInfo.adviser,
-    ...toStrArr(groupInfo.advisers),
-    ...toStrArr(groupInfo.assignedAdviser),
-  ].filter(Boolean).map(String).includes(userIdStr);
+  let hasAccess = false;
+  const accessFlags = {};
 
-  const isCoAdviser = [
-    groupInfo.coadviserId,
-    groupInfo.coAdviserId,
-    groupInfo.coadviser?._id,
-    groupInfo.coAdviser?._id,
-    groupInfo.coadviser,
-    groupInfo.coAdviser,
-    ...toStrArr(groupInfo.coadvisers),
-    ...toStrArr(groupInfo.coAdvisers),
-    ...toStrArr(groupInfo.assignedCoAdviser),
-  ].filter(Boolean).map(String).includes(userIdStr);
+  // ============================================================
+  // ⭐ STUDENT ROLE — gamitin ang referredBy check
+  // ============================================================
+  if (role === "student") {
+    // ⭐ Special case: kung siya ang uploader, may access agad
+    const isUploader = String(submission.uploadedBy) === userIdStr;
+    accessFlags.isUploader = isUploader;
 
-  const isPanelist = [
-    ...toStrArr(groupInfo.panelistIds),
-    ...toStrArr(groupInfo.panelists),
-    ...toStrArr(groupInfo.assignedPanelists),
-    ...toStrArr(groupInfo.panelMembers),
-    ...toStrArr(groupInfo.panelMemberIds),
-    ...toStrArr(groupInfo.panel),
-    ...toStrArr(groupInfo.panelIds),
-  ].includes(userIdStr);
+    if (isUploader) {
+      hasAccess = true;
+      console.log("✅ STUDENT ACCESS: uploader ng submission");
+    } else {
+      // ⭐ Check referredBy → referralCode
+      let currentUser = null;
+      try {
+        currentUser = await UserLoginModel.findById(userId)
+          .select("_id referredBy first_name last_name email role")
+          .lean();
+      } catch (err) {
+        console.error("❌ [STUDENT] Error fetching UserLogin:", err);
+      }
 
-  const isSubjectInstructor = role === "subject_instructor";
-  const isAdmin = ["admin", "organizer"].includes(role);
-  const isStudent = role === "student" && String(submission.uploadedBy) === userIdStr;
+      const userReferredBy = currentUser?.referredBy
+        ? String(currentUser.referredBy).trim().toUpperCase()
+        : null;
+      const groupReferralCode = group?.referralCode
+        ? String(group.referralCode).trim().toUpperCase()
+        : null;
 
-  const hasAccess =
-    isAdviser || isCoAdviser || isPanelist || isSubjectInstructor || isAdmin || isStudent;
+      const isMemberViaReferredBy =
+        !!userReferredBy &&
+        !!groupReferralCode &&
+        userReferredBy === groupReferralCode;
+
+      accessFlags.userReferredBy = userReferredBy;
+      accessFlags.groupReferralCode = groupReferralCode;
+      accessFlags.isMemberViaReferredBy = isMemberViaReferredBy;
+
+      // ⭐ Fallback: check din sa Group.members array kung may laman
+      const groupMembers = toStrArr(groupInfo.members);
+      const isMemberViaArray = groupMembers.includes(userIdStr);
+      accessFlags.isMemberViaArray = isMemberViaArray;
+      accessFlags.groupMembers = groupMembers;
+
+      hasAccess = isMemberViaReferredBy || isMemberViaArray;
+
+      console.log("🔍 STUDENT MEMBERSHIP CHECK:", {
+        userIdStr,
+        isUploader,
+        userReferredBy,
+        groupReferralCode,
+        isMemberViaReferredBy,
+        isMemberViaArray,
+        hasAccess,
+      });
+    }
+  }
+
+  // ============================================================
+  // ⭐ NON-STUDENT ROLES
+  // ============================================================
+  else {
+    const isAdviser = [
+      groupInfo.adviserId,
+      groupInfo.adviser?._id,
+      groupInfo.adviser,
+      ...toStrArr(groupInfo.advisers),
+      ...toStrArr(groupInfo.assignedAdviser),
+    ]
+      .filter(Boolean)
+      .map(String)
+      .includes(userIdStr);
+
+    const isCoAdviser = [
+      groupInfo.coadviserId,
+      groupInfo.coAdviserId,
+      groupInfo.coadviser?._id,
+      groupInfo.coAdviser?._id,
+      groupInfo.coadviser,
+      groupInfo.coAdviser,
+      ...toStrArr(groupInfo.coadvisers),
+      ...toStrArr(groupInfo.coAdvisers),
+      ...toStrArr(groupInfo.assignedCoAdviser),
+    ]
+      .filter(Boolean)
+      .map(String)
+      .includes(userIdStr);
+
+    const isPanelist = [
+      ...toStrArr(groupInfo.panelistIds),
+      ...toStrArr(groupInfo.panelists),
+      ...toStrArr(groupInfo.assignedPanelists),
+      ...toStrArr(groupInfo.panelMembers),
+      ...toStrArr(groupInfo.panelMemberIds),
+      ...toStrArr(groupInfo.panel),
+      ...toStrArr(groupInfo.panelIds),
+    ].includes(userIdStr);
+
+    const isSubjectInstructor = role === "subject_instructor";
+    const isAdmin = ["admin", "organizer"].includes(role);
+
+    accessFlags.isAdviser = isAdviser;
+    accessFlags.isCoAdviser = isCoAdviser;
+    accessFlags.isPanelist = isPanelist;
+    accessFlags.isSubjectInstructor = isSubjectInstructor;
+    accessFlags.isAdmin = isAdmin;
+
+    hasAccess =
+      isAdviser ||
+      isCoAdviser ||
+      isPanelist ||
+      isSubjectInstructor ||
+      isAdmin;
+  }
+
+  console.log("🧮 ACCESS FLAGS:", { role, userIdStr, ...accessFlags, hasAccess });
 
   if (!hasAccess) {
-    console.warn(
-      `[GetByTrackingID] ⚠️ 403 DENIED — role="${role}" userId="${userIdStr}"`,
-      {
-        isAdviser,
-        isCoAdviser,
-        isPanelist,
-        isStudent,
-        isSubjectInstructor,
-        isAdmin,
-        groupPanelistFields: {
-          panelistIds: groupInfo.panelistIds,
-          panelists: groupInfo.panelists,
-          panelMembers: groupInfo.panelMembers,
-          assignedPanelists: groupInfo.assignedPanelists,
-        },
-      }
-    );
-
+    console.warn(`[GetByTrackingID] ⚠️ 403 DENIED — role="${role}" userId="${userIdStr}"`);
     return res.status(403).json({
       status: "fail",
       message: "You are not allowed to access this submission",
@@ -1217,11 +1311,12 @@ exports.GetByTrackingID = AsyncErrorHandler(async (req, res) => {
   }
 
   // ============================================================
-  // FIND TRACKING ENTRY & RESOLVE URL
+  // STEP 4: FIND TRACKING ENTRY & RESOLVE URL
   // ============================================================
-  const tracking = submission.titleUrlTracking?.find(
-    (t) => String(t._id) === cleanedTrackingId
-  );
+  const tracking = Array.isArray(submission.titleUrlTracking)
+    ? submission.titleUrlTracking.find((t) => String(t._id) === cleanedTrackingId)
+    : null;
+
   const remoteUrl = tracking?.url || tracking?.titleUrl || submission.fileUrl;
 
   if (!remoteUrl) {
@@ -1229,7 +1324,7 @@ exports.GetByTrackingID = AsyncErrorHandler(async (req, res) => {
   }
 
   // ============================================================
-  // STREAM PDF FROM CLOUDINARY
+  // STEP 5: STREAM PDF
   // ============================================================
   try {
     console.log("📄 Fetching PDF from Cloudinary:", remoteUrl);
@@ -1256,19 +1351,37 @@ exports.GetByTrackingID = AsyncErrorHandler(async (req, res) => {
     }
     res.setHeader("Cache-Control", "private, max-age=300");
 
+    remoteResponse.data.on("error", (streamErr) => {
+      console.error("❌ [STEP 5] Stream error:", streamErr.message);
+      if (!res.headersSent) {
+        res.status(502).json({
+          status: "fail",
+          message: "Stream interrupted",
+          detail: streamErr.message,
+        });
+      } else {
+        res.end();
+      }
+    });
+
     remoteResponse.data.pipe(res);
   } catch (err) {
-    console.error("❌ PDF Proxy Error:", err.message);
+    console.error("❌ [STEP 5] PDF Proxy Error:", err.message);
     if (!res.headersSent) {
       return res.status(502).json({
         status: "fail",
         message: "Failed to fetch PDF",
         detail: err.message,
       });
+    } else {
+      try {
+        res.end();
+      } catch (endErr) {
+        console.error("❌ Error ending response:", endErr.message);
+      }
     }
   }
 });
-
 
 exports.DisplayProposedTitles = AsyncErrorHandler(async (req, res) => {
   const page = parseInt(req.query.page) || 1;

@@ -173,9 +173,6 @@ const deleteFromCloudinary = async (publicId) => {
   }
 };
 
-// ============================================================
-// ⭐ UPDATE AVATAR — SAME STYLE AS UpdateFood
-// ============================================================
 exports.updateAvatar = AsyncErrorHandler(async (req, res, next) => {
   const userId = req.user?._id || req.user?.id;
 
@@ -424,10 +421,10 @@ exports.signup = async (req, res) => {
       multiplerole = cleanSelected;
     }
 
-    //  Default avatar
+    // ⭐ Default avatar
     let avatarData = { url: "", public_id: "" };
 
-    //  Kung may uploaded avatar, i-save agad
+    // ⭐ Kung may uploaded avatar, i-save agad
     if (req.file) {
       const validation = validateAvatarFile(req.file);
       if (!validation.valid) {
@@ -449,10 +446,10 @@ exports.signup = async (req, res) => {
         };
       } catch (err) {
         console.error("⚠️ Avatar save failed:", err.message);
-        // Continue — user still created without avatar
       }
     }
 
+    // ⭐ CREATE USER
     const newUser = new UserLogin({
       avatar: avatarData,
       first_name: first_name || "",
@@ -486,7 +483,10 @@ exports.signup = async (req, res) => {
 
     await newUser.save();
 
-    const text = `
+    // ============================================================
+    // ⭐ FIRE-AND-FORGET EMAIL — hindi na hinihintay
+    // ============================================================
+    const emailText = `
 Welcome, ${first_name || username}!
 
 Your account has been created successfully.
@@ -500,16 +500,18 @@ Your Default Password is: ${defaultPassword}
 Your Referral Code: ${newUser.referralCode}
     `;
 
-    try {
-      await sendEmail({
+    // ✅ Background email — walang await, walang block sa response
+    setImmediate(() => {
+      sendEmail({
         email: username,
         subject: "Your Account Credentials",
-        text,
+        text: emailText,
+      }).catch((emailErr) => {
+        console.error("❌ Email sending failed (background):", emailErr);
       });
-    } catch (emailErr) {
-      console.error("❌ Email sending failed:", emailErr);
-    }
+    });
 
+    // ⭐ RESPONSE AGAD — ~200-500ms lang (imbes na 3-10s)
     const userResponse = newUser.toObject();
     delete userResponse.password;
     delete userResponse.confirmPassword;
@@ -520,7 +522,7 @@ Your Referral Code: ${newUser.referralCode}
     return res.status(201).json({
       success: true,
       status: "Success",
-      message: "Account created successfully. Credentials sent to your email.",
+      message: "Account created successfully. Credentials will be sent to your email shortly.",
       data: {
         user: userResponse,
         role: currentRole,

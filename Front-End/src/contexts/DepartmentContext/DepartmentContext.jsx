@@ -1,3 +1,4 @@
+// DepartmentContext.js
 import { createContext, useState, useCallback, useEffect } from "react";
 import axios from "axios";
 
@@ -9,17 +10,26 @@ export const DepartmentProvider = ({ children }) => {
 
   const BASE_URL = import.meta.env.VITE_REACT_APP_BACKEND_BASEURL;
 
+  // ⭐ Helper: tanggapin kahit anong 2xx + valid payload
+  const isSuccessResponse = (res) => {
+    if (!res) return false;
+    // HTTP 2xx = success
+    if (res.status >= 200 && res.status < 300) return true;
+    return false;
+  };
+
   // GET ALL DEPARTMENTS
   const fetchDepartments = useCallback(async () => {
     try {
       setIsLoading(true);
+      const res = await axios.get(`${BASE_URL}/api/v1/departments`);
 
-      const res = await axios.get(`${BASE_URL}/api/v1/Department`);
-
-      if (res.data?.status === "success") {
-        setDepartments(res.data.data);
+      if (isSuccessResponse(res)) {
+        const list = res.data?.data || res.data || [];
+        setDepartments(Array.isArray(list) ? list : []);
+      } else {
+        console.warn("⚠️ fetchDepartments unexpected:", res.data);
       }
-
     } catch (error) {
       console.error("Fetch Departments Error:", error);
     } finally {
@@ -30,22 +40,30 @@ export const DepartmentProvider = ({ children }) => {
   // CREATE DEPARTMENT
   const createDepartment = async (values) => {
     try {
-      const res = await axios.post(
-        `${BASE_URL}/api/v1/departments`,
-        values
-      );
+      const res = await axios.post(`${BASE_URL}/api/v1/departments`, values);
 
-      if (res.data?.status === "success") {
+      console.log("📥 createDepartment response:", {
+        status: res.status,
+        data: res.data,
+      });
+
+      if (isSuccessResponse(res)) {
         await fetchDepartments();
-
-        return { success: true, data: res.data.data };
+        return { success: true, data: res.data?.data || res.data };
       }
 
-      return { success: false };
-    } catch (error) {
       return {
         success: false,
-        error: error.response?.data?.message || "Error creating department",
+        error: res.data?.message || `HTTP ${res.status}`,
+      };
+    } catch (error) {
+      console.error("❌ createDepartment error:", error.response?.data || error);
+      return {
+        success: false,
+        error:
+          error.response?.data?.message ||
+          error.message ||
+          "Error creating department",
       };
     }
   };
@@ -53,22 +71,33 @@ export const DepartmentProvider = ({ children }) => {
   // UPDATE DEPARTMENT
   const updateDepartment = async (id, values) => {
     try {
-      const res = await axios.put(
+      const res = await axios.patch(
         `${BASE_URL}/api/v1/departments/${id}`,
         values
       );
 
-      if (res.data?.status === "success") {
-        await fetchDepartments();
+      console.log("📥 updateDepartment response:", {
+        status: res.status,
+        data: res.data,
+      });
 
-        return { success: true, data: res.data.data };
+      if (isSuccessResponse(res)) {
+        await fetchDepartments();
+        return { success: true, data: res.data?.data || res.data };
       }
 
-      return { success: false };
-    } catch (error) {
       return {
         success: false,
-        error: error.response?.data?.message || "Error updating department",
+        error: res.data?.message || `HTTP ${res.status}`,
+      };
+    } catch (error) {
+      console.error("❌ updateDepartment error:", error.response?.data || error);
+      return {
+        success: false,
+        error:
+          error.response?.data?.message ||
+          error.message ||
+          "Error updating department",
       };
     }
   };
@@ -76,21 +105,24 @@ export const DepartmentProvider = ({ children }) => {
   // DELETE DEPARTMENT
   const deleteDepartment = async (id) => {
     try {
-      const res = await axios.delete(
-        `${BASE_URL}/api/v1/departments/${id}`
-      );
+      const res = await axios.delete(`${BASE_URL}/api/v1/departments/${id}`);
 
-      if (res.data?.status === "success") {
+      if (isSuccessResponse(res)) {
         await fetchDepartments();
-
         return { success: true };
       }
 
-      return { success: false };
+      return {
+        success: false,
+        error: res.data?.message || `HTTP ${res.status}`,
+      };
     } catch (error) {
       return {
         success: false,
-        error: error.response?.data?.message || "Error deleting department",
+        error:
+          error.response?.data?.message ||
+          error.message ||
+          "Error deleting department",
       };
     }
   };

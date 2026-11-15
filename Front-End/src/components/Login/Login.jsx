@@ -146,6 +146,9 @@ const normalizeTitle = (doc) => {
     authorList: memberNames.length ? memberNames : [doc?.uploaderName].filter(Boolean),
     advisor: adviserName || "—",
     coAdvisor: coAdviserName,
+    // ⭐ NEW: raw objects for Avatar
+    advisorInfo: doc?.adviserInfo || null,
+    coAdvisorInfo: doc?.coadviserInfo || null,
     ref: `Ref: ${doc?.referralCode || "—"} • Uploaded ${createdAt} • By ${doc?.uploaderName || "—"}`,
     abstract: doc?.description || "No abstract provided.",
     pdf: doc?.fileUrl || latestTracking?.url || null,
@@ -1458,12 +1461,7 @@ export default function BiPSUMentoringHub() {
                       <div className="relative aspect-[3/4] overflow-hidden bg-blue-50">
                         <PdfImage item={t} />
 
-                        {t.latestTracking?.chapter && (
-                          <div className="absolute top-2 left-2 bg-yellow-400 text-blue-950 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider shadow z-10">
-                            {t.latestTracking.chapter}
-                          </div>
-                        )}
-
+                        {/* PDF badge only — chapter badge removed */}
                         <div className="absolute top-2 right-2 bg-blue-900/90 text-yellow-300 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider shadow z-10">
                           PDF
                         </div>
@@ -1500,20 +1498,33 @@ export default function BiPSUMentoringHub() {
                             </div>
                           )}
 
+                          {/* ⭐ Adviser with Avatar */}
                           {t.advisor && t.advisor !== "—" && (
-                            <div className="text-[10px] text-blue-100 mb-2 truncate">
-                              <span className="font-semibold text-white">Adviser:</span>{" "}
-                              {t.advisor}
+                            <div className="flex items-center gap-1.5 mb-1.5 min-w-0">
+                              <Avatar name={t.advisor} size="xs" ring={false} />
+                              <div className="text-[10px] text-blue-100 truncate">
+                                <span className="font-semibold text-white">Adviser:</span>{" "}
+                                {t.advisor}
+                              </div>
                             </div>
                           )}
 
-                          {t.latestTracking && (
-                            <div className="text-[9px] text-blue-200 pt-2 border-t border-white/10 flex items-center justify-between mb-2">
-                              <span className="font-semibold text-yellow-300">
-                                {t.latestTracking.chapter || "—"}
-                              </span>
+                          {/* ⭐ Co-Adviser with Avatar */}
+                          {t.coAdvisor && (
+                            <div className="flex items-center gap-1.5 mb-1.5 min-w-0">
+                              <Avatar name={t.coAdvisor} size="xs" ring={false} />
+                              <div className="text-[10px] text-blue-100 truncate">
+                                <span className="font-semibold text-white">Co-Adviser:</span>{" "}
+                                {t.coAdvisor}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Latest tracking: action only — chapter removed */}
+                          {t.latestTracking?.action && (
+                            <div className="text-[9px] text-blue-200 pt-2 border-t border-white/10 flex items-center justify-end mb-2">
                               <span className="capitalize">
-                                {t.latestTracking.action || ""}
+                                {t.latestTracking.action}
                               </span>
                             </div>
                           )}
@@ -1948,30 +1959,40 @@ export default function BiPSUMentoringHub() {
                     </div>
                   )}
 
-                  {((selectedArchive.advisor && selectedArchive.advisor !== "—") || selectedArchive.coAdvisor) && (
+                  {/* ⭐ Adviser & Co-Adviser with Avatar — driven by raw *Info objects */}
+                  {((selectedArchive.advisorInfo || selectedArchive.advisor) || (selectedArchive.coAdvisorInfo || selectedArchive.coAdvisor)) && (
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(10rem, 1fr))", gap: "0.75rem", marginTop: "1.25rem" }}>
-                      {selectedArchive.advisor && selectedArchive.advisor !== "—" && (
+                      {(selectedArchive.advisorInfo || (selectedArchive.advisor && selectedArchive.advisor !== "—")) && (
                         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                          <Avatar name={selectedArchive.advisor} size="md" ring={false} />
+                          <Avatar
+                            name={selectedArchive.advisorInfo ? formatFullName(selectedArchive.advisorInfo) : selectedArchive.advisor}
+                            size="md"
+                            ring={false}
+                          />
                           <div style={{ minWidth: 0 }}>
                             <div style={{ fontSize: "0.5625rem", fontWeight: 700, color: C.secondary, textTransform: "uppercase", letterSpacing: "0.05em" }}>
                               Adviser
                             </div>
                             <div style={{ fontSize: "0.75rem", color: C.onSurface }}>
-                              {selectedArchive.advisor}
+                              {selectedArchive.advisorInfo ? formatFullName(selectedArchive.advisorInfo) : selectedArchive.advisor}
                             </div>
                           </div>
                         </div>
                       )}
-                      {selectedArchive.coAdvisor && (
+
+                      {(selectedArchive.coAdvisorInfo || selectedArchive.coAdvisor) && (
                         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                          <Avatar name={selectedArchive.coAdvisor} size="md" ring={false} />
+                          <Avatar
+                            name={selectedArchive.coAdvisorInfo ? formatFullName(selectedArchive.coAdvisorInfo) : selectedArchive.coAdvisor}
+                            size="md"
+                            ring={false}
+                          />
                           <div style={{ minWidth: 0 }}>
                             <div style={{ fontSize: "0.5625rem", fontWeight: 700, color: C.secondary, textTransform: "uppercase", letterSpacing: "0.05em" }}>
                               Co-Adviser
                             </div>
                             <div style={{ fontSize: "0.75rem", color: C.onSurface }}>
-                              {selectedArchive.coAdvisor}
+                              {selectedArchive.coAdvisorInfo ? formatFullName(selectedArchive.coAdvisorInfo) : selectedArchive.coAdvisor}
                             </div>
                           </div>
                         </div>
@@ -1979,16 +2000,9 @@ export default function BiPSUMentoringHub() {
                     </div>
                   )}
 
-                  {selectedArchive.latestTracking && (
-                    <div style={{ marginTop: "1.25rem", background: C.surfaceContainerLow, padding: "0.5rem 0.75rem", borderRadius: "0.5rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <div>
-                        <div style={{ fontSize: "0.5625rem", fontWeight: 700, color: C.secondary, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                          Latest Upload
-                        </div>
-                        <div style={{ fontSize: "0.75rem", color: C.primary, fontWeight: 600 }}>
-                          {selectedArchive.latestTracking.chapter || "—"}
-                        </div>
-                      </div>
+                  {/* Latest Upload: action only — chapter removed */}
+                  {selectedArchive.latestTracking?.action && (
+                    <div style={{ marginTop: "1.25rem", background: C.surfaceContainerLow, padding: "0.5rem 0.75rem", borderRadius: "0.5rem", display: "flex", alignItems: "center", justifyContent: "flex-end" }}>
                       <span style={{ fontSize: "0.6875rem", color: C.onSurfaceVariant, textTransform: "capitalize" }}>
                         {selectedArchive.latestTracking.action}
                       </span>

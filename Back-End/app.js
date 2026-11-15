@@ -66,7 +66,7 @@ const uploadsDir = path.join(__dirname, "..", "uploads");
 app.use("/api/v1/announcement", Announcement);
 app.use("/api/v1/qms", Qms);
 app.use("/api/v1/authentication", authentic);
-app.use("/api/v1/Department", DepartmentRoute);
+app.use("/api/v1/departments", DepartmentRoute);
 app.use("/api/v1/subjects", SubjectRoute);
 app.use("/api/v1/userStudent", StudentUserRoute);
 app.use("/api/v1/sections", SectionRoute)
