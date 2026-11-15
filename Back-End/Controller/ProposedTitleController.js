@@ -1836,7 +1836,7 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
     const isRevision = action === "revision";
 
     // ========================================================
-    // UPLOAD FILE TO HOSTINGER — GAYA NG createFood
+    // UPLOAD FILE TO HOSTINGER
     // ========================================================
     let fileData = {};
     if (req.file) {
@@ -1847,7 +1847,17 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
         mimetype: req.file.mimetype,
       });
 
-      if (!process.env.UPLOADMENTOR_URL) {
+      // ✅ NORMALIZE URL — tanggalin ang dobleng https://
+      let uploadUrl = process.env.UPLOADMENTOR_URL || "";
+      uploadUrl = uploadUrl.replace(/^(https?:\/\/)+/i, "");
+      if (uploadUrl && !/^https?:\/\//i.test(uploadUrl)) {
+        uploadUrl = "https://" + uploadUrl;
+      }
+
+      console.log("🔗 Raw env URL =", JSON.stringify(process.env.UPLOADMENTOR_URL));
+      console.log("🔗 Normalized URL =", JSON.stringify(uploadUrl));
+
+      if (!uploadUrl) {
         throw new Error(
           "UPLOADMENTOR_URL is not set on this environment (Render → Environment tab)"
         );
@@ -1860,15 +1870,14 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
       });
 
       // ✅ MINIMAL headers lang — gaya ng createFood
-      // ❌ WALANG Origin, Referer, User-Agent, X-Requested-With
-      const response = await axios.post(process.env.UPLOADMENTOR_URL, form, {
+      const response = await axios.post(uploadUrl, form, {
         maxBodyLength: Infinity,
         headers: { ...form.getHeaders() },
       });
 
       console.log("📤 Upload Response:", response.data);
 
-      // ✅ Flexible response parsing — gaya ng createFood
+      // ✅ Flexible response parsing
       let fileUrl = "";
       let publicId = "";
 
