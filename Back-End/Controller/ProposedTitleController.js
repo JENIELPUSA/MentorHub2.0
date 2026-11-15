@@ -1837,32 +1837,83 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
 
     const isRevision = action === "revision";
 
+    // ========================================================
+    // UPLOAD FILE TO HOSTINGER
+    // ========================================================
     let fileData = {};
     if (req.file) {
       console.log("📸 Uploading file...");
+      console.log("🔗 Upload URL =", JSON.stringify(process.env.UPLOADMENTOR_URL));
+      console.log("📦 File =", {
+        name: req.file.originalname,
+        size: req.file.size,
+        mimetype: req.file.mimetype,
+      });
+
+      // ✅ Use buffer directly (memoryStorage) — no disk, safe on Render
       const form = new FormData();
-      form.append("file", fs.createReadStream(req.file.path), req.file.originalname);
+      form.append("file", req.file.buffer, {
+        filename: req.file.originalname,
+        contentType: req.file.mimetype,
+      });
 
       try {
-        const response = await axios.post(process.env.UPLOADAGTA_URL, form, {
+        // ✅ Validate env var BEFORE calling axios (clearer error)
+        if (!process.env.UPLOADMENTOR_URL) {
+          throw new Error(
+            "UPLOADMENTOR_URL is not set on this environment (Render → Environment tab)"
+          );
+        }
+
+        const response = await axios.post(process.env.UPLOADMENTOR_URL, form, {
           maxBodyLength: Infinity,
-          headers: { ...form.getHeaders() },
+          maxContentLength: Infinity,
+          timeout: 60000, // 60s — Hostinger can be slow on shared hosting
+          headers: {
+            ...form.getHeaders(),
+            // ✅ Hostinger WAF sometimes blocks bare Axios UA
+            "User-Agent": "Mozilla/5.0 (compatible; MentorHub/1.0)",
+            "Accept": "application/json, text/plain, */*",
+          },
+          // ✅ Don't throw on 4xx — let us log the real body
+          validateStatus: (s) => s >= 200 && s < 500,
         });
 
+        console.log("📡 Hostinger status:", response.status);
+        console.log("📡 Hostinger body:", response.data);
+
+        // ✅ If Hostinger returned 4xx, treat as failure with real message
+        if (response.status >= 400) {
+          const detail =
+            typeof response.data === "string"
+              ? response.data
+              : JSON.stringify(response.data);
+          throw new Error(
+            `Upload service returned ${response.status}: ${detail}`
+          );
+        }
+
+        // ✅ Parse response — supports all shapes your code already handled
         let fileUrl = "";
         let publicId = "";
+
         if (response.data?.url) {
           fileUrl = response.data.url;
-          publicId = response.data.public_id || response.data.filename || req.file.filename;
+          publicId =
+            response.data.public_id ||
+            response.data.filename ||
+            req.file.originalname;
         } else if (response.data?.success && response.data?.data) {
           fileUrl = response.data.data.url;
-          publicId = response.data.data.public_id || req.file.filename;
+          publicId =
+            response.data.data.public_id || req.file.originalname;
         } else if (response.data?.file) {
           fileUrl = response.data.file;
-          publicId = req.file.filename;
+          publicId = req.file.originalname;
         } else {
-          fileUrl = `/temp-uploads/${req.file.filename}`;
-          publicId = req.file.filename;
+          // Fallback — should not normally happen
+          fileUrl = `/temp-uploads/${req.file.originalname}`;
+          publicId = req.file.originalname;
         }
 
         fileData = {
@@ -1873,10 +1924,10 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
           isPdf: req.file.mimetype === "application/pdf",
         };
 
-        if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+        console.log("✅ Uploaded →", fileUrl);
       } catch (err) {
         console.error("❌ Upload Error:", err.message);
-        if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+        // ✅ No fs.unlinkSync here — memoryStorage has nothing to clean up
         return res.status(500).json({
           status: false,
           message: "File upload failed",
@@ -1963,13 +2014,12 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
       await existing.save();
 
       // ========================================================
-      // ✅ NOTIFICATION — REVISION (SPECIFIC USER LANG, CUSTOM MESSAGE)
+      // ✅ NOTIFICATION — REVISION
       // ========================================================
       try {
         const revisionGroup = await Group.findById(existing.groupId).select("referralCode name");
         const revisionReferralCode = revisionGroup?.referralCode || null;
 
-        // 🎯 SPECIFIC: adviser + co-adviser + reviewers (panelists)
         const revisionExtraIds = [
           existing.adviserId,
           existing.coAdviserId,
@@ -1980,7 +2030,6 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
           revisionExtraIds.map((id) => id.toString())
         );
 
-        // 🔥 SPECIFIC: subject_instructor(s) na naka-attach sa referralCode
         if (revisionReferralCode) {
           const subjectInstructors = await UserLoginSchema.find({
             referredBy: revisionReferralCode,
@@ -2003,7 +2052,6 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
         console.log("📋 Final IDs:", [...revisionRecipientIds]);
 
         if (revisionRecipientIds.size > 0) {
-          // 🔥 CUSTOM REVISION MESSAGE — iba sa create
           const notifTitle = "Revision Submitted";
           const notifMessage = `Revision uploaded for "${existing.title || "Untitled"}" — ${chapter || "new chapter"}`;
           const notifType = "Reminder";
@@ -2015,8 +2063,8 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
             recipient: [userId],
             uploadedBy: [req.user.linkId],
             type: notifType,
-            title: notifTitle,        // ✅ pareho sa socket
-            message: notifMessage,    // ✅ pareho sa socket
+            title: notifTitle,
+            message: notifMessage,
             referenceId: existing._id,
             referenceModel: "ProposedTitle",
             actionUrl: notifActionUrl,
@@ -2034,14 +2082,12 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
           const saved = await NotificationSchema.insertMany(revisionNotifications);
           console.log(`✅ [NOTIFY] Inserted ${saved.length} notifications`);
 
-          // 🔥 SOCKET.IO — parehong message
           try {
             if (io) {
               saved.forEach((notif) => {
                 const targetRoom = `user:${notif.recipient[0]}`;
                 io.to(targetRoom).emit("notification:new", {
                   data: notif,
-                  // ✅ Pareho sa DB
                   title: notifTitle,
                   message: notifMessage,
                   type: notifType,
@@ -2049,7 +2095,6 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
                   actionUrl: notifActionUrl,
                   referenceId: existing._id,
                   referenceModel: "ProposedTitle",
-                  // Extra context
                   titleId: existing._id,
                   groupId: existing.groupId,
                   chapter,
@@ -2142,8 +2187,8 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
       reviewDeadline: reviewDeadline ? new Date(reviewDeadline) : null,
       assignedReviewers: Array.isArray(assignedReviewers)
         ? assignedReviewers
-          .filter((id) => mongoose.Types.ObjectId.isValid(id))
-          .map((id) => new mongoose.Types.ObjectId(id))
+            .filter((id) => mongoose.Types.ObjectId.isValid(id))
+            .map((id) => new mongoose.Types.ObjectId(id))
         : [],
       objectives: Array.isArray(objectives) ? objectives : [],
       sdgGoals: Array.isArray(sdgGoals) ? sdgGoals : [],
@@ -2151,7 +2196,7 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
     });
 
     // ========================================================
-    // ✅ NOTIFICATION — CREATE (SPECIFIC USER LANG)
+    // ✅ NOTIFICATION — CREATE
     // ========================================================
     try {
       const createReferralCode = group?.referralCode || null;
@@ -2165,7 +2210,6 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
       console.log("📄 titleId:", proposedTitle._id);
       console.log("📚 chapter:", chapter);
 
-      // 🎯 SPECIFIC: adviser + co-adviser + reviewers (panelists)
       const createExtraIds = [
         proposedTitle.adviserId,
         proposedTitle.coAdviserId,
@@ -2176,7 +2220,6 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
         createExtraIds.map((id) => id.toString())
       );
 
-      // 🔥 SPECIFIC: subject_instructor(s) na naka-attach sa referralCode
       if (createReferralCode) {
         const subjectInstructors = await UserLoginSchema.find({
           referredBy: createReferralCode,
@@ -2199,7 +2242,6 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
       console.log("📋 Final IDs:", [...createRecipientIds]);
 
       if (createRecipientIds.size > 0) {
-        // 🔥 CREATE MESSAGE — iba sa revision
         const notifTitle = "New Proposed Title";
         const notifMessage = `"${proposedTitle.title || "Untitled"}" submitted — ${chapter || "new chapter"}`;
         const notifType = "ProposedTitleCreated";
@@ -2211,8 +2253,8 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
           recipient: [userId],
           uploadedBy: [req.user.linkId],
           type: notifType,
-          title: notifTitle,        // ✅ pareho sa socket
-          message: notifMessage,    // ✅ pareho sa socket
+          title: notifTitle,
+          message: notifMessage,
           referenceId: proposedTitle._id,
           referenceModel: "ProposedTitle",
           actionUrl: notifActionUrl,
@@ -2230,14 +2272,12 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
         const saved = await NotificationSchema.insertMany(createNotifications);
         console.log(`✅ [NOTIFY] Inserted ${saved.length} notifications`);
 
-        // 🔥 SOCKET.IO — parehong message
         try {
           if (io) {
             saved.forEach((notif) => {
               const targetRoom = `user:${notif.recipient[0]}`;
               io.to(targetRoom).emit("notification:new", {
                 data: notif,
-                // ✅ Pareho sa DB
                 title: notifTitle,
                 message: notifMessage,
                 type: notifType,
@@ -2245,7 +2285,6 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
                 actionUrl: notifActionUrl,
                 referenceId: proposedTitle._id,
                 referenceModel: "ProposedTitle",
-                // Extra context
                 titleId: proposedTitle._id,
                 groupId,
                 chapter,
@@ -2288,13 +2327,14 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
     });
   }
 });
-
 // ============================================================
 // UPDATE
 // ============================================================
 exports.UpdateProposedTitle = AsyncErrorHandler(async (req, res) => {
   const { status } = req.body;
   const userId = req.user._id;
+
+  console.log("Req.body", req.body);
 
   const proposedTitle = await ProposedTitleModel.findById(req.params.id);
   if (!proposedTitle)

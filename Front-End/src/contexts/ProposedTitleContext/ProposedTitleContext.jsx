@@ -153,6 +153,9 @@ export const ProposedTitleProvider = ({ children }) => {
         }
     };
 
+    // ============================
+    // FETCH READY TITLES (unchanged)
+    // ============================
     const FetchReadyTitle = async (
         page = 1,
         limit = 5,
@@ -198,6 +201,9 @@ export const ProposedTitleProvider = ({ children }) => {
         }
     };
 
+    // ============================
+    // FETCH ARCHIVED TITLES (unchanged)
+    // ============================
     const FetchArchivedTitle = async (
         page = 1,
         limit = 5,
@@ -221,7 +227,7 @@ export const ProposedTitleProvider = ({ children }) => {
                 {
                     params,
                     headers: {
-            
+
                         "Cache-Control": "no-cache",
                     },
                 }
@@ -241,6 +247,9 @@ export const ProposedTitleProvider = ({ children }) => {
         }
     };
 
+    // ============================
+    // ✅ HELPER — Derive heatmap data from charts (unchanged)
+    // ============================
     const deriveHeatmapData = useCallback((charts, mode = "comment") => {
         if (!charts) return [];
 
@@ -283,6 +292,9 @@ export const ProposedTitleProvider = ({ children }) => {
             .sort((a, b) => (a.date < b.date ? -1 : 1));
     }, []);
 
+    // ============================
+    // ✅ FETCH STATISTICS (unchanged)
+    // ============================
     const FetchStatistics = useCallback(
         async ({ groupId = "", fromDate = "", toDate = "", force = false } = {}) => {
             if (!authToken) return null;
@@ -356,6 +368,9 @@ export const ProposedTitleProvider = ({ children }) => {
         [authToken, heatmapMode, deriveHeatmapData]
     );
 
+    // ============================
+    // ✅ REFRESH STATISTICS (unchanged)
+    // ============================
     const RefreshStatistics = useCallback(
         (opts = {}) =>
             FetchStatistics({
@@ -368,7 +383,9 @@ export const ProposedTitleProvider = ({ children }) => {
         [FetchStatistics, statisticsGroupIdFilter, statisticsDateFrom, statisticsDateTo]
     );
 
-
+    // ============================
+    // ✅ FETCH HEATMAP DATA (unchanged)
+    // ============================
     const FetchHeatmapData = useCallback(
         async ({ mode = heatmapMode, force = false } = {}) => {
             if (!authToken) return [];
@@ -560,21 +577,34 @@ export const ProposedTitleProvider = ({ children }) => {
         }
     };
 
+
     // ============================
-    // CREATE PROPOSED TITLE (unchanged)
+    // CREATE PROPOSED TITLE
     // ============================
     const CreateProposedTitle = async (formData) => {
         try {
+            console.log("Submitting Proposed Title...");
+
+            // Debug FormData
+            if (formData instanceof FormData) {
+                for (const [key, value] of formData.entries()) {
+                    console.log(`FormData - ${key}:`, value);
+                }
+            } else {
+                console.warn("Warning: Submitted data is not FormData.");
+            }
+
             const res = await axios.post(
                 `${import.meta.env.VITE_REACT_APP_BACKEND_BASEURL}/api/v1/proposed-titles`,
                 formData,
                 {
                     headers: {
                         Authorization: `Bearer ${authToken}`,
-                        "Content-Type": "multipart/form-data",
                     },
                 }
             );
+
+            console.log("Create Proposed Title Response:", res.data);
 
             const status = res.data?.status;
 
@@ -588,33 +618,50 @@ export const ProposedTitleProvider = ({ children }) => {
                     statusFilter,
                     groupIdFilter
                 );
+
                 RefreshStatistics({ force: true });
 
-                return { success: true, data: res.data.data };
+                return {
+                    success: true,
+                    data: res.data.data
+                };
             }
 
-            setCustomError("Failed to create proposed title.");
-            return { success: false };
+            const errorMessage =
+                res.data?.message || "Failed to create proposed title.";
+
+            setCustomError(errorMessage);
+
+            return {
+                success: false,
+                error: errorMessage
+            };
+
         } catch (error) {
             console.error("Create Proposed Title Error:", error);
 
-            let errorMessage = "Something went wrong.";
-            if (error.response && error.response.data) {
-                const errorData = error.response.data;
-                errorMessage =
-                    typeof errorData === "string"
-                        ? errorData
-                        : errorData.message || errorData.error || "Something went wrong.";
-            } else if (error.request) {
-                errorMessage = "No response from the server.";
-            } else {
-                errorMessage = error.message || "Unexpected error occurred.";
-            }
+            console.error("Backend Response:", error.response?.data);
+            console.error("HTTP Status:", error.response?.status);
+            console.error("Request URL:", error.config?.url);
+
+            const errorMessage =
+                error.response?.data?.message ||
+                error.response?.data?.error ||
+                (typeof error.response?.data === "string"
+                    ? error.response.data
+                    : null) ||
+                error.message ||
+                "Something went wrong.";
 
             setCustomError(errorMessage);
-            return { success: false, error: errorMessage };
+
+            return {
+                success: false,
+                error: errorMessage
+            };
         }
     };
+
 
     // ============================
     // UPDATE PROPOSED TITLE (unchanged)
@@ -1777,7 +1824,7 @@ export const ProposedTitleProvider = ({ children }) => {
         archivedGroupIdFilter,
     ]);
 
-        useEffect(() => {
+    useEffect(() => {
         FetchArchivedTitle(
             archivedCurrentPage,
             limit,
