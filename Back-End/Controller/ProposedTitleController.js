@@ -46,19 +46,6 @@ function syncChapterCompletion(doc) {
   return doc;
 }
 
-const completionExpr = {
-  total: { $size: { $ifNull: ["$task", []] } },
-  completed: {
-    $size: {
-      $filter: {
-        input: { $ifNull: ["$task", []] },
-        as: "t",
-        cond: { $eq: ["$$t.isCompleted", true] },
-      },
-    },
-  },
-};
-
 
 const buildObjectivesStage = () => ({
   $ifNull: ["$objectives", []],
