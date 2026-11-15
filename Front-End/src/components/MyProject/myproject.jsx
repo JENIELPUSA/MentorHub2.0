@@ -6,18 +6,13 @@ import { UserDisplayContext } from '../../contexts/UserManagementContext/UserMan
 import { StatisticalContext } from '../../contexts/StatisticalContext/StatisticalContext';
 import { CommentContext } from '../../contexts/CommentContext/CommentContext';
 import { AuthContext } from '../../contexts/AuthContext';
-import bipsuimage from "../../assets/bipsubg.jpg"
 
 import PdfViewer from '../ReusablePDFviewer/PDFViewer';
 
-const PROJECT_IMG = bipsuimage;
-
 const GLOBAL_KEY = '__global__';
-const PROCEEDINGS_KEY = '__proceedings__';   // ⭐
+const PROCEEDINGS_KEY = '__proceedings__';
 const API_BASE = (import.meta.env?.VITE_API_URL || '').replace(/\/$/, '');
 
-//SAME sequential chapters as ProposedTitle.jsx
-// ⭐ REMOVED: 'Preliminary Pages' at 'Appendices'
 const SEQUENTIAL_CHAPTERS = [
   'Chapter 1',
   'Chapter 2',
@@ -27,7 +22,6 @@ const SEQUENTIAL_CHAPTERS = [
   'Full Manuscript',
 ];
 
-// ⭐ Get approval flag for a chapter (matches ProposedTitle.jsx)
 const getApprovalVal = (approvals, chapter) => {
   if (!approvals) return false;
   if (approvals instanceof Map) return approvals.get(chapter) === true;
@@ -47,7 +41,6 @@ const getRemainingChaptersForDefense = (item) => {
   return SEQUENTIAL_CHAPTERS.filter((ch) => !getApprovalVal(approvals, ch)).length;
 };
 
-// ⭐ Get next chapter to proceed
 const getNextSequentialChapter = (item) => {
   if (!item) return null;
   const approvals = item.chapterProgressionApprovals || {};
@@ -57,7 +50,6 @@ const getNextSequentialChapter = (item) => {
   return null;
 };
 
-// ⭐ Per-chapter status (mirrors getChapterStatus in ProposedTitle.jsx)
 const getChapterStatus = (chapter, item) => {
   const tracking = (item?.titleUrlTracking || []).filter((t) => t.chapter === chapter);
   const completedChapters = item?.completedChapters || [];
@@ -142,6 +134,12 @@ const getInitialsFromUser = (u) => {
   return fallback.charAt(0).toUpperCase();
 };
 
+const getAvatarUrl = (avatar) => {
+  if (!avatar?.url) return null;
+  if (/^https?:\/\//i.test(avatar.url)) return avatar.url;
+  return `${API_BASE}${avatar.url}`;
+};
+
 const formatMilestoneDate = (d) => {
   if (!d) return '—';
   try {
@@ -155,9 +153,6 @@ const formatMilestoneDate = (d) => {
   }
 };
 
-// ============================
-// ⭐ Backend comment → local annotation (with proceedings support)
-// ============================
 const backendCommentToAnnotation = (comment) => {
   const pos = comment.position || {};
   const x = pos.x ?? 0.1;
@@ -165,7 +160,6 @@ const backendCommentToAnnotation = (comment) => {
   const w = pos.width ?? pos.w ?? 0.03;
   const h = pos.height ?? pos.h ?? 0.03;
 
-  // ⭐ Preserve exact annotationType
   const backendType = comment.annotationType || 'text';
 
   let localType = 'comment';
@@ -174,7 +168,7 @@ const backendCommentToAnnotation = (comment) => {
   else if (backendType === 'page') localType = 'page';
   else if (backendType === 'region') localType = 'region';
   else if (backendType === 'global') localType = 'global';
-  else if (backendType === 'proceedings') localType = 'proceedings';   // ⭐
+  else if (backendType === 'proceedings') localType = 'proceedings';
 
   const author = comment.userId
     ? `${comment.userId.first_name || ''} ${comment.userId.last_name || ''}`.trim() || 'Mentor'
@@ -184,7 +178,7 @@ const backendCommentToAnnotation = (comment) => {
     id: comment._id,
     backendId: comment._id,
     type: localType,
-    annotationType: backendType,   // ⭐ preserve exact
+    annotationType: backendType,
     shape: comment.shape || pos.shape || 'rectangle',
     x, y, w, h,
     text: comment.text || '',
@@ -197,9 +191,6 @@ const backendCommentToAnnotation = (comment) => {
   };
 };
 
-// ============================
-// ⭐ Merge — preserves proceedings in dedicated key
-// ============================
 const mergeBackendCommentsIntoAnnotations = (existing, backendComments) => {
   if (!Array.isArray(backendComments) || backendComments.length === 0) return existing;
   const next = { ...existing };
@@ -214,7 +205,6 @@ const mergeBackendCommentsIntoAnnotations = (existing, backendComments) => {
     const ann = backendCommentToAnnotation(c);
     seenIds.add(cid);
 
-    // ⭐ Proceedings → dedicated key; otherwise page_*
     const key = ann.annotationType === 'proceedings'
       ? PROCEEDINGS_KEY
       : (ann.type === 'global' ? GLOBAL_KEY : `page_${ann.pageNum || 1}`);
@@ -225,7 +215,6 @@ const mergeBackendCommentsIntoAnnotations = (existing, backendComments) => {
   return next;
 };
 
-// ⭐ Status → visual tone mapping (Blue / Yellow + neutrals)
 const getStatusTone = (status) => {
   const s = (status || '').toLowerCase().trim();
   if (['approved', 'done', 'ready for defense', 'confirmed', 'mentors confirmed'].includes(s)) {
@@ -284,7 +273,6 @@ export default function App() {
 
   const [viewMode, setViewMode] = useState('full');
 
-  // ── PDF viewer state ──
   const [isViewMode, setIsViewMode] = useState(false);
   const [activeTrackingId, setActiveTrackingId] = useState(null);
   const [viewSubmission, setViewSubmission] = useState(null);
@@ -310,9 +298,7 @@ export default function App() {
   const [toastMessage, setToastMessage] = useState(null);
   const [selectedContributor, setSelectedContributor] = useState(null);
 
-  // ────────────────────────────────────────────────────────────
   // 🔥 FETCH GROUP DETAILS
-  // ────────────────────────────────────────────────────────────
   const lastGroupKeyRef = useRef(null);
 
   useEffect(() => {
@@ -347,7 +333,6 @@ export default function App() {
     groupDetails?.group?._id,
   ]);
 
-  // ── Current proposed title ──
   const currentTitle = useMemo(() => {
     if (!Array.isArray(proposedTitles) || proposedTitles.length === 0) return null;
     const approved = proposedTitles.find(
@@ -419,7 +404,7 @@ export default function App() {
 
   useEffect(() => () => { if (pdfBlobUrl) URL.revokeObjectURL(pdfBlobUrl); }, []);
 
-  // ⭐⭐⭐ MILESTONES — driven by SEQUENTIAL_CHAPTERS
+  // ⭐ MILESTONES
   const milestones = useMemo(() => {
     return SEQUENTIAL_CHAPTERS.map((chapter, idx) => {
       const ch = getChapterStatus(chapter, currentTitle);
@@ -474,9 +459,7 @@ export default function App() {
     });
   }, [currentTitle]);
 
-  // ─────────────────────────────────────────────────────────────
   // 🔥 GROUP INFO
-  // ─────────────────────────────────────────────────────────────
   const group = groupDetails?.group || {};
   const groupSection = group.section || {};
   const groupSubject = groupSection.subject || {};
@@ -506,31 +489,56 @@ export default function App() {
     ? `A.Y. ${new Date(group.createdAt).getFullYear()}–${new Date(group.createdAt).getFullYear() + 1}`
     : 'A.Y. N/A';
 
-  // ── Contributors ──
+  // ── Contributors
   const referredUsers = useMemo(() => {
     const raw = groupDetails?.referredUsers;
     if (!Array.isArray(raw)) return [];
     return raw.filter(u => u && (u._id || u.id));
   }, [groupDetails]);
 
-  // ── Adviser / Co-Adviser ──
+  // ── Adviser / Co-Adviser
   const adviserName = useMemo(() => {
+    if (currentTitle?.adviserInfo) {
+      const n = buildFullName(currentTitle.adviserInfo);
+      if (n !== 'Unassigned') return n;
+    }
     if (statisticsMentorship?.adviser) {
       const n = buildFullName(statisticsMentorship.adviser);
       if (n !== 'Unassigned') return n;
     }
     const fromGroup = resolveUserFromGroup(group.adviserId, advisers);
     return buildFullName(fromGroup);
-  }, [statisticsMentorship, group.adviserId, advisers]);
+  }, [currentTitle?.adviserInfo, statisticsMentorship, group.adviserId, advisers]);
 
   const coAdviserName = useMemo(() => {
+    if (currentTitle?.coAdviserInfo) {
+      const n = buildFullName(currentTitle.coAdviserInfo);
+      if (n !== 'Unassigned') return n;
+    }
     if (statisticsMentorship?.coAdviser) {
       const n = buildFullName(statisticsMentorship.coAdviser);
       if (n !== 'Unassigned') return n;
     }
     const fromGroup = resolveUserFromGroup(group.coadviserId, advisers);
     return buildFullName(fromGroup);
-  }, [statisticsMentorship, group.coadviserId, advisers]);
+  }, [currentTitle?.coAdviserInfo, statisticsMentorship, group.coadviserId, advisers]);
+
+  // ⭐ Adviser/Co-Adviser Avatar — mula sa currentTitle.proposedTitles
+  const adviserAvatarUrl = useMemo(() => {
+    return (
+      getAvatarUrl(currentTitle?.adviserInfo?.avatar) ||
+      getAvatarUrl(statisticsMentorship?.adviser?.avatar) ||
+      null
+    );
+  }, [currentTitle?.adviserInfo, statisticsMentorship?.adviser]);
+
+  const coAdviserAvatarUrl = useMemo(() => {
+    return (
+      getAvatarUrl(currentTitle?.coAdviserInfo?.avatar) ||
+      getAvatarUrl(statisticsMentorship?.coAdviser?.avatar) ||
+      null
+    );
+  }, [currentTitle?.coAdviserInfo, statisticsMentorship?.coAdviser]);
 
   const getInitials = (name) => {
     if (!name || name === 'Unassigned') return '?';
@@ -541,7 +549,6 @@ export default function App() {
     ? milestones.filter((m) => m.status !== 'done')
     : milestones;
 
-  // ⭐ Progress from sequential chapter proceeded count
   const totalChapters = SEQUENTIAL_CHAPTERS.length;
   const doneChapters = milestones.filter((m) => m.status === 'done').length;
   const progressPct = totalChapters > 0 ? Math.round((doneChapters / totalChapters) * 100) : 0;
@@ -559,9 +566,23 @@ export default function App() {
   const stepperNodes = milestones.slice(0, 8);
   const statusTone = getStatusTone(displayStatus);
 
-  // ============================================================
+  // ⭐ LATEST TRACKING
+  const latestPreview =
+    currentTitle?.latestTracking?.preview ||
+    group?.latestTracking?.preview ||
+    null;
+
+  const latestChapter =
+    currentTitle?.latestTracking?.chapter ||
+    group?.latestTracking?.chapter ||
+    null;
+
+  const latestUrl =
+    currentTitle?.latestTracking?.url ||
+    group?.latestTracking?.url ||
+    null;
+
   // 🔥 HANDLERS
-  // ============================================================
   const handleViewLatestUpload = async () => {
     const tracking = currentTitle?.titleUrlTracking || [];
     if (!Array.isArray(tracking) || tracking.length === 0) {
@@ -624,7 +645,6 @@ export default function App() {
       showNotification('❌ No PDF to generate', true);
       return;
     }
-    // ⭐ Exclude proceedings sa annotation count
     const total =
       (pdfAnnotations[GLOBAL_KEY] || []).length +
       Object.entries(pdfAnnotations)
@@ -649,7 +669,6 @@ export default function App() {
       };
 
       const globals = (pdfAnnotations[GLOBAL_KEY] || []).map(a => ({ ...a, isGlobal: true }));
-      // ⭐ Exclude proceedings sa page-specific extraction
       const pageSpecific = Object.entries(pdfAnnotations)
         .filter(([k]) => k !== GLOBAL_KEY && k !== PROCEEDINGS_KEY)
         .flatMap(([key, list]) => {
@@ -661,11 +680,6 @@ export default function App() {
       const pdfDoc = await PDFDocument.load(arrayBuffer);
       const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
       const pages = pdfDoc.getPages();
-
-      const nums = {};
-      [...globals, ...pageSpecific]
-        .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
-        .forEach((a, i) => { nums[a.id] = i + 1; });
 
       for (const g of globals) {
         const { r, g: gCol, b } = hexToRgb(g.color);
@@ -746,19 +760,15 @@ export default function App() {
     setTextMenu(null);
   };
 
-  // ============================================================
-  // ⭐ refreshComments — DOUBLE FETCH (feedback + proceedings)
-  // ============================================================
+  // ⭐ refreshComments
   const refreshComments = useCallback(async () => {
     if (!proposedTitleId) return;
 
     try {
-      // 1️⃣ Feedback (exclude proceedings sa backend)
       if (FetchCommentsByProposedTitle) {
         await FetchCommentsByProposedTitle(proposedTitleId, 1, 100);
       }
 
-      // 2️⃣ Proceedings (dedicated endpoint)
       let procRes = { data: [] };
       try {
         const r = await fetch(
@@ -770,11 +780,6 @@ export default function App() {
         console.warn('⚠️ Proceedings fetch failed:', e);
       }
 
-      console.log('═══════════════════════════════════════════');
-      console.log('📥 Proceedings fetched:', procRes?.data?.length || 0);
-      console.log('═══════════════════════════════════════════');
-
-      // 3️⃣ Merge proceedings sa pdfAnnotations
       if ((procRes?.data || []).length > 0) {
         setPdfAnnotations(prev => {
           const next = { ...prev };
@@ -816,9 +821,6 @@ export default function App() {
             ];
           }
 
-          console.log('📦 After merge keys:', Object.keys(next));
-          console.log('📋 Proceedings count:', next[PROCEEDINGS_KEY]?.length || 0);
-
           return next;
         });
       }
@@ -827,18 +829,14 @@ export default function App() {
     }
   }, [FetchCommentsByProposedTitle, proposedTitleId]);
 
-  // ⭐ Auto-fetch comments + proceedings kapag nag-open ng PDF viewer
   useEffect(() => {
     if (isViewMode && activeTrackingId) {
       refreshComments();
     }
   }, [isViewMode, activeTrackingId, refreshComments]);
 
-  // ============================================================
-  // 🔥 RENDER: PDF VIEWER MODE
-  // ============================================================
+  // 🔥 PDF VIEWER MODE
   if (isViewMode && viewSubmission) {
-    // ⭐ Exclude proceedings sa total count badge
     const totalAnnotationCount =
       (pdfAnnotations[GLOBAL_KEY] || []).length +
       Object.entries(pdfAnnotations)
@@ -895,9 +893,7 @@ export default function App() {
     );
   }
 
-  // ============================================================
-  // 🔥 RENDER: DASHBOARD
-  // ============================================================
+  // 🔥 DASHBOARD
   return (
     <div className="bg-slate-50 text-slate-800 text-sm antialiased min-h-screen">
       {toastMessage && (
@@ -906,7 +902,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 🔥 CONTRIBUTOR POPUP MODAL */}
+      {/* CONTRIBUTOR MODAL */}
       {selectedContributor && (
         <div
           className="fixed inset-0 z-[110] flex items-center justify-center p-4"
@@ -925,9 +921,25 @@ export default function App() {
               >
                 <span className="material-symbols-outlined text-[18px]">close</span>
               </button>
-              <div className="w-20 h-20 rounded-full bg-white text-blue-900 flex items-center justify-center text-2xl font-extrabold shadow-lg mb-3 border-4 border-yellow-300">
+
+              {getAvatarUrl(selectedContributor.avatar) ? (
+                <img
+                  src={getAvatarUrl(selectedContributor.avatar)}
+                  alt={buildCompleteName(selectedContributor)}
+                  className="w-20 h-20 rounded-full object-cover shadow-lg mb-3 border-4 border-yellow-300 bg-white"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                    e.currentTarget.nextSibling.style.display = 'flex';
+                  }}
+                />
+              ) : null}
+              <div
+                className="w-20 h-20 rounded-full bg-white text-blue-900 flex items-center justify-center text-2xl font-extrabold shadow-lg mb-3 border-4 border-yellow-300"
+                style={{ display: getAvatarUrl(selectedContributor.avatar) ? 'none' : 'flex' }}
+              >
                 {getInitialsFromUser(selectedContributor)}
               </div>
+
               <p className="text-[11px] uppercase tracking-wider text-yellow-100 font-semibold">Contributor</p>
               <h3 className="text-lg font-bold text-center mt-0.5">
                 {buildCompleteName(selectedContributor)}
@@ -941,15 +953,6 @@ export default function App() {
                   <div className="min-w-0 flex-1">
                     <p className="text-[10px] uppercase font-semibold text-slate-400">Email</p>
                     <p className="text-slate-900 font-medium truncate">{selectedContributor.email}</p>
-                  </div>
-                </div>
-              )}
-              {selectedContributor.username && selectedContributor.username !== selectedContributor.email && (
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="material-symbols-outlined text-[18px] text-blue-600">badge</span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[10px] uppercase font-semibold text-slate-400">Username</p>
-                    <p className="text-slate-900 font-medium truncate">{selectedContributor.username}</p>
                   </div>
                 </div>
               )}
@@ -1075,7 +1078,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* ⭐ Progress — BLUE / YELLOW theme (fully-proceeded = full yellow) */}
+            {/* Progress */}
             <div className={`mt-6 pt-4 rounded-lg p-4 border transition-colors ${
               fullyProceeded
                 ? 'bg-gradient-to-r from-yellow-50 via-slate-50 to-yellow-100 border-yellow-300'
@@ -1098,7 +1101,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* ⭐ Progress Bar */}
               <div className="w-full h-3 rounded-full overflow-hidden relative bg-blue-900/20 border border-blue-300/40 shadow-inner">
                 <div
                   className={`h-full rounded-full transition-all duration-700 ease-out ${
@@ -1130,7 +1132,7 @@ export default function App() {
 
           {/* Abstract + Right column */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 mt-4">
-            {/* ── Abstract + Contributors ── */}
+            {/* Abstract + Contributors */}
             <div className="lg:col-span-7 bg-white rounded-xl p-6 shadow-sm flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between mb-2">
@@ -1147,7 +1149,7 @@ export default function App() {
                 </p>
               </div>
 
-              {/* ✅ Contributors */}
+              {/* Contributors — AVATAR */}
               <div className="mt-6 pt-4 border-t border-slate-200">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-1">
@@ -1166,15 +1168,29 @@ export default function App() {
                     {referredUsers.map((u) => {
                       const initials = getInitialsFromUser(u);
                       const completeName = buildCompleteName(u);
+                      const avatarUrl = getAvatarUrl(u.avatar);
+
                       return (
                         <button
                           key={u._id || u.id || u.email}
                           onClick={() => setSelectedContributor(u)}
                           title={completeName}
                           aria-label={completeName}
-                          className="group w-9 h-9 rounded-full bg-blue-900 text-white flex items-center justify-center text-[11px] font-bold shadow-sm ring-2 ring-yellow-300 hover:bg-yellow-500 hover:text-blue-900 hover:ring-yellow-500 hover:scale-110 transition-all"
+                          className="group w-9 h-9 rounded-full bg-blue-900 text-white flex items-center justify-center text-[11px] font-bold shadow-sm ring-2 ring-yellow-300 hover:bg-yellow-500 hover:text-blue-900 hover:ring-yellow-500 hover:scale-110 transition-all overflow-hidden"
                         >
-                          {initials}
+                          {avatarUrl ? (
+                            <img
+                              src={avatarUrl}
+                              alt={completeName}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                e.currentTarget.style.display = 'none';
+                                e.currentTarget.parentElement.textContent = initials;
+                              }}
+                            />
+                          ) : (
+                            initials
+                          )}
                         </button>
                       );
                     })}
@@ -1183,16 +1199,60 @@ export default function App() {
               </div>
             </div>
 
+            {/* SIDE PANEL */}
             <div className="lg:col-span-5 flex flex-col gap-4">
               <div className="relative overflow-hidden bg-white rounded-xl shadow-sm p-4 flex flex-col justify-between">
-                <div className="relative h-44 w-full rounded-lg overflow-hidden mb-2">
-                  <img className="w-full h-full object-cover rounded-lg" alt="Testbed" src={PROJECT_IMG} />
-                  <div className="absolute inset-0 bg-gradient-to-t from-blue-900/80 via-blue-900/20 to-transparent"></div>
-                  <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-white">
-                    <div>
-                      <p className="text-[11px] uppercase tracking-wider text-yellow-200 font-semibold">Testbed Deployment</p>
-                      <p className="text-[13px] font-semibold truncate">{groupName}</p>
+                <div className="relative h-44 w-full rounded-lg overflow-hidden mb-2 bg-blue-50">
+                  {latestPreview ? (
+                    <img
+                      className="w-full h-full object-cover object-top rounded-lg"
+                      alt={`${latestChapter || "Thesis"} Preview`}
+                      src={latestPreview}
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                        e.currentTarget.nextSibling.style.display = "flex";
+                      }}
+                    />
+                  ) : null}
+
+                  <div
+                    className="w-full h-full flex flex-col items-center justify-center gap-1 text-slate-400"
+                    style={{ display: latestPreview ? "none" : "flex" }}
+                  >
+                    <span className="material-symbols-outlined text-[36px] text-blue-200">description</span>
+                    <span className="text-[11px] font-semibold uppercase tracking-wider">No Preview</span>
+                  </div>
+
+                  <div className="absolute inset-0 bg-gradient-to-t from-blue-900/80 via-blue-900/20 to-transparent pointer-events-none"></div>
+
+                  {latestChapter && (
+                    <div className="absolute top-2 left-2 bg-yellow-400 text-blue-950 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider shadow z-10">
+                      {latestChapter}
                     </div>
+                  )}
+
+                  <div className="absolute top-2 right-2 bg-blue-900/90 text-yellow-300 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider shadow z-10">
+                    PDF
+                  </div>
+
+                  <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-white">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] uppercase tracking-wider text-yellow-200 font-semibold">
+                        Latest Upload
+                      </p>
+                      <p className="text-[13px] font-semibold truncate">
+                        {latestChapter || groupName}
+                      </p>
+                    </div>
+                    {latestUrl && (
+                      <button
+                        onClick={() => window.open(latestUrl, "_blank")}
+                        className="px-2 py-1 bg-yellow-400 hover:bg-yellow-300 text-blue-950 text-[10px] font-bold rounded shadow-md flex items-center gap-1 transition shrink-0"
+                      >
+                        <span className="material-symbols-outlined text-[12px]">open_in_new</span>
+                        Open
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -1213,6 +1273,7 @@ export default function App() {
                 </div>
               </div>
 
+              {/* ⭐ MENTORSHIP CARD — may adviser/co-adviser avatar */}
               <div className="bg-white rounded-xl p-4 shadow-sm">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-[11px] uppercase font-bold text-slate-500">
@@ -1220,18 +1281,45 @@ export default function App() {
                   </span>
                 </div>
                 <div className="grid grid-cols-1 gap-2 pt-1">
+                  {/* ⭐ Adviser — with avatar from proposedTitles */}
                   <div className="p-2 bg-blue-50 rounded-lg flex items-center gap-2 border border-blue-100">
-                    <div className="w-9 h-9 rounded-full bg-blue-900 text-yellow-200 flex items-center justify-center font-bold text-[13px] shrink-0">
-                      {getInitials(adviserName)}
+                    <div className="w-9 h-9 rounded-full bg-blue-900 text-yellow-200 flex items-center justify-center font-bold text-[13px] shrink-0 overflow-hidden ring-2 ring-blue-300">
+                      {adviserAvatarUrl ? (
+                        <img
+                          src={adviserAvatarUrl}
+                          alt={adviserName}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                            e.currentTarget.parentElement.textContent = getInitials(adviserName);
+                          }}
+                        />
+                      ) : (
+                        getInitials(adviserName)
+                      )}
                     </div>
                     <div className="min-w-0">
                       <p className="text-[13px] font-bold text-slate-900 truncate">{adviserName}</p>
                       <p className="text-[11px] text-slate-500 truncate">Primary Adviser</p>
                     </div>
                   </div>
+
+                  {/* ⭐ Co-Adviser — with avatar from proposedTitles */}
                   <div className="p-2 bg-yellow-50 rounded-lg flex items-center gap-2 border border-yellow-200">
-                    <div className="w-9 h-9 rounded-full bg-yellow-400 text-blue-900 flex items-center justify-center font-bold text-[13px] shrink-0">
-                      {getInitials(coAdviserName)}
+                    <div className="w-9 h-9 rounded-full bg-yellow-400 text-blue-900 flex items-center justify-center font-bold text-[13px] shrink-0 overflow-hidden ring-2 ring-yellow-300">
+                      {coAdviserAvatarUrl ? (
+                        <img
+                          src={coAdviserAvatarUrl}
+                          alt={coAdviserName}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                            e.currentTarget.parentElement.textContent = getInitials(coAdviserName);
+                          }}
+                        />
+                      ) : (
+                        getInitials(coAdviserName)
+                      )}
                     </div>
                     <div className="min-w-0">
                       <p className="text-[13px] font-bold text-slate-900 truncate">{coAdviserName}</p>
@@ -1243,7 +1331,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* ⭐ Chapter Tracking — SEQUENTIAL CHAPTERS */}
+          {/* Chapter Tracking */}
           <div className="mt-4 bg-white rounded-xl p-6 shadow-sm">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-4">
               <div>
@@ -1269,7 +1357,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* ⭐ Stepper — sequential nodes */}
             <div className="relative hidden xl:block py-2 mb-6">
               <div className="absolute top-6 left-6 right-6 h-0.5 bg-slate-300 -z-0"></div>
               <div
@@ -1337,7 +1424,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* ⭐ Milestone rows — sequential */}
             <div className="space-y-1">
               {visibleMilestones.length === 0 && (
                 <div className="text-center py-8 text-slate-500 text-xs">

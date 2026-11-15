@@ -6,6 +6,13 @@ const axios = require("axios");
 const FormData = require("form-data");
 const fs = require("fs");
 
+
+const { pdf } = require("pdf-to-img");
+
+
+
+
+
 const Group = require("./../Models/GroupName");
 const NotificationSchema = require("../Models/NotificationSchema");
 const UserLoginSchema = require("../Models/LogInSchema");
@@ -13,12 +20,12 @@ const UserLoginSchema = require("../Models/LogInSchema");
 const Proposal = ProposedTitleModel;
 
 // ============================================================
-// ⭐ CHAPTER CONFIG
+// CHAPTER CONFIG
 // ============================================================
 const REQUIRED_CHAPTERS = ["Chapter 1", "Chapter 2", "Chapter 3", "Chapter 4", "Chapter 5"];
 
 // ============================================================
-// ⭐ EXISTING HELPERS (UNCHANGED)
+//  EXISTING HELPERS (UNCHANGED)
 // ============================================================
 function syncChapterCompletion(doc) {
   if (!doc || !Array.isArray(doc.titleUrlTracking)) {
@@ -50,203 +57,6 @@ const completionExpr = {
   },
 };
 
-const buildCompletionStage = () => ({
-  total: completionExpr.total,
-  completed: completionExpr.completed,
-  pending: { $subtract: [completionExpr.total, completionExpr.completed] },
-  percentage: {
-    $cond: [
-      { $eq: [completionExpr.total, 0] },
-      0,
-      {
-        $round: [
-          {
-            $multiply: [
-              { $divide: [completionExpr.completed, completionExpr.total] },
-              100,
-            ],
-          },
-          0,
-        ],
-      },
-    ],
-  },
-});
-
-const buildIsFullyCompletedStage = () => ({
-  $and: [
-    { $gt: [completionExpr.total, 0] },
-    { $eq: [completionExpr.completed, completionExpr.total] },
-  ],
-});
-
-const buildChapterCompletionStage = () => ({
-  $let: {
-    vars: {
-      completedEntries: {
-        $filter: {
-          input: { $ifNull: ["$titleUrlTracking", []] },
-          as: "t",
-          cond: { $eq: ["$$t.isCompleted", true] },
-        },
-      },
-      allEntries: { $ifNull: ["$titleUrlTracking", []] },
-    },
-    in: {
-      completedChapters: {
-        $setUnion: [
-          {
-            $map: {
-              input: "$$completedEntries",
-              as: "e",
-              in: "$$e.chapter",
-            },
-          },
-          [],
-        ],
-      },
-      chapters: {
-        $map: {
-          input: {
-            $setUnion: [
-              {
-                $map: {
-                  input: "$$allEntries",
-                  as: "a",
-                  in: "$$a.chapter",
-                },
-              },
-              [],
-            ],
-          },
-          as: "ch",
-          in: {
-            chapter: "$$ch",
-            isCompleted: {
-              $in: [
-                "$$ch",
-                {
-                  $map: {
-                    input: "$$completedEntries",
-                    as: "e",
-                    in: "$$e.chapter",
-                  },
-                },
-              ],
-            },
-            latestEntry: {
-              $let: {
-                vars: {
-                  chapterEntries: {
-                    $filter: {
-                      input: "$$allEntries",
-                      as: "x",
-                      cond: { $eq: ["$$x.chapter", "$$ch"] },
-                    },
-                  },
-                },
-                in: {
-                  $arrayElemAt: [
-                    {
-                      $sortArray: {
-                        input: "$$chapterEntries",
-                        sortBy: { date: -1 },
-                      },
-                    },
-                    0,
-                  ],
-                },
-              },
-            },
-          },
-        },
-      },
-      isAllChaptersCompleted: {
-        $and: [
-          {
-            $gte: [
-              {
-                $size: {
-                  $setIntersection: [
-                    {
-                      $map: {
-                        input: "$$completedEntries",
-                        as: "e",
-                        in: "$$e.chapter",
-                      },
-                    },
-                    REQUIRED_CHAPTERS,
-                  ],
-                },
-              },
-              REQUIRED_CHAPTERS.length,
-            ],
-          },
-        ],
-      },
-      chapterProgress: {
-        $round: [
-          {
-            $multiply: [
-              {
-                $divide: [
-                  {
-                    $size: {
-                      $setIntersection: [
-                        {
-                          $map: {
-                            input: "$$completedEntries",
-                            as: "e",
-                            in: "$$e.chapter",
-                          },
-                        },
-                        REQUIRED_CHAPTERS,
-                      ],
-                    },
-                  },
-                  REQUIRED_CHAPTERS.length,
-                ],
-              },
-              100,
-            ],
-          },
-          0,
-        ],
-      },
-    },
-  },
-});
-
-// ============================================================
-// ⭐ NEW HELPERS (ADDITIVE)
-// ============================================================
-
-const buildRubricStage = () => ({
-  $ifNull: [
-    "$rubric",
-    {
-      scientificSignificance: 0,
-      technicalNovelty: 0,
-      methodologyRigor: 0,
-      resourceFeasibility: 0,
-      overallScore: 0,
-    },
-  ],
-});
-
-const buildDefenseScheduleStage = () => ({
-  $ifNull: [
-    "$defenseSchedule",
-    {
-      scheduledAt: null,
-      venue: "",
-      modality: "In-Person",
-      zoomLink: "",
-      zoomPasscode: "",
-      panelQuorum: { required: 3, confirmed: 0 },
-    },
-  ],
-});
 
 const buildObjectivesStage = () => ({
   $ifNull: ["$objectives", []],
@@ -273,41 +83,6 @@ const buildAdviserLookupStages = () => [
   { $unwind: { path: "$coAdviserInfo", preserveNullAndEmptyArrays: true } },
 ];
 
-const buildReviewersLookupStage = () => [
-  {
-    $lookup: {
-      from: "userloginschemas",
-      localField: "assignedReviewers",
-      foreignField: "_id",
-      as: "assignedReviewerInfo",
-    },
-  },
-  {
-    $project: {
-      assignedReviewers: 1,
-      assignedReviewerInfo: {
-        $map: {
-          input: "$assignedReviewerInfo",
-          as: "r",
-          in: {
-            _id: "$$r._id",
-            first_name: "$$r.first_name",
-            last_name: "$$r.last_name",
-            full_name: {
-              $concat: [
-                { $ifNull: ["$$r.first_name", ""] },
-                " ",
-                { $ifNull: ["$$r.last_name", ""] },
-              ],
-            },
-            email: "$$r.email",
-            role: "$$r.role",
-          },
-        },
-      },
-    },
-  },
-];
 
 const buildReviewedByLookupStage = () => ({
   $lookup: {
@@ -369,7 +144,7 @@ exports.GetProposedTitleStatistics = AsyncErrorHandler(async (req, res) => {
 
   const matchStage = {};
 
-  // ⭐ STUDENT LOGIC
+  //  STUDENT LOGIC
   // Step 1: Get student's user doc to find referredBy
   // Step 2: Match referredBy against Group.referralCode
   // Step 3: Use matched group's _id to filter proposed titles
@@ -1041,7 +816,7 @@ exports.GetProposedTitleStatistics = AsyncErrorHandler(async (req, res) => {
         ],
 
         // ============================================================
-        // ⭐ NEW FACETS
+        //  NEW FACETS
         // ============================================================
         byScopeStatus: [
           { $group: { _id: "$scopeStatus", count: { $sum: 1 } } },
@@ -1322,7 +1097,7 @@ exports.GetByTrackingID = AsyncErrorHandler(async (req, res) => {
     return res.status(400).json({ status: "fail", message: "trackingId is required" });
   }
 
-  // ✅ FIX: Trim at tanggalin ang extra characters (::, spaces, quotes)
+  // FIX: Trim at tanggalin ang extra characters (::, spaces, quotes)
   const cleanedTrackingId = String(trackingId)
     .trim()
     .replace(/[:"'\s]+/g, "");
@@ -1343,7 +1118,7 @@ exports.GetByTrackingID = AsyncErrorHandler(async (req, res) => {
   const userIdStr = String(userId);
   const trackingObjectId = new mongoose.Types.ObjectId(cleanedTrackingId);
 
-  // ⭐ ALWAYS match the tracking first
+  //  ALWAYS match the tracking first
   const matchStage = { "titleUrlTracking._id": trackingObjectId };
   if (role === "student") matchStage.uploadedBy = userObjectId;
 
@@ -1370,7 +1145,7 @@ exports.GetByTrackingID = AsyncErrorHandler(async (req, res) => {
   }
 
   // ============================================================
-  // ⭐ POST-QUERY ROLE CHECK (JS-based — handles ALL formats)
+  //  POST-QUERY ROLE CHECK (JS-based — handles ALL formats)
   // ============================================================
   const groupInfo = submission.groupInfo || {};
   const toStrArr = (v) => {
@@ -1651,7 +1426,6 @@ exports.DisplayProposedTitles = AsyncErrorHandler(async (req, res) => {
         isUrgent: { $first: "$isUrgent" },
         priority: { $first: "$priority" },
 
-        // ⭐ IMPORTANT: Chapter progression fields
         chapterProgressionApprovals: { $first: "$chapterProgressionApprovals" },
         chapterProgressionApprovedBy: { $first: "$chapterProgressionApprovedBy" },
         chapterProgressionApprovedAt: { $first: "$chapterProgressionApprovedAt" },
@@ -1731,7 +1505,6 @@ exports.DisplayProposedTitles = AsyncErrorHandler(async (req, res) => {
               isFullyCompleted: buildIsFullyCompletedStage(),
               chapterCompletion: buildChapterCompletionStage(),
 
-              // ⭐ IMPORTANT
               chapterProgressionApprovals: 1,
               chapterProgressionApprovedBy: 1,
               chapterProgressionApprovedAt: 1,
@@ -1768,6 +1541,7 @@ exports.DisplayProposedTitles = AsyncErrorHandler(async (req, res) => {
                 last_name: "$adviserInfo.last_name",
                 email: "$adviserInfo.email",
                 role: "$adviserInfo.role",
+                avatar: "$adviserInfo.avatar",  // ⭐ KASAMA NA
                 full_name: {
                   $concat: [
                     { $ifNull: ["$adviserInfo.first_name", ""] },
@@ -1782,6 +1556,7 @@ exports.DisplayProposedTitles = AsyncErrorHandler(async (req, res) => {
                 last_name: "$coAdviserInfo.last_name",
                 email: "$coAdviserInfo.email",
                 role: "$coAdviserInfo.role",
+                avatar: "$coAdviserInfo.avatar",  // ⭐ KASAMA NA
                 full_name: {
                   $concat: [
                     { $ifNull: ["$coAdviserInfo.first_name", ""] },
@@ -1799,6 +1574,7 @@ exports.DisplayProposedTitles = AsyncErrorHandler(async (req, res) => {
                 ],
               },
               uploaderIdNumber: { $ifNull: ["$uploaderInfo.id_number", "N/A"] },
+              uploaderAvatar: "$uploaderInfo.avatar",  // ⭐ KASAMA NA
               comments: 1,
               commentCountActual: { $size: "$comments" },
               groupInfo: 1,
@@ -1815,20 +1591,130 @@ exports.DisplayProposedTitles = AsyncErrorHandler(async (req, res) => {
   const totalCount = result[0]?.totalCount?.[0]?.count || 0;
   const totalPages = Math.ceil(totalCount / limit);
 
+  // ============================================================
+  // ⭐ FAST PREVIEW — cache-first, concurrency 2, timeout 8s
+  // ============================================================
+  const PREVIEW_CACHE_DIR = path.join(process.cwd(), "cache", "previews");
+
+  function readCachedPreview(cacheKey) {
+    try {
+      const file = path.join(PREVIEW_CACHE_DIR, `${cacheKey}.png`);
+      if (fs.existsSync(file)) {
+        const b64 = fs.readFileSync(file).toString("base64");
+        return `data:image/png;base64,${b64}`;
+      }
+    } catch (_) { }
+    return null;
+  }
+
+  function writeCachedPreview(cacheKey, dataUrl) {
+    try {
+      fs.mkdirSync(PREVIEW_CACHE_DIR, { recursive: true });
+      const base64 = dataUrl.split(",")[1];
+      fs.writeFileSync(
+        path.join(PREVIEW_CACHE_DIR, `${cacheKey}.png`),
+        Buffer.from(base64, "base64")
+      );
+    } catch (_) { }
+  }
+
+  async function renderPreview(item, latest) {
+    const cacheKey = `${item._id}_${latest.chapter || "ch"}_${new Date(
+      latest.date || 0
+    ).getTime()}`;
+
+    const cached = readCachedPreview(cacheKey);
+    if (cached) return cached;
+
+    try {
+      const pdfBuffer = await resolvePdfBuffer(latest.url);
+      const doc = await pdf(pdfBuffer, { scale: 1.0 });
+      const firstPage = await doc.getPage(1);
+      const base64 = Buffer.from(firstPage).toString("base64");
+      const dataUrl = `data:image/png;base64,${base64}`;
+
+      writeCachedPreview(cacheKey, dataUrl);
+      return dataUrl;
+    } catch (err) {
+      console.error(`[Preview] ${item._id}:`, err.message);
+      return null;
+    }
+  }
+
+  async function runWithLimit(items, limitCount, workerFn) {
+    const queue = [...items];
+    const results = [];
+    const workers = Array.from({ length: limitCount }, async () => {
+      while (queue.length) {
+        const item = queue.shift();
+        if (!item) break;
+        const res = await workerFn(item);
+        results.push(res);
+      }
+    });
+    await Promise.all(workers);
+    return results;
+  }
+
+  // ============================================================
+  // ⭐ ATTACH latestTracking (metadata lang, walang preview pa)
+  // ============================================================
+  const itemsWithLatest = proposedTitles.map((item) => {
+    const tracking = item.titleUrlTracking || [];
+    const latest = getLatestTracking(tracking);
+
+    item.latestTracking = latest
+      ? {
+        chapter: latest.chapter || null,
+        url: latest.url || null,
+        date: latest.date || null,
+        action: latest.action || null,
+        isCompleted: latest.isCompleted || false,
+        remarks: latest.remarks || "",
+        preview: null,
+        isPdf: isPdfUrl(latest.url),
+      }
+      : null;
+
+    return item;
+  });
+
+  // ============================================================
+  // ⭐ GENERATE PREVIEWS — concurrency 2, 8s timeout
+  // ============================================================
+  await runWithLimit(itemsWithLatest, 2, async (item) => {
+    if (!item.latestTracking) return item;
+
+    if (item.latestTracking.isPdf) {
+      const preview = await Promise.race([
+        renderPreview(item, item.latestTracking),
+        new Promise((resolve) => setTimeout(() => resolve(null), 8000)),
+      ]);
+      item.latestTracking.preview = preview;
+    } else if (item.latestTracking.url) {
+      item.latestTracking.preview = item.latestTracking.url;
+    }
+
+    return item;
+  });
+
+  // ============================================================
+  // ⭐ RESPONSE
+  // ============================================================
   res.status(200).json({
     status: "success",
     currentPage: page,
     totalPages,
     totalCount,
-    results: proposedTitles.length,
-    data: proposedTitles,
+    results: itemsWithLatest.length,
+    data: itemsWithLatest,
   });
 });
 
 const cloudinary = require("cloudinary").v2;
 
 // ============================================================
-// ⭐ CLOUDINARY CONFIG
+//  CLOUDINARY CONFIG
 // ============================================================
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -1837,7 +1723,7 @@ cloudinary.config({
 });
 
 // ============================================================
-// ⭐ HELPER — Upload buffer to Cloudinary
+//  HELPER — Upload buffer to Cloudinary
 // ============================================================
 const uploadToCloudinary = (buffer, options = {}) => {
   return new Promise((resolve, reject) => {
@@ -1858,7 +1744,7 @@ const uploadToCloudinary = (buffer, options = {}) => {
 };
 
 // ============================================================
-// ⭐ CREATE PROPOSED TITLE — CLOUDINARY VERSION
+//  CREATE PROPOSED TITLE — CLOUDINARY VERSION
 // ============================================================
 exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
   try {
@@ -2060,9 +1946,8 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
 
         if (revisionRecipientIds.size > 0) {
           const notifTitle = "Revision Submitted";
-          const notifMessage = `Revision uploaded for "${
-            existing.title || "Untitled"
-          }" — ${chapter || "new chapter"}`;
+          const notifMessage = `Revision uploaded for "${existing.title || "Untitled"
+            }" — ${chapter || "new chapter"}`;
           const notifType = "Reminder";
           const notifPriority = "Normal";
           const notifActionUrl = `/proposed-titles/${existing._id}`;
@@ -2201,8 +2086,8 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
       reviewDeadline: reviewDeadline ? new Date(reviewDeadline) : null,
       assignedReviewers: Array.isArray(assignedReviewers)
         ? assignedReviewers
-            .filter((id) => mongoose.Types.ObjectId.isValid(id))
-            .map((id) => new mongoose.Types.ObjectId(id))
+          .filter((id) => mongoose.Types.ObjectId.isValid(id))
+          .map((id) => new mongoose.Types.ObjectId(id))
         : [],
       objectives: Array.isArray(objectives) ? objectives : [],
       sdgGoals: Array.isArray(sdgGoals) ? sdgGoals : [],
@@ -2240,9 +2125,8 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
 
       if (createRecipientIds.size > 0) {
         const notifTitle = "New Proposed Title";
-        const notifMessage = `"${
-          proposedTitle.title || "Untitled"
-        }" submitted — ${chapter || "new chapter"}`;
+        const notifMessage = `"${proposedTitle.title || "Untitled"
+          }" submitted — ${chapter || "new chapter"}`;
         const notifType = "ProposedTitleCreated";
         const notifPriority = "Normal";
         const notifActionUrl = `/proposed-titles/${proposedTitle._id}`;
@@ -3275,9 +3159,6 @@ exports.bulkUpdateStatus = AsyncErrorHandler(async (req, res) => {
   });
 });
 
-// ============================================================
-// DISPLAY READY TITLES
-// ============================================================
 exports.DisplayReadytitle = AsyncErrorHandler(async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 5;
@@ -3460,18 +3341,227 @@ exports.DisplayReadytitle = AsyncErrorHandler(async (req, res) => {
   const totalCount = result[0]?.totalCount?.[0]?.count || 0;
   const totalPages = Math.ceil(totalCount / limit);
 
+  // ============================================================
+  // ⭐ FAST PREVIEW — cache-first, concurrency 2, timeout 8s
+  // ============================================================
+
+  // ✅ Helper: get cached preview kung existing
+  const PREVIEW_CACHE_DIR = path.join(process.cwd(), "cache", "previews");
+
+  function readCachedPreview(cacheKey) {
+    try {
+      const file = path.join(PREVIEW_CACHE_DIR, `${cacheKey}.png`);
+      if (fs.existsSync(file)) {
+        const b64 = fs.readFileSync(file).toString("base64");
+        return `data:image/png;base64,${b64}`;
+      }
+    } catch (_) { }
+    return null;
+  }
+
+  function writeCachedPreview(cacheKey, dataUrl) {
+    try {
+      fs.mkdirSync(PREVIEW_CACHE_DIR, { recursive: true });
+      const base64 = dataUrl.split(",")[1];
+      fs.writeFileSync(
+        path.join(PREVIEW_CACHE_DIR, `${cacheKey}.png`),
+        Buffer.from(base64, "base64")
+      );
+    } catch (_) { }
+  }
+
+  // ✅ Helper: render 1 PDF → base64 (may cache check)
+  async function renderPreview(item, latest) {
+    const cacheKey = `${item._id}_${latest.chapter || "ch"}_${new Date(
+      latest.date || 0
+    ).getTime()}`;
+
+    // 1. Cache hit?
+    const cached = readCachedPreview(cacheKey);
+    if (cached) return cached;
+
+    // 2. Render
+    try {
+      const pdfBuffer = await resolvePdfBuffer(latest.url);
+      const doc = await pdf(pdfBuffer, { scale: 1.0 }); // ⭐ 1.0 = mas mabilis
+      const firstPage = await doc.getPage(1);
+      const base64 = Buffer.from(firstPage).toString("base64");
+      const dataUrl = `data:image/png;base64,${base64}`;
+
+      writeCachedPreview(cacheKey, dataUrl);
+      return dataUrl;
+    } catch (err) {
+      console.error(`[Preview] ${item._id}:`, err.message);
+      return null;
+    }
+  }
+
+  // ✅ Concurrency limiter — max 2 sabay-sabay
+  async function runWithLimit(items, limitCount, workerFn) {
+    const queue = [...items];
+    const results = [];
+    const workers = Array.from({ length: limitCount }, async () => {
+      while (queue.length) {
+        const item = queue.shift();
+        if (!item) break;
+        const res = await workerFn(item);
+        results.push(res);
+      }
+    });
+    await Promise.all(workers);
+    return results;
+  }
+
+  // ✅ Process lahat ng items
+  const itemsWithLatest = proposedTitles.map((item) => {
+    const tracking = item.titleUrlTracking || [];
+    const latest = getLatestTracking(tracking);
+
+    item.latestTracking = latest
+      ? {
+        chapter: latest.chapter || null,
+        url: latest.url || null,
+        date: latest.date || null,
+        action: latest.action || null,
+        isCompleted: latest.isCompleted || false,
+        remarks: latest.remarks || "",
+        preview: null,
+        isPdf: isPdfUrl(latest.url),
+      }
+      : null;
+
+    return item;
+  });
+
+  // ✅ Generate previews — concurrency 2
+  await runWithLimit(itemsWithLatest, 2, async (item) => {
+    if (!item.latestTracking) return item;
+
+    if (item.latestTracking.isPdf) {
+      // PDF → render (with cache)
+      const preview = await Promise.race([
+        renderPreview(item, item.latestTracking),
+        // ⭐ 8s timeout — kung stuck, null lang
+        new Promise((resolve) => setTimeout(() => resolve(null), 8000)),
+      ]);
+      item.latestTracking.preview = preview;
+    } else if (item.latestTracking.url) {
+      // Image na — direct URL
+      item.latestTracking.preview = item.latestTracking.url;
+    }
+
+    return item;
+  });
+
   res.status(200).json({
     status: "success",
     currentPage: page,
     totalPages,
     totalCount,
-    results: proposedTitles.length,
-    data: proposedTitles,
+    results: itemsWithLatest.length,
+    data: itemsWithLatest,
   });
 });
 
 // ============================================================
-// DISPLAY ARCHIVED TITLES
+// HELPERS
+// ============================================================
+
+// Cache directory para sa mga generated previews
+const PREVIEW_CACHE_DIR = path.join(process.cwd(), "cache", "previews");
+
+// ============================================================
+// HELPER: Resolve URL/path → PDF Buffer
+// ============================================================
+async function resolvePdfBuffer(url) {
+  if (!url) throw new Error("Empty URL");
+
+  // 1) Full HTTP(S) URL → download
+  if (/^https?:\/\//i.test(url)) {
+    const resp = await axios.get(url, {
+      responseType: "arraybuffer",
+      timeout: 30000,
+      maxContentLength: 50 * 1024 * 1024, // 50MB max
+    });
+    return Buffer.from(resp.data);
+  }
+
+  // 2) Local path — i-try iba't ibang base
+  const candidates = [
+    path.join(process.cwd(), url),
+    path.join(process.cwd(), "uploads", path.basename(url)),
+    path.join(__dirname, "..", url),
+    path.join(__dirname, "..", "uploads", path.basename(url)),
+    path.resolve(url),
+  ];
+
+  for (const p of candidates) {
+    if (fs.existsSync(p)) return fs.readFileSync(p);
+  }
+
+  throw new Error(`PDF not found: ${url}`);
+}
+
+// ============================================================
+// HELPER: PDF buffer → 1st page PNG base64 (with disk cache)
+// ============================================================
+async function pdfFirstPageToBase64(pdfBuffer, cacheKey, scale = 1.5) {
+  // ✅ 1. Cache check
+  try {
+    if (cacheKey && fs.existsSync(PREVIEW_CACHE_DIR)) {
+      const cacheFile = path.join(PREVIEW_CACHE_DIR, `${cacheKey}.png`);
+      if (fs.existsSync(cacheFile)) {
+        const b64 = fs.readFileSync(cacheFile).toString("base64");
+        return `data:image/png;base64,${b64}`;
+      }
+    }
+  } catch (_) {
+    /* ignore cache read errors */
+  }
+
+  // ✅ 2. Render 1st page lang
+  const doc = await pdf(pdfBuffer, { scale });
+  const firstPageBuffer = await doc.getPage(1); // Uint8Array (PNG)
+
+  const base64 = Buffer.from(firstPageBuffer).toString("base64");
+  const dataUrl = `data:image/png;base64,${base64}`;
+
+  // ✅ 3. Save cache (non-blocking)
+  try {
+    if (cacheKey) {
+      fs.mkdirSync(PREVIEW_CACHE_DIR, { recursive: true });
+      fs.writeFileSync(
+        path.join(PREVIEW_CACHE_DIR, `${cacheKey}.png`),
+        Buffer.from(base64, "base64")
+      );
+    }
+  } catch (_) {
+    /* ignore cache write errors */
+  }
+
+  return dataUrl;
+}
+
+// ============================================================
+// HELPER: Get latest tracking entry (by date)
+// ============================================================
+function getLatestTracking(tracking) {
+  if (!Array.isArray(tracking) || !tracking.length) return null;
+  return [...tracking].sort(
+    (a, b) => new Date(b.date || 0) - new Date(a.date || 0)
+  )[0];
+}
+
+// ============================================================
+// HELPER: Check if URL is a PDF
+// ============================================================
+function isPdfUrl(url) {
+  if (!url) return false;
+  return /\.pdf($|\?)/i.test(url);
+}
+
+// ============================================================
+// CONTROLLER: DisplayArcivedtitle
 // ============================================================
 exports.DisplayArcivedtitle = AsyncErrorHandler(async (req, res) => {
   const page = parseInt(req.query.page) || 1;
@@ -3479,19 +3569,16 @@ exports.DisplayArcivedtitle = AsyncErrorHandler(async (req, res) => {
   const skip = (page - 1) * limit;
   const { search, dateFrom, dateTo, groupId } = req.query;
 
-  // ✅ Public-safe: kung walang req.user, ituring na "guest"
   const role = req.user?.role || null;
   const userId = req.user?._id || null;
   const userObjectId = userId ? new mongoose.Types.ObjectId(userId) : null;
 
   const matchStage = { isArchived: true };
 
-  // ✅ Role-based filtering — SKIP kung walang user
   if (userObjectId) {
     if (role === "student") {
       matchStage.uploadedBy = userObjectId;
     }
-    // adviser/coadviser/panelist handled via roleMatchStage below
   }
 
   if (groupId) matchStage.groupId = new mongoose.Types.ObjectId(groupId);
@@ -3506,7 +3593,6 @@ exports.DisplayArcivedtitle = AsyncErrorHandler(async (req, res) => {
     }
   }
 
-  // ✅ Role filter — APPLY LANG kung may user at role na adviser/coadviser/panelist
   let roleMatchStage = null;
   if (userObjectId && (role === "adviser" || role === "coadviser")) {
     roleMatchStage = {
@@ -3518,24 +3604,86 @@ exports.DisplayArcivedtitle = AsyncErrorHandler(async (req, res) => {
   } else if (userObjectId && role === "panelist") {
     roleMatchStage = { "groupInfo.panelistIds": userObjectId };
   }
-  // ✅ Kung walang user (guest) → roleMatchStage = null → LAHAT ng archived titles
 
   const result = await ProposedTitleModel.aggregate([
     { $match: matchStage },
-    { $lookup: { from: "groups", localField: "groupId", foreignField: "_id", as: "groupInfo" } },
+    {
+      $lookup: {
+        from: "groups",
+        localField: "groupId",
+        foreignField: "_id",
+        as: "groupInfo",
+      },
+    },
     { $unwind: { path: "$groupInfo", preserveNullAndEmptyArrays: true } },
     ...(roleMatchStage ? [{ $match: roleMatchStage }] : []),
 
-    { $lookup: { from: "userloginschemas", localField: "groupInfo.members", foreignField: "_id", as: "membersInfo" } },
-    { $lookup: { from: "userloginschemas", localField: "groupInfo.adviserId", foreignField: "_id", as: "adviserInfo" } },
-    { $lookup: { from: "userloginschemas", localField: "groupInfo.coadviserId", foreignField: "_id", as: "coadviserInfo" } },
-    { $lookup: { from: "userloginschemas", localField: "groupInfo.panelistIds", foreignField: "_id", as: "panelistsInfo" } },
-    { $lookup: { from: "userloginschemas", localField: "groupInfo.referralCode", foreignField: "referredBy", as: "referredUsersInfo" } },
-    { $lookup: { from: "userloginschemas", localField: "uploadedBy", foreignField: "_id", as: "uploaderInfo" } },
+    {
+      $lookup: {
+        from: "userloginschemas",
+        localField: "groupInfo.members",
+        foreignField: "_id",
+        as: "membersInfo",
+      },
+    },
+    {
+      $lookup: {
+        from: "userloginschemas",
+        localField: "groupInfo.adviserId",
+        foreignField: "_id",
+        as: "adviserInfo",
+      },
+    },
+    {
+      $lookup: {
+        from: "userloginschemas",
+        localField: "groupInfo.coadviserId",
+        foreignField: "_id",
+        as: "coadviserInfo",
+      },
+    },
+    {
+      $lookup: {
+        from: "userloginschemas",
+        localField: "groupInfo.panelistIds",
+        foreignField: "_id",
+        as: "panelistsInfo",
+      },
+    },
+    {
+      $lookup: {
+        from: "userloginschemas",
+        localField: "groupInfo.referralCode",
+        foreignField: "referredBy",
+        as: "referredUsersInfo",
+      },
+    },
+    {
+      $lookup: {
+        from: "userloginschemas",
+        localField: "uploadedBy",
+        foreignField: "_id",
+        as: "uploaderInfo",
+      },
+    },
     { $unwind: { path: "$uploaderInfo", preserveNullAndEmptyArrays: true } },
-    { $lookup: { from: "comments", localField: "_id", foreignField: "proposedTitleId", as: "comments" } },
+    {
+      $lookup: {
+        from: "comments",
+        localField: "_id",
+        foreignField: "proposedTitleId",
+        as: "comments",
+      },
+    },
     { $unwind: { path: "$comments", preserveNullAndEmptyArrays: true } },
-    { $lookup: { from: "userloginschemas", localField: "comments.userId", foreignField: "_id", as: "comments.authorInfo" } },
+    {
+      $lookup: {
+        from: "userloginschemas",
+        localField: "comments.userId",
+        foreignField: "_id",
+        as: "comments.authorInfo",
+      },
+    },
     { $unwind: { path: "$comments.authorInfo", preserveNullAndEmptyArrays: true } },
     {
       $group: {
@@ -3598,7 +3746,9 @@ exports.DisplayArcivedtitle = AsyncErrorHandler(async (req, res) => {
     },
     {
       $addFields: {
-        comments: { $sortArray: { input: "$comments", sortBy: { createdAt: 1 } } },
+        comments: {
+          $sortArray: { input: "$comments", sortBy: { createdAt: 1 } },
+        },
       },
     },
     { $sort: { createdAt: -1 } },
@@ -3609,24 +3759,19 @@ exports.DisplayArcivedtitle = AsyncErrorHandler(async (req, res) => {
           { $limit: limit },
           {
             $project: {
-              _id: 1, title: 1, description: 1, status: 1, isArchived: 1, remarks: 1,
-              createdAt: 1, updatedAt: 1, fileName: 1, fileUrl: 1, fileType: 1,
-              isPdf: 1, adviser: 1, coAdviser: 1, titleUrlTracking: 1,
+              _id: 1, title: 1, description: 1, status: 1, isArchived: 1,
+              remarks: 1, createdAt: 1, updatedAt: 1, fileName: 1,
+              fileUrl: 1, fileType: 1, isPdf: 1, adviser: 1, coAdviser: 1,
+              titleUrlTracking: 1,
               task: 1,
               completion: buildCompletionStage(),
               isFullyCompleted: buildIsFullyCompletedStage(),
               chapterCompletion: buildChapterCompletionStage(),
 
-              topicCode: 1,
-              track: 1,
-              revisionNumber: 1,
-              groupStatus: 1,
+              topicCode: 1, track: 1, revisionNumber: 1, groupStatus: 1,
               rubric: buildRubricStage(),
-              noveltyScore: 1,
-              feasibilityScore: 1,
-              scopeStatus: 1,
-              panelDecision: 1,
-              panelFeedback: 1,
+              noveltyScore: 1, feasibilityScore: 1, scopeStatus: 1,
+              panelDecision: 1, panelFeedback: 1,
               defenseSchedule: buildDefenseScheduleStage(),
 
               groupName: { $ifNull: ["$groupInfo.name", "N/A"] },
@@ -3723,20 +3868,240 @@ exports.DisplayArcivedtitle = AsyncErrorHandler(async (req, res) => {
   const totalCount = result[0]?.totalCount?.[0]?.count || 0;
   const totalPages = Math.ceil(totalCount / limit);
 
+  // ============================================================
+  // ⭐ FAST PREVIEW — cache-first, concurrency 2, timeout 8s
+  // ============================================================
+
+  // ✅ Helper: get cached preview kung existing
+  const PREVIEW_CACHE_DIR = path.join(process.cwd(), "cache", "previews");
+
+  function readCachedPreview(cacheKey) {
+    try {
+      const file = path.join(PREVIEW_CACHE_DIR, `${cacheKey}.png`);
+      if (fs.existsSync(file)) {
+        const b64 = fs.readFileSync(file).toString("base64");
+        return `data:image/png;base64,${b64}`;
+      }
+    } catch (_) { }
+    return null;
+  }
+
+  function writeCachedPreview(cacheKey, dataUrl) {
+    try {
+      fs.mkdirSync(PREVIEW_CACHE_DIR, { recursive: true });
+      const base64 = dataUrl.split(",")[1];
+      fs.writeFileSync(
+        path.join(PREVIEW_CACHE_DIR, `${cacheKey}.png`),
+        Buffer.from(base64, "base64")
+      );
+    } catch (_) { }
+  }
+
+  // ✅ Helper: render 1 PDF → base64 (may cache check)
+  async function renderPreview(item, latest) {
+    const cacheKey = `${item._id}_${latest.chapter || "ch"}_${new Date(
+      latest.date || 0
+    ).getTime()}`;
+
+    // 1. Cache hit?
+    const cached = readCachedPreview(cacheKey);
+    if (cached) return cached;
+
+    // 2. Render
+    try {
+      const pdfBuffer = await resolvePdfBuffer(latest.url);
+      const doc = await pdf(pdfBuffer, { scale: 1.0 }); // ⭐ 1.0 = mas mabilis
+      const firstPage = await doc.getPage(1);
+      const base64 = Buffer.from(firstPage).toString("base64");
+      const dataUrl = `data:image/png;base64,${base64}`;
+
+      writeCachedPreview(cacheKey, dataUrl);
+      return dataUrl;
+    } catch (err) {
+      console.error(`[Preview] ${item._id}:`, err.message);
+      return null;
+    }
+  }
+
+  // ✅ Concurrency limiter — max 2 sabay-sabay
+  async function runWithLimit(items, limitCount, workerFn) {
+    const queue = [...items];
+    const results = [];
+    const workers = Array.from({ length: limitCount }, async () => {
+      while (queue.length) {
+        const item = queue.shift();
+        if (!item) break;
+        const res = await workerFn(item);
+        results.push(res);
+      }
+    });
+    await Promise.all(workers);
+    return results;
+  }
+
+  // ✅ Process lahat ng items
+  const itemsWithLatest = proposedTitles.map((item) => {
+    const tracking = item.titleUrlTracking || [];
+    const latest = getLatestTracking(tracking);
+
+    item.latestTracking = latest
+      ? {
+        chapter: latest.chapter || null,
+        url: latest.url || null,
+        date: latest.date || null,
+        action: latest.action || null,
+        isCompleted: latest.isCompleted || false,
+        remarks: latest.remarks || "",
+        preview: null,
+        isPdf: isPdfUrl(latest.url),
+      }
+      : null;
+
+    return item;
+  });
+
+  // ✅ Generate previews — concurrency 2
+  await runWithLimit(itemsWithLatest, 2, async (item) => {
+    if (!item.latestTracking) return item;
+
+    if (item.latestTracking.isPdf) {
+      // PDF → render (with cache)
+      const preview = await Promise.race([
+        renderPreview(item, item.latestTracking),
+        // ⭐ 8s timeout — kung stuck, null lang
+        new Promise((resolve) => setTimeout(() => resolve(null), 8000)),
+      ]);
+      item.latestTracking.preview = preview;
+    } else if (item.latestTracking.url) {
+      // Image na — direct URL
+      item.latestTracking.preview = item.latestTracking.url;
+    }
+
+    return item;
+  });
+
   res.status(200).json({
     status: "success",
     currentPage: page,
     totalPages,
     totalCount,
-    results: proposedTitles.length,
-    data: proposedTitles,
+    results: itemsWithLatest.length,
+    data: itemsWithLatest,
   });
 });
+
+function buildCompletionStage() {
+  return {
+    total: { $size: { $ifNull: ["$titleUrlTracking", []] } },
+    completed: {
+      $size: {
+        $filter: {
+          input: { $ifNull: ["$titleUrlTracking", []] },
+          as: "t",
+          cond: { $eq: ["$$t.isCompleted", true] },
+        },
+      },
+    },
+    pending: {
+      $size: {
+        $filter: {
+          input: { $ifNull: ["$titleUrlTracking", []] },
+          as: "t",
+          cond: { $ne: ["$$t.isCompleted", true] },
+        },
+      },
+    },
+    // ✅ ITO ANG FIX — computed, hindi `0` exclusion
+    percentage: {
+      $cond: [
+        { $eq: [{ $size: { $ifNull: ["$titleUrlTracking", []] } }, 0] },
+        0,
+        {
+          $round: [
+            {
+              $multiply: [
+                {
+                  $divide: [
+                    {
+                      $size: {
+                        $filter: {
+                          input: { $ifNull: ["$titleUrlTracking", []] },
+                          as: "t",
+                          cond: { $eq: ["$$t.isCompleted", true] },
+                        },
+                      },
+                    },
+                    { $size: { $ifNull: ["$titleUrlTracking", []] } },
+                  ],
+                },
+                100,
+              ],
+            },
+            0,
+          ],
+        },
+      ],
+    },
+  };
+}
+
+function buildIsFullyCompletedStage() {
+  return { $eq: ["$isAllChaptersCompleted", true] };
+}
+
+function buildChapterCompletionStage() {
+  return {
+    completedChapters: { $ifNull: ["$completedChapters", []] },
+    chapters: {
+      $map: {
+        input: { $ifNull: ["$titleUrlTracking", []] },
+        as: "t",
+        in: {
+          chapter: "$$t.chapter",
+          isCompleted: "$$t.isCompleted",
+          latestEntry: "$$t",
+        },
+      },
+    },
+    isAllChaptersCompleted: { $ifNull: ["$isAllChaptersCompleted", false] },
+    // ✅ FIX — computed, hindi `0`
+    chapterProgress: {
+      $cond: [
+        { $eq: [{ $size: { $ifNull: ["$completedChapters", []] } }, 0] },
+        0,
+        {
+          $round: [
+            {
+              $multiply: [
+                {
+                  $divide: [
+                    { $size: { $ifNull: ["$completedChapters", []] } },
+                    { $size: { $ifNull: ["$titleUrlTracking", []] } },
+                  ],
+                },
+                100,
+              ],
+            },
+            0,
+          ],
+        },
+      ],
+    },
+  };
+}
+
+function buildRubricStage() {
+  return "$rubric";
+}
+
+function buildDefenseScheduleStage() {
+  return "$defenseSchedule";
+}
 
 
 
 // ============================================================
-// ⭐ PROCEED CHAPTER (Subject Instructor / Admin / Organizer only)
+//  PROCEED CHAPTER (Subject Instructor / Admin / Organizer only)
 // PATCH /api/v1/proposed-titles/:id/chapters/:chapter/proceed
 // ============================================================
 exports.proceedChapter = async (req, res) => {
@@ -3796,7 +4161,7 @@ exports.proceedChapter = async (req, res) => {
 };
 
 // ============================================================
-// ⭐ REJECT CHAPTER (Subject Instructor / Admin / Organizer only)
+//  REJECT CHAPTER (Subject Instructor / Admin / Organizer only)
 // PATCH /api/v1/proposed-titles/:id/chapters/:chapter/reject
 // ============================================================
 exports.rejectChapter = async (req, res) => {
@@ -3880,7 +4245,7 @@ exports.rejectChapter = async (req, res) => {
 };
 
 // ============================================================
-// ⭐ GET CHAPTER PROGRESSION (any authenticated user)
+//  GET CHAPTER PROGRESSION (any authenticated user)
 // GET /api/v1/proposed-titles/:id/chapters/progression
 // ============================================================
 exports.getChapterProgression = async (req, res) => {

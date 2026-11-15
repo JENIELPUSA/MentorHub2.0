@@ -1,6 +1,8 @@
 import {
     Bell, X, FileText, CheckCircle, AlertCircle,
     Clock, Users, LogOut, Lock, ArrowLeftRight, CheckCheck,
+    User, Settings, ChevronRight, Shield, Mail, Calendar,
+    IdCard, ShieldCheck, Camera, Upload, Loader2, Trash2,
 } from "lucide-react";
 import PropTypes from "prop-types";
 import { useContext, useState, useEffect, useRef } from "react";
@@ -10,13 +12,407 @@ import ChangePassword from "../components/Login/UpdatePassword";
 import ConfirmationModal from "../components/ReusableFolder/ConfirmationModal";
 import { useAuth } from "../contexts/AuthContext";
 
+/* ============================================================
+   PROFILE MODAL — popup + avatar upload
+   ============================================================ */
+const ProfileModal = ({
+    isOpen,
+    onClose,
+    user,
+    roleLower,
+    roleGradient,
+    roleBadgeColor,
+    onAvatarUpdate,
+    onAvatarRemove,
+    avatarUrl,
+    hasAvatar,
+}) => {
+    const [imageError, setImageError] = useState(false);
+    const [isUploading, setIsUploading] = useState(false);
+    const [uploadError, setUploadError] = useState(null);
+    const [uploadSuccess, setUploadSuccess] = useState(false);
+    const fileInputRef = useRef(null);
+
+    // ESC to close
+    useEffect(() => {
+        if (!isOpen) return;
+        const onKey = (e) => {
+            if (e.key === "Escape") onClose();
+        };
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+    }, [isOpen, onClose]);
+
+    // Reset state kapag nagsara ang modal
+    useEffect(() => {
+        if (!isOpen) {
+            setUploadError(null);
+            setUploadSuccess(false);
+            setImageError(false);
+            setIsUploading(false);
+        }
+    }, [isOpen]);
+
+    // Auto-dismiss success message
+    useEffect(() => {
+        if (!uploadSuccess) return;
+        const t = setTimeout(() => setUploadSuccess(false), 3000);
+        return () => clearTimeout(t);
+    }, [uploadSuccess]);
+
+    if (!isOpen) return null;
+
+    const fullName = `${user.firstName || ""} ${user.lastName || ""}`.trim() || "User";
+    const initials = `${user.firstName?.[0] || ""}${user.lastName?.[0] || ""}`.toUpperCase() || "U";
+
+    // ⭐ Handle file selection
+    const handleFileSelect = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        if (!file.type.startsWith("image/")) {
+            setUploadError("Please select a valid image file (JPG, PNG, etc.)");
+            return;
+        }
+
+        const MAX_SIZE = 5 * 1024 * 1024;
+        if (file.size > MAX_SIZE) {
+            setUploadError("Image is too large. Maximum size is 5MB.");
+            return;
+        }
+
+        setUploadError(null);
+        setUploadSuccess(false);
+        setImageError(false);
+
+        setIsUploading(true);
+        try {
+            if (onAvatarUpdate) {
+                const result = await onAvatarUpdate(file);
+                if (result?.success === false) {
+                    throw new Error(result?.message || "Upload failed");
+                }
+                setUploadSuccess(true);
+            }
+        } catch (err) {
+            setUploadError(err.message || "Failed to upload avatar. Please try again.");
+        } finally {
+            setIsUploading(false);
+            if (fileInputRef.current) fileInputRef.current.value = "";
+        }
+    };
+
+    const handleUploadClick = () => {
+        if (isUploading) return;
+        fileInputRef.current?.click();
+    };
+
+    // ⭐ Remove avatar
+    const handleRemoveAvatar = async () => {
+        if (isUploading) return;
+        if (!onAvatarRemove) return;
+
+        setUploadError(null);
+        setUploadSuccess(false);
+        setIsUploading(true);
+        try {
+            const result = await onAvatarRemove();
+            if (result?.success === false) {
+                throw new Error(result?.message || "Remove failed");
+            }
+            setUploadSuccess(true);
+            setImageError(false);
+        } catch (err) {
+            setUploadError(err.message || "Failed to remove avatar.");
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
+    // Compute displayed image
+    const displayedImage = !imageError && avatarUrl ? avatarUrl : null;
+
+    return (
+        <div
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm"
+            onClick={(e) => e.target === e.currentTarget && onClose()}
+        >
+            <div
+                role="dialog"
+                aria-modal="true"
+                aria-label="User Profile"
+                className="relative w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/5"
+            >
+                {/* Close button */}
+                <button
+                    onClick={onClose}
+                    aria-label="Close profile"
+                    className="absolute right-3 top-3 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-sm transition-colors hover:bg-white/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                >
+                    <X size={16} />
+                </button>
+
+                {/* Gradient header */}
+                <div className={`relative bg-gradient-to-br ${roleGradient} px-6 pt-8 pb-6`}>
+                    <div className="flex flex-col items-center text-center">
+                        {/* Avatar with upload button */}
+                        <div className="relative group">
+                            {displayedImage ? (
+                                <img
+                                    src={displayedImage}
+                                    alt={fullName}
+                                    onError={() => setImageError(true)}
+                                    className="h-24 w-24 rounded-full border-4 border-white/30 object-cover shadow-xl transition-opacity"
+                                    style={{ opacity: isUploading ? 0.5 : 1 }}
+                                />
+                            ) : (
+                                <div className="flex h-24 w-24 items-center justify-center rounded-full border-4 border-white/30 bg-white/20 text-2xl font-bold text-white shadow-xl backdrop-blur-sm">
+                                    {initials}
+                                </div>
+                            )}
+
+                            {/* Online status dot */}
+                            <span className="absolute bottom-1 right-1 h-5 w-5 rounded-full border-4 border-white bg-emerald-500 shadow" />
+
+                            {/* Upload overlay */}
+                            <button
+                                onClick={handleUploadClick}
+                                disabled={isUploading}
+                                className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100 disabled:cursor-wait"
+                                aria-label="Upload avatar"
+                            >
+                                {isUploading ? (
+                                    <Loader2 size={24} className="animate-spin text-white" />
+                                ) : (
+                                    <Camera size={24} className="text-white" />
+                                )}
+                            </button>
+
+                            {/* Hidden file input */}
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept="image/*"
+                                onChange={handleFileSelect}
+                                className="hidden"
+                            />
+                        </div>
+
+                        {/* Upload / Remove buttons */}
+                        <div className="mt-3 flex items-center justify-center gap-2">
+                            <button
+                                onClick={handleUploadClick}
+                                disabled={isUploading}
+                                className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1.5 text-[11px] font-semibold text-white backdrop-blur-sm transition-colors hover:bg-white/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:cursor-wait disabled:opacity-60"
+                            >
+                                {isUploading ? (
+                                    <>
+                                        <Loader2 size={12} className="animate-spin" />
+                                        Uploading…
+                                    </>
+                                ) : (
+                                    <>
+                                        <Upload size={12} />
+                                        {displayedImage ? "Change Photo" : "Upload Photo"}
+                                    </>
+                                )}
+                            </button>
+
+                            {hasAvatar && !isUploading && (
+                                <button
+                                    onClick={handleRemoveAvatar}
+                                    className="inline-flex items-center gap-1.5 rounded-full bg-rose-500/30 px-3 py-1.5 text-[11px] font-semibold text-white backdrop-blur-sm transition-colors hover:bg-rose-500/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                                >
+                                    <Trash2 size={12} />
+                                    Remove
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Success / Error messages */}
+                        {uploadSuccess && (
+                            <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-emerald-500/30 px-3 py-1 text-[11px] font-semibold text-white backdrop-blur-sm">
+                                <CheckCircle size={12} />
+                                Avatar updated successfully!
+                            </div>
+                        )}
+
+                        {uploadError && (
+                            <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-rose-500/30 px-3 py-1 text-[11px] font-semibold text-white backdrop-blur-sm">
+                                <AlertCircle size={12} />
+                                {uploadError}
+                            </div>
+                        )}
+
+                        {/* Name */}
+                        <h2 className="mt-4 text-lg font-bold text-white">
+                            {fullName}
+                        </h2>
+
+                        {/* Email */}
+                        <p className="mt-0.5 text-sm text-white/80">
+                            {user.email || "No email provided"}
+                        </p>
+
+                        {/* Role badge */}
+                        {roleLower && (
+                            <span className="mt-3 inline-flex items-center gap-1 rounded-full bg-white/20 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-white ring-1 ring-inset ring-white/30 backdrop-blur-sm">
+                                <Shield size={12} />
+                                {roleLower}
+                            </span>
+                        )}
+                    </div>
+                </div>
+
+                {/* Body — user info */}
+                <div className="max-h-[50vh] overflow-y-auto p-5">
+                    <h3 className="mb-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        Account Information
+                    </h3>
+
+                    <div className="space-y-3">
+                        {/* Full Name */}
+                        <div className="flex items-start gap-3 rounded-lg border border-slate-100 bg-slate-50/50 p-3">
+                            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-blue-100 text-blue-600">
+                                <User size={16} />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                                    Full Name
+                                </p>
+                                <p className="mt-0.5 truncate text-sm font-medium text-slate-900">
+                                    {fullName}
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Email */}
+                        <div className="flex items-start gap-3 rounded-lg border border-slate-100 bg-slate-50/50 p-3">
+                            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600">
+                                <Mail size={16} />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                                    Email Address
+                                </p>
+                                <p className="mt-0.5 truncate text-sm font-medium text-slate-900">
+                                    {user.email || "—"}
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Role */}
+                        <div className="flex items-start gap-3 rounded-lg border border-slate-100 bg-slate-50/50 p-3">
+                            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-violet-100 text-violet-600">
+                                <ShieldCheck size={16} />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                                    Role
+                                </p>
+                                <p className="mt-0.5 truncate text-sm font-medium capitalize text-slate-900">
+                                    {roleLower || "—"}
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* ID Number */}
+                        {user.id_number && (
+                            <div className="flex items-start gap-3 rounded-lg border border-slate-100 bg-slate-50/50 p-3">
+                                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-600">
+                                    <IdCard size={16} />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                                        ID Number
+                                    </p>
+                                    <p className="mt-0.5 truncate text-sm font-medium text-slate-900">
+                                        {user.id_number}
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Member Since */}
+                        {user.createdAt && (
+                            <div className="flex items-start gap-3 rounded-lg border border-slate-100 bg-slate-50/50 p-3">
+                                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-sky-100 text-sky-600">
+                                    <Calendar size={16} />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                                        Member Since
+                                    </p>
+                                    <p className="mt-0.5 truncate text-sm font-medium text-slate-900">
+                                        {new Date(user.createdAt).toLocaleDateString("en-US", {
+                                            year: "numeric",
+                                            month: "long",
+                                            day: "numeric",
+                                        })}
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Footer actions */}
+                <div className="flex items-center gap-2 border-t border-slate-100 bg-slate-50/60 p-3">
+                    <button
+                        onClick={onClose}
+                        className="flex-1 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+                    >
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+ProfileModal.propTypes = {
+    isOpen: PropTypes.bool.isRequired,
+    onClose: PropTypes.func.isRequired,
+    user: PropTypes.shape({
+        firstName: PropTypes.string,
+        lastName: PropTypes.string,
+        email: PropTypes.string,
+        image: PropTypes.string,
+        id_number: PropTypes.string,
+        createdAt: PropTypes.string,
+    }).isRequired,
+    roleLower: PropTypes.string,
+    roleGradient: PropTypes.string,
+    roleBadgeColor: PropTypes.string,
+    onAvatarUpdate: PropTypes.func,
+    onAvatarRemove: PropTypes.func,
+    avatarUrl: PropTypes.string,
+    hasAvatar: PropTypes.bool,
+};
+
+/* ============================================================
+   MAIN HEADER
+   ============================================================ */
 export const Header = () => {
-    const { logout, role, email, first_name, last_name, switchRole } = useAuth();
+    const {
+        logout,
+        role,
+        email,
+        first_name,
+        last_name,
+        switchRole,
+        updateAvatar,
+        removeAvatar,
+        avatarUrl,
+        hasAvatar,
+    } = useAuth();
+
     const navigate = useNavigate();
 
     const [isNotificationOpen, setIsNotificationOpen] = useState(false);
     const [isProfileOpen, setIsProfileOpen] = useState(false);
     const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+    const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
     const [isSwitchingRole, setIsSwitchingRole] = useState(false);
     const [isSwitchConfirmOpen, setIsSwitchConfirmOpen] = useState(false);
     const [switchError, setSwitchError] = useState(null);
@@ -27,17 +423,13 @@ export const Header = () => {
     const profileRef = useRef(null);
     const notificationRef = useRef(null);
 
-    const dummyProfile = {
-        firstName: "Juan",
-        lastName: "Dela Cruz",
-        email: "juan.delacruz@example.com",
-        image: "https://i.pravatar.cc/150?img=12",
-    };
+    // ⭐ Avatar mula sa AuthContext (with fallback sa placeholder)
+    const FALLBACK_AVATAR = "https://i.pravatar.cc/150?img=12";
+    const displayImage = hasAvatar && avatarUrl ? avatarUrl : FALLBACK_AVATAR;
 
-    const displayFirstName = first_name || dummyProfile.firstName;
-    const displayLastName = last_name || dummyProfile.lastName;
-    const displayEmail = email || dummyProfile.email;
-    const displayImage = dummyProfile.image;
+    const displayFirstName = first_name || "User";
+    const displayLastName = last_name || "";
+    const displayEmail = email || "";
 
     const {
         notifications = [],
@@ -51,6 +443,17 @@ export const Header = () => {
     const roleLower = String(role || "").toLowerCase();
     const isSwitchableRole = roleLower === "adviser" || roleLower === "panelist";
     const targetRole = roleLower === "adviser" ? "panelist" : "adviser";
+
+    // ⭐ Handle avatar upload — delegated to AuthContext
+    const handleAvatarUpdate = async (file) => {
+        if (!file) return { success: false, message: "No file provided" };
+        return await updateAvatar(file);
+    };
+
+    // ⭐ Handle avatar removal — delegated to AuthContext
+    const handleAvatarRemove = async () => {
+        return await removeAvatar();
+    };
 
     // ---- Click-outside for profile ----
     useEffect(() => {
@@ -78,6 +481,18 @@ export const Header = () => {
         }
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, [isNotificationOpen]);
+
+    // ---- ESC to close ----
+    useEffect(() => {
+        const onKey = (e) => {
+            if (e.key === "Escape") {
+                setIsProfileOpen(false);
+                setIsNotificationOpen(false);
+            }
+        };
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+    }, []);
 
     const handleToggle = () => setIsNotificationOpen((v) => !v);
 
@@ -147,12 +562,18 @@ export const Header = () => {
         setIsChangePasswordOpen(true);
     };
 
+    const handleViewProfile = () => {
+        setIsProfileOpen(false);
+        setIsProfileModalOpen(true);
+    };
+
     const handleLogout = () => {
         setIsProfileOpen(false);
         logout();
     };
 
     const handleCloseChangePassword = () => setIsChangePasswordOpen(false);
+    const handleCloseProfileModal = () => setIsProfileModalOpen(false);
 
     const handleSwitchRoleClick = () => {
         if (!targetRole || isSwitchingRole) return;
@@ -215,7 +636,6 @@ export const Header = () => {
         return colors[priority] || "text-slate-500";
     };
 
-    // ✅ Only render priority badge when it's Low or Urgent
     const HIDDEN_PRIORITIES = ["Normal", "High"];
     const shouldShowPriority = (priority) =>
         Boolean(priority) && !HIDDEN_PRIORITIES.includes(priority);
@@ -236,7 +656,18 @@ export const Header = () => {
             ? "bg-violet-50 text-violet-700 ring-violet-200"
             : roleLower === "adviser"
               ? "bg-amber-50 text-amber-700 ring-amber-200"
+              : roleLower === "student"
+              ? "bg-blue-50 text-blue-700 ring-blue-200"
               : "bg-slate-50 text-slate-600 ring-slate-200";
+
+    const roleGradient =
+        roleLower === "panelist"
+            ? "from-violet-500 to-purple-600"
+            : roleLower === "adviser"
+              ? "from-amber-500 to-orange-600"
+              : roleLower === "student"
+              ? "from-blue-500 to-blue-700"
+              : "from-slate-500 to-slate-700";
 
     const confirmMessage = switchError
         ? `❌ ${switchError}`
@@ -244,17 +675,24 @@ export const Header = () => {
 
     const hasUnread = unreadCount > 0;
 
+    const userForModal = {
+        firstName: displayFirstName,
+        lastName: displayLastName,
+        email: displayEmail,
+        image: displayImage,
+    };
+
     return (
         <>
             <header className="relative z-30 flex h-16 items-center justify-end border-b border-slate-200 bg-white/95 px-4 backdrop-blur-md transition-colors">
                 <div className="flex items-center gap-1.5">
 
-                    {/* ───────── Role badge + switch ───────── */}
                     {role && (
                         <div className="mr-1 hidden items-center gap-2 sm:flex">
                             <span
-                                className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider ring-1 ring-inset ${roleBadgeColor}`}
+                                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider ring-1 ring-inset ${roleBadgeColor}`}
                             >
+                                <Shield size={10} />
                                 {roleLower}
                             </span>
 
@@ -276,10 +714,9 @@ export const Header = () => {
                         </div>
                     )}
 
-                    {/* ───────── Divider ───────── */}
                     <div className="mx-1 hidden h-6 w-px bg-slate-200 sm:block" />
 
-                    {/* ───────── Notifications ───────── */}
+                    {/* Notifications */}
                     <div className="relative" ref={notificationRef}>
                         <button
                             onClick={handleToggle}
@@ -307,7 +744,6 @@ export const Header = () => {
                                 role="menu"
                                 className="absolute right-0 mt-2 z-50 w-[380px] origin-top-right overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl ring-1 ring-black/5 transition-all duration-150"
                             >
-                                {/* Header */}
                                 <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/60 px-4 py-3">
                                     <div className="flex items-center gap-2">
                                         <h3 className="text-sm font-semibold text-slate-900">
@@ -328,7 +764,6 @@ export const Header = () => {
                                     </button>
                                 </div>
 
-                                {/* Quick actions bar */}
                                 <div className="flex items-center gap-3 border-b border-slate-100 bg-white px-4 py-2 text-[11px]">
                                     {hasUnread && (
                                         <button
@@ -359,7 +794,6 @@ export const Header = () => {
                                     </button>
                                 </div>
 
-                                {/* List */}
                                 <div className="max-h-[380px] overflow-y-auto overscroll-contain">
                                     {isLoading ? (
                                         <div className="space-y-3 p-4">
@@ -427,7 +861,6 @@ export const Header = () => {
                                                             <span className="text-[10px] font-medium text-slate-400">
                                                                 {getTimeAgo(notif.createdAt)}
                                                             </span>
-                                                            {/* ✅ Priority hidden when Normal or High */}
                                                             {shouldShowPriority(notif.priority) && (
                                                                 <span
                                                                     className={`text-[10px] font-semibold ${getPriorityColor(
@@ -465,7 +898,6 @@ export const Header = () => {
                                     )}
                                 </div>
 
-                                {/* Footer */}
                                 {notifications && notifications.length > 0 && !isLoading && (
                                     <div className="border-t border-slate-100 bg-slate-50/60 px-4 py-2.5 text-center">
                                         <button
@@ -482,67 +914,74 @@ export const Header = () => {
                         )}
                     </div>
 
-                    {/* ───────── Divider ───────── */}
                     <div className="mx-1 hidden h-6 w-px bg-slate-200 sm:block" />
 
-                    {/* ───────── Profile ───────── */}
+                    {/* Profile */}
                     <div className="relative" ref={profileRef}>
                         <button
                             onClick={() => setIsProfileOpen((v) => !v)}
                             title="Profile menu"
                             aria-label="Profile menu"
                             aria-expanded={isProfileOpen}
-                            className="group inline-flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border-2 border-slate-200 transition-all hover:border-blue-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                            className="group relative inline-flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border-2 border-slate-200 transition-all hover:border-blue-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
                         >
                             <img
                                 src={displayImage}
                                 alt="Profile"
                                 className="h-full w-full object-cover"
+                                onError={(e) => {
+                                    e.currentTarget.src = FALLBACK_AVATAR;
+                                }}
                             />
+                            <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-emerald-500" />
                         </button>
 
                         {isProfileOpen && (
                             <div
                                 role="menu"
-                                className="absolute right-0 mt-2 z-50 w-64 origin-top-right overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl ring-1 ring-black/5 transition-all duration-150"
+                                className="absolute right-0 mt-2 z-50 w-72 origin-top-right overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl ring-1 ring-black/5 transition-all duration-150"
                             >
-                                {/* Profile header */}
-                                <div className="flex items-center gap-3 border-b border-slate-100 bg-slate-50/60 px-4 py-3">
-                                    <img
-                                        src={displayImage}
-                                        alt="Profile"
-                                        className="h-10 w-10 rounded-full border-2 border-white object-cover shadow-sm"
-                                    />
-                                    <div className="min-w-0 flex-1">
-                                        <p className="truncate text-sm font-semibold text-slate-900">
-                                            {displayFirstName} {displayLastName}
-                                        </p>
-                                        <p className="truncate text-xs text-slate-500">
-                                            {displayEmail}
-                                        </p>
+                                <div className={`relative bg-gradient-to-br ${roleGradient} px-4 pt-5 pb-4`}>
+                                    <div className="flex items-center gap-3">
+                                        <div className="relative">
+                                            <img
+                                                src={displayImage}
+                                                alt="Profile"
+                                                className="h-12 w-12 rounded-full border-2 border-white object-cover shadow-md"
+                                                onError={(e) => {
+                                                    e.currentTarget.src = FALLBACK_AVATAR;
+                                                }}
+                                            />
+                                            <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white bg-emerald-500" />
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <p className="truncate text-sm font-bold text-white">
+                                                {displayFirstName} {displayLastName}
+                                            </p>
+                                            <p className="truncate text-xs text-white/80">
+                                                {displayEmail}
+                                            </p>
+                                        </div>
                                     </div>
-                                </div>
 
-                                {/* Role section */}
-                                {role && (
-                                    <div className="border-b border-slate-100 px-4 py-2.5">
-                                        <div className="flex items-center justify-between gap-2">
-                                            <span className="text-[11px] font-medium text-slate-500">
-                                                Current role
-                                            </span>
-                                            <span
-                                                className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ring-1 ring-inset ${roleBadgeColor}`}
-                                            >
+                                    {role && (
+                                        <div className="mt-3 flex items-center gap-2">
+                                            <span className="inline-flex items-center gap-1 rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white ring-1 ring-inset ring-white/30 backdrop-blur-sm">
+                                                <Shield size={10} />
                                                 {roleLower}
                                             </span>
                                         </div>
+                                    )}
+                                </div>
 
-                                        {isSwitchableRole && (
-                                            <button
-                                                onClick={handleSwitchRoleClick}
-                                                disabled={isSwitchingRole}
-                                                className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-lg border border-blue-900 bg-blue-900 px-3 py-2 text-xs font-semibold capitalize text-white shadow-sm transition-all hover:bg-blue-950 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60"
-                                            >
+                                {isSwitchableRole && (
+                                    <div className="border-b border-slate-100 bg-slate-50/50 px-3 py-2.5">
+                                        <button
+                                            onClick={handleSwitchRoleClick}
+                                            disabled={isSwitchingRole}
+                                            className="flex w-full items-center justify-between gap-2 rounded-lg border border-blue-900 bg-white px-3 py-2 text-xs font-semibold text-blue-900 shadow-sm transition-all hover:bg-blue-900 hover:text-white hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-60"
+                                        >
+                                            <span className="flex items-center gap-2">
                                                 <ArrowLeftRight
                                                     size={13}
                                                     className={isSwitchingRole ? "animate-spin" : ""}
@@ -550,19 +989,37 @@ export const Header = () => {
                                                 <span>
                                                     {isSwitchingRole ? "Switching…" : `Switch to ${targetRole}`}
                                                 </span>
-                                            </button>
-                                        )}
+                                            </span>
+                                            <ChevronRight size={12} />
+                                        </button>
                                     </div>
                                 )}
 
-                                {/* Actions */}
                                 <div className="p-1">
+                                    <button
+                                        onClick={handleViewProfile}
+                                        className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 focus:outline-none focus-visible:bg-slate-100"
+                                    >
+                                        <User size={15} className="text-slate-400" />
+                                        <span>View Profile</span>
+                                        <ChevronRight size={12} className="ml-auto text-slate-300" />
+                                    </button>
                                     <button
                                         onClick={handleChangePassword}
                                         className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 focus:outline-none focus-visible:bg-slate-100"
                                     >
                                         <Lock size={15} className="text-slate-400" />
                                         <span>Change password</span>
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setIsProfileOpen(false);
+                                            navigate("/settings");
+                                        }}
+                                        className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 focus:outline-none focus-visible:bg-slate-100"
+                                    >
+                                        <Settings size={15} className="text-slate-400" />
+                                        <span>Settings</span>
                                     </button>
                                 </div>
 
@@ -582,6 +1039,20 @@ export const Header = () => {
             </header>
 
             <ChangePassword isOpen={isChangePasswordOpen} onClose={handleCloseChangePassword} />
+
+            {/* PROFILE POPUP MODAL */}
+            <ProfileModal
+                isOpen={isProfileModalOpen}
+                onClose={handleCloseProfileModal}
+                user={userForModal}
+                roleLower={roleLower}
+                roleGradient={roleGradient}
+                roleBadgeColor={roleBadgeColor}
+                onAvatarUpdate={handleAvatarUpdate}
+                onAvatarRemove={handleAvatarRemove}
+                avatarUrl={avatarUrl}
+                hasAvatar={hasAvatar}
+            />
 
             <ConfirmationModal
                 isOpen={isSwitchConfirmOpen}

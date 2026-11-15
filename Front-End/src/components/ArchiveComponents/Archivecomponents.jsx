@@ -1,6 +1,6 @@
-import React, { useState, useMemo, useEffect, useContext, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useContext, useCallback, useRef } from 'react';
 import { ProposedTitleContext } from '../../contexts/ProposedTitleContext/ProposedTitleContext';
-import PDFimage from "../../assets/cardbg.jpg"
+import PDFimage from "../../assets/cardbg.jpg";
 
 // ============================================================
 // HELPERS
@@ -31,14 +31,8 @@ const getYear = (dateStr) => {
 };
 
 const AVATAR_COLORS = [
-    'bg-blue-900',
-    'bg-blue-800',
-    'bg-blue-700',
-    'bg-indigo-800',
-    'bg-sky-800',
-    'bg-cyan-800',
-    'bg-blue-600',
-    'bg-indigo-700',
+    'bg-blue-900', 'bg-blue-800', 'bg-blue-700', 'bg-indigo-800',
+    'bg-sky-800', 'bg-cyan-800', 'bg-blue-600', 'bg-indigo-700',
 ];
 
 const getAvatarColor = (name) => {
@@ -58,33 +52,23 @@ const API_URL = import.meta.env.VITE_API_URL || '';
 
 const getPdfUrl = (raw) => {
     if (!raw) return null;
-
     const fileId =
-        raw?.fileId ||
-        raw?.file?.public_id ||
-        raw?.pdfId ||
-        raw?.pdfPublicId ||
-        raw?.titleUrlTracking?.fileId ||
+        raw?.fileId || raw?.file?.public_id || raw?.pdfId ||
+        raw?.pdfPublicId || raw?.titleUrlTracking?.fileId ||
         raw?.titleUrlTracking?.publicId;
-
     const directUrl =
-        raw?.fileUrl ||
-        raw?.pdfUrl ||
-        raw?.file?.url ||
+        raw?.fileUrl || raw?.pdfUrl || raw?.file?.url ||
         raw?.titleUrlTracking?.url;
-
     if (directUrl) return directUrl;
     if (!fileId) return null;
-
     if (raw?.file?.resource_type === 'raw' || raw?.isCloudinary) {
         return `https://res.cloudinary.com/${CLOUD_NAME}/raw/upload/${fileId}`;
     }
-
     return `${API_URL}/files/${fileId}/view`;
 };
 
 // ============================================================
-// AVATAR COMPONENTS
+// AVATAR
 // ============================================================
 const Avatar = ({ name, size = 'md', ring = true }) => {
     const sizeClasses = {
@@ -126,6 +110,56 @@ const AvatarGroup = ({ names = [], max = 3, size = 'md' }) => {
         </div>
     );
 };
+
+// ============================================================
+// ⭐ PDF PREVIEW COMPONENT
+// ============================================================
+const PdfImage = ({ item }) => {
+    const [imgError, setImgError] = useState(false);
+
+    const base64Preview = item?.latestTracking?.preview;
+    const isPdfFile = item?.latestTracking?.isPdf;
+    const trackingUrl = item?.latestTracking?.url;
+
+    let src = null;
+    if (!imgError) {
+        if (base64Preview) src = base64Preview;
+        else if (trackingUrl && !isPdfFile) src = trackingUrl;
+    }
+    if (!src) src = PDFimage;
+
+    return (
+        <img
+            src={src}
+            alt={item?.title || 'PDF Preview'}
+            className="w-full h-full object-cover object-top bg-blue-50"
+            onError={() => setImgError(true)}
+            loading="lazy"
+        />
+    );
+};
+
+// ============================================================
+// ⭐ SKELETON CARD — reusable
+// ============================================================
+const SkeletonCard = () => (
+    <div className="bg-white rounded-2xl border border-blue-200 shadow-md shadow-blue-900/10 overflow-hidden animate-pulse">
+        <div className="aspect-[3/4] w-full bg-blue-100" />
+        <div className="p-3 space-y-2">
+            <div className="h-3 w-16 bg-blue-100 rounded" />
+            <div className="h-4 w-full bg-blue-100 rounded" />
+            <div className="h-4 w-3/4 bg-blue-100 rounded" />
+        </div>
+    </div>
+);
+
+const SkeletonGrid = ({ count = 8 }) => (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        {[...Array(count)].map((_, i) => (
+            <SkeletonCard key={i} />
+        ))}
+    </div>
+);
 
 // ============================================================
 // MAP BACKEND -> UI SHAPE
@@ -171,6 +205,7 @@ const mapArchivedToProject = (item) => {
         downloads: item.downloads ?? 0,
         raw: item,
         pdfUrl: getPdfUrl(item),
+        latestTracking: item.latestTracking || null,
     };
 };
 
@@ -189,9 +224,8 @@ export default function Archivecomponents() {
         isLoading = false,
         ResetArchivedFilters,
         GetFileFromCloudinary,
+        GetArchivedTitles,
     } = useContext(ProposedTitleContext);
-
-    console.log("archivedTitles", archivedTitles)
 
     const [searchInput, setSearchInput] = useState(archivedSearch);
     const [deptFilter, setDeptFilter] = useState('');
@@ -200,10 +234,97 @@ export default function Archivecomponents() {
     const [selectedProject, setSelectedProject] = useState(null);
     const [toastMessage, setToastMessage] = useState(null);
 
+    // ⭐ LOCAL LOADING
+    const [isInitialLoading, setIsInitialLoading] = useState(true);
+    // ⭐ TRACK kung tapos na ang unang fetch (kahit empty)
+    const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+
+    const hasFetchedRef = useRef(false);
+    const lastFetchKeyRef = useRef('');
+
+    // ============================================================
+    // ⭐ INITIAL FETCH — safe kahit sync o async
+    // ============================================================
+    useEffect(() => {
+        if (!GetArchivedTitles) {
+            setIsInitialLoading(false);
+            setHasLoadedOnce(true);
+            return;
+        }
+        if (hasFetchedRef.current) return;
+
+        hasFetchedRef.current = true;
+
+        const key = `${archivedCurrentPage}|${archivedSearch}`;
+        lastFetchKeyRef.current = key;
+
+        setIsInitialLoading(true);
+
+        let cancelled = false;
+
+        const finishLoading = () => {
+            if (cancelled) return;
+            setIsInitialLoading(false);
+            setHasLoadedOnce(true); // ⭐ tapos na ang unang fetch
+        };
+
+        try {
+            const result = GetArchivedTitles(archivedCurrentPage, archivedSearch);
+
+            if (result && typeof result.finally === 'function') {
+                result.finally(finishLoading);
+            } else if (result && typeof result.then === 'function') {
+                result.then(finishLoading).catch(finishLoading);
+            } else {
+                finishLoading();
+            }
+        } catch (err) {
+            console.error('GetArchivedTitles error:', err);
+            finishLoading();
+        }
+
+        // ⭐ SAFETY TIMER — kung stuck, i-off after 5s
+        const safetyTimer = setTimeout(finishLoading, 5000);
+
+        return () => {
+            cancelled = true;
+            clearTimeout(safetyTimer);
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // ============================================================
+    // ⭐ REFETCH — kapag nagbago ang page o search
+    // ============================================================
+    useEffect(() => {
+        if (!GetArchivedTitles) return;
+        if (!hasFetchedRef.current) return;
+
+        const key = `${archivedCurrentPage}|${archivedSearch}`;
+        if (key === lastFetchKeyRef.current) return;
+
+        lastFetchKeyRef.current = key;
+
+        try {
+            const result = GetArchivedTitles(archivedCurrentPage, archivedSearch);
+            if (result && typeof result.catch === 'function') {
+                result.catch((err) => console.error('Refetch error:', err));
+            }
+        } catch (err) {
+            console.error('Refetch error:', err);
+        }
+    }, [archivedCurrentPage, archivedSearch, GetArchivedTitles]);
+
+    // ============================================================
+    // SYNC search input mula sa context
+    // ============================================================
     useEffect(() => {
         setSearchInput(archivedSearch);
     }, [archivedSearch]);
 
+    // ============================================================
+    // DEBOUNCED SEARCH — 400ms bago i-set sa context
+    // ============================================================
     useEffect(() => {
         const t = setTimeout(() => {
             if (searchInput !== archivedSearch) {
@@ -261,17 +382,15 @@ export default function Archivecomponents() {
     );
 
     // ============================================================
-    // OPEN PDF IN BROWSER (new tab)
+    // OPEN PDF
     // ============================================================
     const handleOpenInBrowser = async (project) => {
-        const pdfUrl = project?.pdfUrl;
+        const latestUrl = project?.latestTracking?.url;
+        const pdfUrl = latestUrl || project?.pdfUrl;
 
-        // Case 1: May direct PDF URL — buksan agad sa new tab
         if (pdfUrl) {
             showToast('Opening document in browser...');
             const newTab = window.open(pdfUrl, '_blank', 'noopener,noreferrer');
-
-            // Fallback kung na-block ng popup blocker
             if (!newTab) {
                 const link = document.createElement('a');
                 link.href = pdfUrl;
@@ -284,7 +403,6 @@ export default function Archivecomponents() {
             return;
         }
 
-        // Case 2: Walang direct URL — subukan ang GetFileFromCloudinary
         if (!project?.raw?._id || !GetFileFromCloudinary) {
             showToast('No PDF document available for this project.');
             return;
@@ -294,7 +412,6 @@ export default function Archivecomponents() {
             showToast('Opening document in browser...');
             const result = await GetFileFromCloudinary(project.raw._id);
 
-            // Kung Blob ang binalik
             if (result instanceof Blob) {
                 const blobUrl = URL.createObjectURL(
                     new Blob([result], { type: 'application/pdf' })
@@ -310,9 +427,7 @@ export default function Archivecomponents() {
                     document.body.removeChild(link);
                 }
                 setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
-            }
-            // Kung URL string ang binalik
-            else if (typeof result === 'string') {
+            } else if (typeof result === 'string') {
                 const newTab = window.open(result, '_blank', 'noopener,noreferrer');
                 if (!newTab) {
                     const link = document.createElement('a');
@@ -323,9 +438,7 @@ export default function Archivecomponents() {
                     link.click();
                     document.body.removeChild(link);
                 }
-            }
-            // Kung object na may url property
-            else if (result?.url) {
+            } else if (result?.url) {
                 const newTab = window.open(result.url, '_blank', 'noopener,noreferrer');
                 if (!newTab) {
                     const link = document.createElement('a');
@@ -344,6 +457,19 @@ export default function Archivecomponents() {
             showToast('Failed to open document.');
         }
     };
+
+    // ============================================================
+    // ⭐ DECISION LOGIC — ITO ANG FIX
+    // ============================================================
+    // 1. Kung nag-loading pa (initial o context) → SKELETON
+    // 2. Kung wala pang data at HINDI pa tapos ang unang fetch → SKELETON
+    // 3. Kung may data → CARDS
+    // 4. Kung wala pang data at tapos na ang fetch → "No Projects Found"
+
+    const noDataYet = !archivedTitles || archivedTitles.length === 0;
+    const isStillLoading = isInitialLoading || isLoading;
+    const shouldShowSkeleton = isStillLoading || (noDataYet && !hasLoadedOnce);
+    const shouldShowEmpty = !isStillLoading && hasLoadedOnce && noDataYet;
 
     return (
         <div className="min-h-screen bg-gradient-to-b from-blue-100 via-blue-50 to-sky-50 text-slate-800 font-sans antialiased flex flex-col">
@@ -434,98 +560,137 @@ export default function Archivecomponents() {
                     </div>
                 </div>
 
-                {/* Loading */}
-                {isLoading ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {[...Array(6)].map((_, i) => (
-                            <div key={i} className="bg-white rounded-2xl border border-blue-200 shadow-md shadow-blue-900/10 overflow-hidden animate-pulse border-t-4 border-t-blue-900">
-                                <div className="h-44 w-full bg-blue-100" />
-                                <div className="p-5 space-y-4">
-                                    <div className="flex justify-between">
-                                        <div className="h-4 w-16 bg-blue-100 rounded" />
-                                        <div className="h-4 w-12 bg-blue-100 rounded" />
-                                    </div>
-                                    <div className="h-4 w-full bg-blue-100 rounded" />
-                                    <div className="h-4 w-3/4 bg-blue-100 rounded" />
-                                    <div className="h-12 w-full bg-blue-50 rounded" />
-                                </div>
-                            </div>
-                        ))}
+                {/* ⭐ DECISION: skeleton vs cards vs empty */}
+                {shouldShowSkeleton ? (
+                    <SkeletonGrid count={8} />
+                ) : shouldShowEmpty ? (
+                    <div className="text-center py-16 bg-white rounded-2xl border border-blue-200 p-8 space-y-3 border-t-4 border-t-blue-900 shadow-md shadow-blue-900/10">
+                        <div className="w-12 h-12 bg-yellow-400 text-blue-900 rounded-lg flex items-center justify-center mx-auto">
+                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" /></svg>
+                        </div>
+                        <h3 className="text-base font-bold text-blue-900">No Projects Found</h3>
+                        <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">Try adjusting your search terms or clearing filters to see other archives.</p>
+                        <button
+                            onClick={handleResetFilters}
+                            className="px-3.5 py-1.5 bg-blue-900 text-yellow-300 rounded-md text-xs font-bold hover:bg-blue-800 transition tracking-wide"
+                        >
+                            Reset Filters
+                        </button>
                     </div>
-                ) : filteredProjects.length > 0 ? (
+                ) : (
                     <>
-                        {/* Cards */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {/* ⭐ CARDS */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                             {filteredProjects.map(p => (
-                                <div key={p.id} className="bg-white rounded-2xl border border-blue-200 shadow-md shadow-blue-900/10 hover:shadow-lg hover:border-blue-900/40 transition-all duration-200 flex flex-col justify-between overflow-hidden group border-t-4 border-t-blue-900">
+                                <div
+                                    key={p.id}
+                                    className="group relative bg-white rounded-2xl border border-blue-200 shadow-md shadow-blue-900/10 hover:shadow-2xl hover:border-blue-900/40 transition-all duration-300 overflow-hidden cursor-pointer"
+                                    onClick={() => setSelectedProject(p)}
+                                >
+                                    <div className="relative aspect-[3/4] overflow-hidden bg-blue-50">
+                                        <PdfImage item={p} />
 
-                                    {/* 👇 CARD IMAGE */}
-                                    <div className="h-44 w-full border-b border-blue-100 overflow-hidden relative">
-                                        <img
-                                            src={PDFimage}
-                                            alt={p.title}
-                                            className="w-full h-full object-cover object-center"
-                                        />
-                                        <div className="absolute top-2 right-2 bg-blue-900/90 text-yellow-300 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider shadow">
+                                        {p.latestTracking?.chapter && (
+                                            <div className="absolute top-2 left-2 bg-yellow-400 text-blue-950 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider shadow z-10">
+                                                {p.latestTracking.chapter}
+                                            </div>
+                                        )}
+
+                                        <div className="absolute top-2 right-2 bg-blue-900/90 text-yellow-300 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider shadow z-10">
                                             PDF
                                         </div>
-                                    </div>
 
-                                    <div className="p-5 space-y-3">
-                                        {/* Dept + Year badges */}
-                                        <div className="flex items-center justify-between">
-                                            {isValid(p.dept) && (
-                                                <span className="px-2 py-0.5 bg-blue-900 text-yellow-300 text-[10px] font-bold rounded uppercase tracking-wider">{p.dept}</span>
+                                        {/* HOVER OVERLAY */}
+                                        <div className="absolute inset-0 bg-gradient-to-t from-blue-950 via-blue-950/95 to-blue-950/70 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-5 text-white">
+                                            <div className="flex items-center gap-2 mb-2">
+                                                {isValid(p.dept) && (
+                                                    <span className="px-2 py-0.5 bg-yellow-400 text-blue-950 text-[10px] font-bold rounded uppercase tracking-wider">
+                                                        {p.dept}
+                                                    </span>
+                                                )}
+                                                {isValid(p.year) && (
+                                                    <span className="px-2 py-0.5 bg-white/20 text-white text-[10px] font-bold rounded tracking-wider backdrop-blur-sm">
+                                                        {p.year}
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            <h3 className="font-bold text-white text-[15px] leading-snug line-clamp-3 mb-2">
+                                                {p.title}
+                                            </h3>
+
+                                            {isValid(p.abstract) && (
+                                                <p className="text-[11px] text-blue-100 line-clamp-3 leading-relaxed mb-3 border-l-2 border-yellow-400 pl-2">
+                                                    {p.abstract}
+                                                </p>
                                             )}
-                                            {isValid(p.year) && (
-                                                <span className="text-[10px] font-bold text-blue-950 tracking-wider bg-yellow-400 px-2 py-0.5 rounded">{p.year}</span>
+
+                                            {p.authorList.length > 0 && (
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <AvatarGroup names={p.authorList} max={3} size="sm" />
+                                                    <span className="text-[11px] text-blue-100 truncate">
+                                                        {p.authorList.length === 1
+                                                            ? p.authorList[0]
+                                                            : `${p.authorList[0]} +${p.authorList.length - 1}`}
+                                                    </span>
+                                                </div>
                                             )}
-                                        </div>
 
-                                        {/* Title */}
-                                        <h3 className="font-bold text-blue-900 group-hover:text-blue-700 transition line-clamp-2 text-[15px] leading-snug">{p.title}</h3>
+                                            {isValid(p.adviser) && (
+                                                <div className="flex items-center gap-2 mb-3">
+                                                    <Avatar name={p.adviser} size="sm" ring={false} />
+                                                    <div className="min-w-0">
+                                                        <span className="text-[9px] text-blue-300 block uppercase tracking-wider">Adviser</span>
+                                                        <span className="text-[11px] text-white truncate block">{p.adviser}</span>
+                                                    </div>
+                                                </div>
+                                            )}
 
-                                        {/* Description */}
-                                        {isValid(p.abstract) && (
-                                            <p className="text-xs text-slate-500 line-clamp-3 leading-relaxed border-l-2 border-yellow-400 pl-2.5 italic">
-                                                {p.abstract}
-                                            </p>
-                                        )}
+                                            {p.latestTracking && (
+                                                <div className="text-[10px] text-blue-200 pt-2 border-t border-white/10 flex items-center justify-between mb-3">
+                                                    <span className="font-semibold text-yellow-300">
+                                                        {p.latestTracking.chapter || '—'}
+                                                    </span>
+                                                    <span className="capitalize">
+                                                        {p.latestTracking.action || ''}
+                                                    </span>
+                                                </div>
+                                            )}
 
-                                        {/* Contributors */}
-                                        {p.authorList.length > 0 && (
+                                            {p.keywords.length > 0 && (
+                                                <div className="flex flex-wrap gap-1 mb-3">
+                                                    {p.keywords.slice(0, 3).map(kw => (
+                                                        <span key={kw} className="text-[9px] font-semibold tracking-wide bg-yellow-400/20 text-yellow-200 px-1.5 py-0.5 rounded border border-yellow-400/30">
+                                                            #{kw}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            )}
+
                                             <div className="flex items-center gap-2">
-                                                <AvatarGroup names={p.authorList} max={3} size="sm" />
-                                                <span className="text-xs text-slate-500 truncate">
-                                                    {p.authorList.length === 1
-                                                        ? p.authorList[0]
-                                                        : `${p.authorList[0]} +${p.authorList.length - 1} more`}
-                                                </span>
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleOpenInBrowser(p);
+                                                    }}
+                                                    className="flex-1 px-3 py-2 bg-yellow-400 hover:bg-yellow-300 text-blue-950 text-[11px] font-bold rounded-md shadow-sm flex items-center justify-center gap-1.5 transition"
+                                                >
+                                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                                    </svg>
+                                                    Open PDF
+                                                </button>
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setSelectedProject(p);
+                                                    }}
+                                                    className="px-3 py-2 bg-white/10 hover:bg-white/20 text-white text-[11px] font-bold rounded-md backdrop-blur-sm flex items-center justify-center gap-1.5 transition"
+                                                >
+                                                    Details
+                                                </button>
                                             </div>
-                                        )}
-
-                                        {/* Keywords */}
-                                        {p.keywords.length > 0 && (
-                                            <div className="flex flex-wrap gap-1 pt-0.5">
-                                                {p.keywords.slice(0, 3).map(kw => (
-                                                    <span key={kw} className="text-blue-900/80 text-[10px] font-semibold tracking-wide bg-yellow-50 px-1.5 py-0.5 rounded border border-yellow-200">#{kw}</span>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                    <div className="px-5 py-3 bg-blue-50 border-t border-blue-100 flex items-center justify-between">
-                                        <span className="text-[11px] text-slate-600 flex items-center">
-                                            <svg className="w-3 h-3 text-blue-900 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                                            <span className="font-bold text-blue-900">{p.downloads}</span>
-                                            <span className="ml-1 text-slate-500">downloads</span>
-                                        </span>
-                                        <button
-                                            onClick={() => setSelectedProject(p)}
-                                            className="text-[11px] font-bold text-blue-900 hover:text-blue-700 flex items-center tracking-wide uppercase group-hover:text-blue-700"
-                                        >
-                                            <span>View Details</span>
-                                            <svg className="w-3 h-3 ml-1 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7" /></svg>
-                                        </button>
+                                        </div>
                                     </div>
                                 </div>
                             ))}
@@ -591,142 +756,150 @@ export default function Archivecomponents() {
                             </div>
                         )}
                     </>
-                ) : (
-                    <div className="text-center py-16 bg-white rounded-2xl border border-blue-200 p-8 space-y-3 border-t-4 border-t-blue-900 shadow-md shadow-blue-900/10">
-                        <div className="w-12 h-12 bg-yellow-400 text-blue-900 rounded-lg flex items-center justify-center mx-auto">
-                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" /></svg>
-                        </div>
-                        <h3 className="text-base font-bold text-blue-900">No Projects Found</h3>
-                        <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">Try adjusting your search terms or clearing filters to see other archives.</p>
-                        <button
-                            onClick={handleResetFilters}
-                            className="px-3.5 py-1.5 bg-blue-900 text-yellow-300 rounded-md text-xs font-bold hover:bg-blue-800 transition tracking-wide"
-                        >
-                            Reset Filters
-                        </button>
-                    </div>
                 )}
 
             </main>
 
-            {/* Modal */}
+            {/* ⭐ MODAL */}
             {selectedProject && (
-                <div className="fixed inset-0 z-50 bg-blue-950/60 backdrop-blur-sm flex items-center justify-center p-4">
-                    <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-xl border border-blue-200 border-t-4 border-t-yellow-400">
+                <div
+                    className="fixed inset-0 z-50 bg-blue-950/60 backdrop-blur-sm flex items-center justify-center p-4"
+                    onClick={() => setSelectedProject(null)}
+                >
+                    <div
+                        className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden shadow-xl border border-blue-200 border-t-4 border-t-yellow-400 relative"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="group relative w-full h-[70vh] overflow-hidden bg-blue-50">
+                            <PdfImage item={selectedProject} />
 
-                        {/* 👇 MODAL IMAGE */}
-                        <div className="h-64 w-full border-b border-blue-100 rounded-t-2xl overflow-hidden relative">
-                            <img
-                                src={PDFimage}
-                                alt={selectedProject.title}
-                                className="w-full h-full object-cover object-center"
-                            />
-                            <div className="absolute top-2 right-2 bg-blue-900/90 text-yellow-300 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider shadow">
+                            <div className="absolute top-3 left-3 bg-yellow-400 text-blue-950 text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider shadow z-10">
+                                {selectedProject.latestTracking?.chapter || 'PDF'}
+                            </div>
+                            <div className="absolute top-3 right-3 bg-blue-900/90 text-yellow-300 text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider shadow z-10">
                                 PDF
                             </div>
-                        </div>
 
-                        <div className="p-6 space-y-5">
-                            <div className="flex items-start justify-between border-b border-blue-100 pb-4">
-                                <div>
-                                    {(isValid(selectedProject.dept) || isValid(selectedProject.year)) && (
-                                        <span className="inline-block px-2 py-0.5 bg-blue-900 text-yellow-300 text-[10px] font-bold rounded uppercase tracking-wider mb-2">
-                                            {[selectedProject.dept, selectedProject.year].filter(isValid).join(' • ')}
+                            <button
+                                onClick={() => setSelectedProject(null)}
+                                className="absolute top-3 w-8 h-8 bg-white/90 hover:bg-yellow-400 text-blue-900 rounded-md flex items-center justify-center shadow z-20 transition"
+                                style={{ right: '4.5rem' }}
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+
+                            {/* HOVER OVERLAY */}
+                            <div className="absolute inset-0 bg-gradient-to-t from-blue-950 via-blue-950/95 to-blue-950/70 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-6 text-white overflow-y-auto">
+                                <div className="flex items-center gap-2 mb-3">
+                                    {isValid(selectedProject.dept) && (
+                                        <span className="px-2.5 py-1 bg-yellow-400 text-blue-950 text-[11px] font-bold rounded uppercase tracking-wider">
+                                            {selectedProject.dept}
                                         </span>
                                     )}
-                                    <h3 className="text-lg font-bold text-blue-900 leading-snug">{selectedProject.title}</h3>
+                                    {isValid(selectedProject.year) && (
+                                        <span className="px-2.5 py-1 bg-white/20 text-white text-[11px] font-bold rounded tracking-wider backdrop-blur-sm">
+                                            {selectedProject.year}
+                                        </span>
+                                    )}
                                 </div>
-                                <button
-                                    onClick={() => setSelectedProject(null)}
-                                    className="text-blue-400 hover:text-blue-900 p-1.5 rounded-md hover:bg-yellow-50 transition"
-                                >
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                                </button>
-                            </div>
 
-                            <div className="space-y-4 text-sm">
+                                <h2 className="font-bold text-white text-lg leading-snug mb-3">
+                                    {selectedProject.title}
+                                </h2>
+
                                 {isValid(selectedProject.abstract) && (
-                                    <div className="bg-blue-50 p-4 rounded-md border-l-4 border-l-yellow-400 border border-blue-200">
-                                        <h4 className="text-[10px] font-bold text-blue-900 mb-2 uppercase tracking-wider">Description</h4>
-                                        <p className="text-slate-700 leading-relaxed text-justify text-[13px]">{selectedProject.abstract}</p>
+                                    <div className="bg-white/5 backdrop-blur-sm p-3 rounded-md border-l-4 border-yellow-400 mb-3">
+                                        <h4 className="text-[10px] font-bold text-yellow-300 mb-1 uppercase tracking-wider">Description</h4>
+                                        <p className="text-[12px] text-blue-50 line-clamp-4 leading-relaxed">
+                                            {selectedProject.abstract}
+                                        </p>
                                     </div>
                                 )}
 
                                 {selectedProject.authorList.length > 0 && (
-                                    <div className="bg-blue-50 p-4 rounded-md border border-blue-200">
-                                        <span className="text-[10px] font-bold text-blue-900/70 block mb-3 uppercase tracking-wider">Contributors</span>
-                                        <div className="space-y-1.5">
+                                    <div className="mb-3">
+                                        <span className="text-[10px] text-blue-300 block uppercase tracking-wider mb-1.5">Contributors</span>
+                                        <div className="flex flex-wrap items-center gap-2">
                                             {selectedProject.authorList.map((name, i) => (
-                                                <div key={i} className="flex items-center gap-2">
-                                                    <Avatar name={name} size="md" ring={false} />
-                                                    <span className="font-medium text-slate-800 text-[13px]">{name}</span>
+                                                <div key={i} className="flex items-center gap-1.5">
+                                                    <Avatar name={name} size="sm" ring={false} />
+                                                    <span className="text-[11px] text-white">{name}</span>
                                                 </div>
                                             ))}
                                         </div>
                                     </div>
                                 )}
 
-                                <div className="grid grid-cols-2 gap-3 bg-blue-50 p-4 rounded-md border border-blue-200">
-                                    {isValid(selectedProject.year) && (
-                                        <div>
-                                            <span className="text-[10px] font-bold text-blue-900/70 block mb-1 uppercase tracking-wider">Publication Year</span>
-                                            <p className="font-semibold text-slate-800 text-[13px]">{selectedProject.year}</p>
-                                        </div>
-                                    )}
-                                    {isValid(selectedProject.tag) && (
-                                        <div>
-                                            <span className="text-[10px] font-bold text-blue-900/70 block mb-1 uppercase tracking-wider">Category</span>
-                                            <p className="font-semibold text-blue-900 text-[13px]">{selectedProject.tag}</p>
-                                        </div>
-                                    )}
+                                <div className="grid grid-cols-2 gap-3 mb-3">
                                     {isValid(selectedProject.adviser) && (
                                         <div className="flex items-center gap-2">
-                                            <Avatar name={selectedProject.adviser} size="md" ring={false} />
-                                            <div>
-                                                <span className="text-[10px] font-bold text-blue-900/70 block uppercase tracking-wider">Adviser</span>
-                                                <p className="font-medium text-slate-800 text-[13px]">{selectedProject.adviser}</p>
+                                            <Avatar name={selectedProject.adviser} size="sm" ring={false} />
+                                            <div className="min-w-0">
+                                                <span className="text-[9px] text-blue-300 block uppercase tracking-wider">Adviser</span>
+                                                <span className="text-[11px] text-white truncate block">{selectedProject.adviser}</span>
                                             </div>
                                         </div>
                                     )}
                                     {isValid(selectedProject.coAdviser) && (
                                         <div className="flex items-center gap-2">
-                                            <Avatar name={selectedProject.coAdviser} size="md" ring={false} />
-                                            <div>
-                                                <span className="text-[10px] font-bold text-blue-900/70 block uppercase tracking-wider">Co-Adviser</span>
-                                                <p className="font-medium text-slate-800 text-[13px]">{selectedProject.coAdviser}</p>
+                                            <Avatar name={selectedProject.coAdviser} size="sm" ring={false} />
+                                            <div className="min-w-0">
+                                                <span className="text-[9px] text-blue-300 block uppercase tracking-wider">Co-Adviser</span>
+                                                <span className="text-[11px] text-white truncate block">{selectedProject.coAdviser}</span>
                                             </div>
                                         </div>
                                     )}
                                 </div>
 
-                                {selectedProject.keywords.length > 0 && (
-                                    <div>
-                                        <h4 className="text-[11px] font-bold text-blue-900 mb-2 uppercase tracking-wider">Keywords</h4>
-                                        <div className="flex flex-wrap gap-1.5">
-                                            {selectedProject.keywords.map(kw => (
-                                                <span key={kw} className="bg-yellow-50 text-blue-900 text-[11px] px-2 py-0.5 rounded border border-yellow-200 font-semibold">#{kw}</span>
-                                            ))}
+                                {selectedProject.latestTracking && (
+                                    <div className="bg-white/5 backdrop-blur-sm p-2.5 rounded-md mb-3 flex items-center justify-between">
+                                        <div>
+                                            <span className="text-[9px] text-blue-300 block uppercase tracking-wider">Latest Upload</span>
+                                            <span className="text-[12px] text-white font-semibold">
+                                                {selectedProject.latestTracking.chapter}
+                                            </span>
                                         </div>
+                                        <span className="text-[11px] text-yellow-300 capitalize">
+                                            {selectedProject.latestTracking.action}
+                                        </span>
                                     </div>
                                 )}
-                            </div>
 
-                            <div className="border-t border-blue-100 pt-4 flex items-center justify-end space-x-2">
-                                <button
-                                    onClick={() => setSelectedProject(null)}
-                                    className="px-3.5 py-2 border border-blue-200 text-blue-900 text-xs font-semibold rounded-md hover:bg-blue-50 transition tracking-wide"
-                                >
-                                    Close
-                                </button>
-                                <button
-                                    onClick={() => handleOpenInBrowser(selectedProject)}
-                                    className="px-4 py-2 bg-blue-900 hover:bg-blue-800 text-yellow-300 text-xs font-bold rounded-md shadow-sm flex items-center space-x-2 transition tracking-wide"
-                                >
-                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                    </svg>
-                                    <span>Open Document (PDF)</span>
-                                </button>
+                                {selectedProject.keywords.length > 0 && (
+                                    <div className="flex flex-wrap gap-1 mb-3">
+                                        {selectedProject.keywords.map(kw => (
+                                            <span key={kw} className="text-[10px] font-semibold tracking-wide bg-yellow-400/20 text-yellow-200 px-2 py-0.5 rounded border border-yellow-400/30">
+                                                #{kw}
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
+
+                                <div className="flex items-center gap-2 pt-2 border-t border-white/10">
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleOpenInBrowser(selectedProject);
+                                        }}
+                                        className="flex-1 px-3 py-2 bg-yellow-400 hover:bg-yellow-300 text-blue-950 text-[12px] font-bold rounded-md shadow-sm flex items-center justify-center gap-1.5 transition"
+                                    >
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                        </svg>
+                                        Open PDF
+                                    </button>
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSelectedProject(null);
+                                        }}
+                                        className="px-3 py-2 bg-white/10 hover:bg-white/20 text-white text-[12px] font-bold rounded-md backdrop-blur-sm transition"
+                                    >
+                                        Close
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>

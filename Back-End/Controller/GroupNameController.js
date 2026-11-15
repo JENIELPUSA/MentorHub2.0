@@ -9,6 +9,10 @@ const NotificationSchema = require("../Models/NotificationSchema");
 
 
 
+
+
+
+
 const Group = require("../Models/GroupName");
 
 exports.createGroup = AsyncErrorHandler(async (req, res, next) => {
@@ -522,7 +526,9 @@ exports.getgroupdetails = AsyncErrorHandler(async (req, res) => {
                                 last_name: '$section.subject.formatDetails.uploaderDetails.last_name',
                                 username: '$section.subject.formatDetails.uploaderDetails.username',
                                 email: '$section.subject.formatDetails.uploaderDetails.username',
-                                role: '$section.subject.formatDetails.uploaderDetails.role'
+                                role: '$section.subject.formatDetails.uploaderDetails.role',
+                                // ⭐ ADDED AVATAR
+                                avatar: '$section.subject.formatDetails.uploaderDetails.avatar',
                             },
                             createdAt: '$section.subject.formatDetails.createdAt',
                             updatedAt: '$section.subject.formatDetails.updatedAt'
@@ -537,7 +543,9 @@ exports.getgroupdetails = AsyncErrorHandler(async (req, res) => {
                             _id: '$$m._id',
                             first_name: '$$m.first_name',
                             last_name: '$$m.last_name',
-                            email: '$$m.username'
+                            email: '$$m.username',
+                            // ⭐ ADDED AVATAR
+                            avatar: '$$m.avatar',
                         }
                     }
                 },
@@ -549,7 +557,9 @@ exports.getgroupdetails = AsyncErrorHandler(async (req, res) => {
                             _id: '$$mentor._id',
                             first_name: '$$mentor.first_name',
                             last_name: '$$mentor.last_name',
-                            email: '$$mentor.username'
+                            email: '$$mentor.username',
+                            // ⭐ ADDED AVATAR
+                            avatar: '$$mentor.avatar',
                         }
                     }
                 }
@@ -568,7 +578,7 @@ exports.getgroupdetails = AsyncErrorHandler(async (req, res) => {
         });
     }
 
-    // 3. I-format ang data ng bawat user
+    // 3. I-format ang data ng bawat user (kasama ang avatar)
     const formattedUsers = users.map(user => ({
         id: user._id,
         first_name: user.first_name,
@@ -580,6 +590,8 @@ exports.getgroupdetails = AsyncErrorHandler(async (req, res) => {
         role: user.role,
         status: user.status,
         referredBy: user.referredBy,
+        // ⭐ ADDED AVATAR
+        avatar: user.avatar || { url: "", public_id: "" },
         createdAt: user.createdAt,
         updatedAt: user.updatedAt
     }));

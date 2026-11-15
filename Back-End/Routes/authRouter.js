@@ -3,6 +3,9 @@ const authController = require("../Controller/authController");
 const router = express.Router();
 const upload = require("../middleware/fileUploader");
 
+// ============================================================
+// AUTH ROUTES
+// ============================================================
 router.route("/signup").post(
     upload.single("avatar"),
     authController.signup,
@@ -25,6 +28,20 @@ router.route("/User/:id").patch(
     authController.protect,
     upload.single("avatar"),
     authController.updateUser,
+);
+
+
+// UPLOAD / UPDATE AVATAR — PATCH /api/v1/authentication/avatar
+router.route("/avatar").patch(
+    authController.protect,
+    upload.single("avatar"),
+    authController.updateAvatar,
+);
+
+// REMOVE AVATAR — DELETE /api/v1/authentication/avatar
+router.route("/avatar").delete(
+    authController.protect,
+    authController.removeAvatar,
 );
 
 module.exports = router;

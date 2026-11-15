@@ -7,6 +7,7 @@ const CustomError = require("../Utils/CustomError");
 const jwt = require("jsonwebtoken");
 const util = require("util");
 const fs = require("fs");
+const path = require("path");
 const FormData = require("form-data");
 const crypto = require("crypto");
 const sendEmail = require("./../Utils/email");
@@ -20,14 +21,86 @@ const signToken = (id, role, linkId) => {
 const SWITCHABLE_ROLES = ["panelist", "adviser"];
 
 // ==========================================
+//  AVATAR STORAGE HELPERS (LOCAL)
+// ==========================================
+const AVATAR_UPLOAD_DIR = path.join(process.cwd(), "uploads", "avatars");
+
+if (!fs.existsSync(AVATAR_UPLOAD_DIR)) {
+  fs.mkdirSync(AVATAR_UPLOAD_DIR, { recursive: true });
+}
+
+// Allowed image types
+const ALLOWED_AVATAR_TYPES = [
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+];
+
+const MAX_AVATAR_SIZE = 5 * 1024 * 1024; // 5MB
+
+//  Save buffer to local disk
+const saveAvatarToDisk = (buffer, userId, originalname) => {
+  const ext = path.extname(originalname).toLowerCase() || ".png";
+  const filename = `user_${userId}_${Date.now()}${ext}`;
+  const filepath = path.join(AVATAR_UPLOAD_DIR, filename);
+
+  fs.writeFileSync(filepath, buffer);
+
+  return {
+    filename,
+    filepath,
+    url: `/uploads/avatars/${filename}`,
+  };
+};
+
+//  Delete old avatar from disk
+const deleteAvatarFromDisk = (avatarUrl) => {
+  try {
+    if (!avatarUrl || !avatarUrl.startsWith("/uploads/avatars/")) {
+      return;
+    }
+    const filename = path.basename(avatarUrl);
+    const filepath = path.join(AVATAR_UPLOAD_DIR, filename);
+
+    if (fs.existsSync(filepath)) {
+      fs.unlinkSync(filepath);
+    }
+  } catch (err) {
+    console.warn("⚠️ Failed to delete old avatar:", err.message);
+  }
+};
+
+//  Validate avatar file
+const validateAvatarFile = (file) => {
+  if (!file) {
+    return { valid: false, message: "No image file provided." };
+  }
+  if (!ALLOWED_AVATAR_TYPES.includes(file.mimetype)) {
+    return {
+      valid: false,
+      message: "Invalid file type. Only JPG, PNG, WEBP, GIF allowed.",
+    };
+  }
+  if (file.size > MAX_AVATAR_SIZE) {
+    return {
+      valid: false,
+      message: "File too large. Maximum size is 5MB.",
+    };
+  }
+  return { valid: true };
+};
+
+// ==========================================
 // HELPER — normalize switchable roles array
 // ==========================================
 const normalizeSelectedRoles = (rawSelected, currentRole) => {
   const arr = Array.isArray(rawSelected)
     ? rawSelected
     : rawSelected
-    ? [rawSelected]
-    : [];
+      ? [rawSelected]
+      : [];
 
   const clean = [
     ...new Set(
@@ -45,8 +118,252 @@ const normalizeSelectedRoles = (rawSelected, currentRole) => {
   return clean;
 };
 
+const cloudinary = require("cloudinary").v2;
+
+// ============================================================
+// ⭐ CLOUDINARY CONFIG
+// ============================================================
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+  secure: true,
+});
+
+// ============================================================
+// ⭐ HELPER — Upload buffer to Cloudinary
+// ============================================================
+const uploadToCloudinary = (buffer, options = {}) => {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      {
+        folder: "mentorhub/avatars",
+        resource_type: "image",
+        transformation: [
+          { width: 400, height: 400, crop: "fill", gravity: "face" },
+          { quality: "auto:good" },
+          { fetch_format: "auto" },
+        ],
+        timeout: 120000,
+        ...options,
+      },
+      (err, result) => {
+        if (err) return reject(err);
+        resolve(result);
+      }
+    );
+    stream.end(buffer);
+  });
+};
+
+// ============================================================
+// ⭐ HELPER — Delete from Cloudinary
+// ============================================================
+const deleteFromCloudinary = async (publicId) => {
+  if (!publicId) return;
+  try {
+    console.log("🗑️ Deleting old avatar from Cloudinary:", publicId);
+    const result = await cloudinary.uploader.destroy(publicId, {
+      resource_type: "image",
+      invalidate: true,
+    });
+    console.log("✅ Deleted:", result);
+  } catch (err) {
+    console.warn("⚠️ Failed to delete from Cloudinary:", err.message);
+  }
+};
+
+// ============================================================
+// ⭐ UPDATE AVATAR — SAME STYLE AS UpdateFood
+// ============================================================
+exports.updateAvatar = AsyncErrorHandler(async (req, res, next) => {
+  const userId = req.user?._id || req.user?.id;
+
+   console.log("weee", req.body)
+
+  if (!userId) {
+    return res.status(401).json({
+      success: false,
+      message: "Unauthorized. User ID not found.",
+    });
+  }
+
+  // ⭐ Validate file
+  if (!req.file) {
+    return res.status(400).json({
+      success: false,
+      message: "No image file provided.",
+    });
+  }
+
+  console.log("📸 Uploading new avatar to Cloudinary...");
+  console.log("📁 File:", {
+    originalname: req.file.originalname,
+    size: `${(req.file.size / 1024).toFixed(2)} KB`,
+    mimetype: req.file.mimetype,
+    buffer: `Buffer(${req.file.buffer?.length || 0} bytes)`,
+  });
+
+  // ⭐ Validate type
+  const allowedTypes = [
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+  ];
+  if (!allowedTypes.includes(req.file.mimetype)) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid file type. Only JPG, PNG, WEBP, GIF allowed.",
+    });
+  }
+
+  // ⭐ Validate size (5MB)
+  const MAX_SIZE = 5 * 1024 * 1024;
+  if (req.file.size > MAX_SIZE) {
+    return res.status(400).json({
+      success: false,
+      message: "File too large. Maximum size is 5MB.",
+    });
+  }
+
+  // ⭐ Get existing user
+  const user = await UserLogin.findById(userId);
+  if (!user) {
+    return res.status(404).json({
+      success: false,
+      message: "User not found.",
+    });
+  }
+
+  let avatar = user.avatar || { url: "", public_id: "" };
+
+  try {
+   
+    const uploadResult = await uploadToCloudinary(req.file.buffer, {
+      folder: "mentorhub/avatars",
+      public_id: `user_${userId}_${Date.now()}`,
+      overwrite: true,
+      invalidate: true,
+    });
+
+    console.log("📤 Cloudinary Upload Response:", {
+      url: uploadResult.secure_url,
+      public_id: uploadResult.public_id,
+      format: uploadResult.format,
+      bytes: uploadResult.bytes,
+    });
+
+    if (!uploadResult?.secure_url) {
+      throw new Error("Cloudinary upload failed — no secure_url returned.");
+    }
+
+    // ============================================
+    // ⭐ DELETE OLD IMAGE FROM CLOUDINARY
+    // ============================================
+    if (
+      user.avatar?.public_id &&
+      user.avatar?.url &&
+      user.avatar.public_id !== uploadResult.public_id
+    ) {
+      console.log("🗑️ Deleting old avatar...");
+      console.log("📁 Old Public ID:", user.avatar.public_id);
+      console.log("🔗 Old URL:", user.avatar.url);
+
+      await deleteFromCloudinary(user.avatar.public_id);
+    }
+
+    // ============================================
+    // ⭐ UPDATE AVATAR OBJECT
+    // ============================================
+    avatar = {
+      url: uploadResult.secure_url,
+      public_id: uploadResult.public_id,
+    };
+
+    console.log("✅ New avatar uploaded successfully:", avatar);
+  } catch (err) {
+    console.error("❌ Upload Error:", err.message);
+    return res.status(500).json({
+      success: false,
+      message: err.message || "Failed to upload avatar.",
+    });
+  }
+
+  // ============================================
+  // ⭐ UPDATE USER DOCUMENT
+  // ============================================
+  user.avatar = avatar;
+  user.updatedAt = Date.now();
+  await user.save();
+
+  console.log("📝 User avatar updated in DB:", user.avatar);
+
+  return res.status(200).json({
+    success: true,
+    status: "Success",
+    message: "Avatar updated successfully.",
+    data: {
+      avatar: user.avatar,
+    },
+  });
+});
+
+// ============================================================
+// ⭐ REMOVE AVATAR — SAME STYLE
+// ============================================================
+exports.removeAvatar = AsyncErrorHandler(async (req, res, next) => {
+  const userId = req.user?._id || req.user?.id;
+
+  if (!userId) {
+    return res.status(401).json({
+      success: false,
+      message: "Unauthorized. User ID not found.",
+    });
+  }
+
+  const user = await UserLogin.findById(userId);
+  if (!user) {
+    return res.status(404).json({
+      success: false,
+      message: "User not found.",
+    });
+  }
+
+  try {
+    // ⭐ Delete old image from Cloudinary
+    if (user.avatar?.public_id) {
+      console.log("🗑️ Deleting avatar from Cloudinary...");
+      console.log("📁 Public ID:", user.avatar.public_id);
+
+      await deleteFromCloudinary(user.avatar.public_id);
+    }
+
+    // ⭐ Reset avatar
+    user.avatar = { url: "", public_id: "" };
+    user.updatedAt = Date.now();
+    await user.save();
+
+    console.log("✅ Avatar removed successfully");
+
+    return res.status(200).json({
+      success: true,
+      status: "Success",
+      message: "Avatar removed successfully.",
+      data: { avatar: user.avatar },
+    });
+  } catch (err) {
+    console.error("❌ Avatar removal error:", err);
+    return res.status(500).json({
+      success: false,
+      message: err.message || "Failed to remove avatar.",
+    });
+  }
+});
+
 // ==========================================
-// SIGNUP — Create new user
+// SIGNUP — Create new user (may avatar support)
 // ==========================================
 exports.signup = async (req, res) => {
   try {
@@ -72,9 +389,6 @@ exports.signup = async (req, res) => {
       referralCode,
     } = req.body;
 
-    // =========================================================
-    // ✅ VALIDATE PASSWORDS (manual — before hitting the model)
-    // =========================================================
     const defaultPassword = password || "default123";
 
     if (confirmPassword !== undefined && confirmPassword !== "") {
@@ -86,9 +400,6 @@ exports.signup = async (req, res) => {
       }
     }
 
-    // =========================================================
-    // ✅ NORMALIZE multiplerole (switchable roles)
-    // =========================================================
     const rawSelected = Array.isArray(selectedrole)
       ? selectedrole
       : selectedrole
@@ -99,13 +410,12 @@ exports.signup = async (req, res) => {
       ...new Set(
         rawSelected
           .map((r) => String(r).trim().toLowerCase())
-          .filter((r) => SWITCHABLE_ROLES.includes(r)),
+          .filter((r) => SWITCHABLE_ROLES.includes(r))
       ),
     ];
 
     const currentRole = (role || "student").toLowerCase();
 
-    // Only allow multiplerole for switchable roles
     let multiplerole = [];
     if (SWITCHABLE_ROLES.includes(currentRole)) {
       if (!cleanSelected.includes(currentRole)) {
@@ -114,14 +424,37 @@ exports.signup = async (req, res) => {
       multiplerole = cleanSelected;
     }
 
-    // =========================================================
-    // ✅ CREATE USER
-    // =========================================================
+    //  Default avatar
+    let avatarData = { url: "", public_id: "" };
+
+    //  Kung may uploaded avatar, i-save agad
+    if (req.file) {
+      const validation = validateAvatarFile(req.file);
+      if (!validation.valid) {
+        return res.status(400).json({
+          success: false,
+          message: validation.message,
+        });
+      }
+
+      try {
+        const saved = saveAvatarToDisk(
+          req.file.buffer,
+          username || "new",
+          req.file.originalname
+        );
+        avatarData = {
+          url: saved.url,
+          public_id: saved.filename,
+        };
+      } catch (err) {
+        console.error("⚠️ Avatar save failed:", err.message);
+        // Continue — user still created without avatar
+      }
+    }
+
     const newUser = new UserLogin({
-      avatar: {
-        url: "",
-        public_id: "",
-      },
+      avatar: avatarData,
       first_name: first_name || "",
       last_name: last_name || "",
       middle_name: middle_name || "",
@@ -153,9 +486,6 @@ exports.signup = async (req, res) => {
 
     await newUser.save();
 
-    // =========================================================
-    // ✅ SEND EMAIL — PLAIN TEXT
-    // =========================================================
     const text = `
 Welcome, ${first_name || username}!
 
@@ -168,7 +498,7 @@ Your Default Password is: ${defaultPassword}
 ⚠️ Please Change your preferred Password after logging in.
 
 Your Referral Code: ${newUser.referralCode}
-        `;
+    `;
 
     try {
       await sendEmail({
@@ -225,6 +555,9 @@ Your Referral Code: ${newUser.referralCode}
   }
 };
 
+// ==========================================
+// UPDATE USER — admin update
+// ==========================================
 exports.updateUser = AsyncErrorHandler(async (req, res, next) => {
   const { id } = req.params;
 
@@ -238,15 +571,12 @@ exports.updateUser = AsyncErrorHandler(async (req, res, next) => {
     return next(new CustomError("User not found.", 404));
   }
 
-  // ─────────────────────────────────────────────
-  // Pull incoming fields (multipart or JSON)
-  // ─────────────────────────────────────────────
   const {
     first_name,
     middle_name,
     last_name,
     suffix,
-    email,        // NOTE: email is immutable after creation
+    email,
     role,
     departmentId,
     laboratoryId,
@@ -257,16 +587,12 @@ exports.updateUser = AsyncErrorHandler(async (req, res, next) => {
     selectedrole,
   } = req.body;
 
-  // ── Basic name fields ──
   if (first_name !== undefined) user.first_name = first_name;
   if (middle_name !== undefined) user.middle_name = middle_name;
   if (last_name !== undefined) user.last_name = last_name;
   if (suffix !== undefined) user.suffix = suffix;
 
-  // ── Email is immutable — reject kung magkaiba ──
   if (email !== undefined && email !== "" && email !== user.username) {
-    // Optional: kung email ang ginagamit na username, huwag hayaang baguhin
-    // Kung gusto mong payagan, alisin ang block na ito.
     return next(
       new CustomError(
         "Email/username cannot be changed once the account is created.",
@@ -275,7 +601,6 @@ exports.updateUser = AsyncErrorHandler(async (req, res, next) => {
     );
   }
 
-  // ── Role + switchable roles ──
   const currentRole = (role || user.role || "student").toLowerCase();
 
   let multiplerole = Array.isArray(user.multiplerole) ? [...user.multiplerole] : [];
@@ -285,12 +610,10 @@ exports.updateUser = AsyncErrorHandler(async (req, res, next) => {
       const cleanSelected = normalizeSelectedRoles(selectedrole, currentRole);
       multiplerole = cleanSelected;
     } else {
-      // Non-switchable role → clear multiplerole
       multiplerole = [];
     }
     user.role = currentRole;
   } else if (selectedrole !== undefined) {
-    // Role unchanged pero may selectedrole update
     if (SWITCHABLE_ROLES.includes(user.role)) {
       multiplerole = normalizeSelectedRoles(selectedrole, user.role);
     }
@@ -298,7 +621,6 @@ exports.updateUser = AsyncErrorHandler(async (req, res, next) => {
 
   user.multiplerole = multiplerole;
 
-  // ── Department / lab ──
   if (departmentId !== undefined && departmentId !== "") {
     user.departmentId = departmentId;
   }
@@ -306,25 +628,33 @@ exports.updateUser = AsyncErrorHandler(async (req, res, next) => {
     user.laboratoryId = laboratoryId;
   }
 
-  // ── Status ──
   if (statusAccount !== undefined && statusAccount !== "") {
     user.statusAccount = statusAccount;
-    // Sync isActive flag
     user.isActive = statusAccount === "approved";
   }
   if (status !== undefined && status !== "") {
     user.status = status;
   }
 
-  // ── Avatar (file upload) ──
+  //  Avatar (file upload) — LOCAL STORAGE
   if (req.file) {
+    const validation = validateAvatarFile(req.file);
+    if (!validation.valid) {
+      return next(new CustomError(validation.message, 400));
+    }
+
+    if (user.avatar?.url) {
+      deleteAvatarFromDisk(user.avatar.url);
+    }
+
+    const saved = saveAvatarToDisk(req.file.buffer, id, req.file.originalname);
+
     user.avatar = {
-      url: req.file.path || req.file.secure_url || "",
-      public_id: req.file.filename || req.file.public_id || "",
+      url: saved.url,
+      public_id: saved.filename,
     };
   }
 
-  // ── Optional password change ──
   if (password && password !== "") {
     if (password.length < 8) {
       return next(
@@ -343,9 +673,6 @@ exports.updateUser = AsyncErrorHandler(async (req, res, next) => {
 
   await user.save();
 
-  // ─────────────────────────────────────────────
-  // Strip sensitive fields before responding
-  // ─────────────────────────────────────────────
   const userResponse = user.toObject();
   delete userResponse.password;
   delete userResponse.confirmPassword;
@@ -480,7 +807,7 @@ exports.login = AsyncErrorHandler(async (req, res, next) => {
   const { email, password } = req.body;
 
   const user = await UserLogin.findOne({ username: email }).select(
-    "+password +status",
+    "+password +status"
   );
 
   if (!user || !(await user.comparePasswordInDb(password, user.password))) {
@@ -489,7 +816,7 @@ exports.login = AsyncErrorHandler(async (req, res, next) => {
 
   if (user.status === "In-Active") {
     return next(
-      new CustomError("Account is inactive. Please contact support.", 403),
+      new CustomError("Account is inactive. Please contact support.", 403)
     );
   }
 
@@ -515,6 +842,7 @@ exports.login = AsyncErrorHandler(async (req, res, next) => {
     referredBy: user.referredBy || null,
     contact_number: user.contact_number || null,
     Designatedzone: user.Designatedzone || null,
+    avatar: user.avatar || { url: "", public_id: "" },
   };
 
   return res.status(200).json({
@@ -530,6 +858,7 @@ exports.login = AsyncErrorHandler(async (req, res, next) => {
     userId: user._id,
     contact_number: user.contact_number || null,
     Designatedzone: user.Designatedzone || null,
+    avatar: user.avatar || { url: "", public_id: "" },
   });
 });
 
@@ -553,7 +882,7 @@ exports.protect = AsyncErrorHandler(async (req, res, next) => {
 
   const decoded = await util.promisify(jwt.verify)(
     token,
-    process.env.SECRET_STR,
+    process.env.SECRET_STR
   );
 
   const user = await UserLogin.findById(decoded.id);
@@ -581,6 +910,7 @@ exports.protect = AsyncErrorHandler(async (req, res, next) => {
     contact_number: user.contact_number || null,
     Designatedzone: user.Designatedzone || null,
     theme: user.theme || "light",
+    avatar: user.avatar || { url: "", public_id: "" },
   };
 
   next();
@@ -656,7 +986,7 @@ exports.forgotPassword = AsyncErrorHandler(async (req, res, next) => {
 
   if (!user) {
     return next(
-      new CustomError("We could  not find the user with given email", 404),
+      new CustomError("We could  not find the user with given email", 404)
     );
   }
 
@@ -685,8 +1015,8 @@ exports.forgotPassword = AsyncErrorHandler(async (req, res, next) => {
     return next(
       new CustomError(
         "There was an error sending password reset email. Please try again later",
-        500,
-      ),
+        500
+      )
     );
   }
 });
@@ -729,12 +1059,12 @@ exports.updatePassword = AsyncErrorHandler(async (req, res, next) => {
 
   const isMatch = await user.comparePasswordInDb(
     req.body.currentPassword,
-    user.password,
+    user.password
   );
 
   if (!isMatch) {
     return next(
-      new CustomError("The current password you provided is wrong", 401),
+      new CustomError("The current password you provided is wrong", 401)
     );
   }
 
