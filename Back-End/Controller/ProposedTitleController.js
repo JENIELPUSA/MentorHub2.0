@@ -1321,15 +1321,27 @@ exports.GetByTrackingID = AsyncErrorHandler(async (req, res) => {
   if (!trackingId) {
     return res.status(400).json({ status: "fail", message: "trackingId is required" });
   }
-  if (!mongoose.Types.ObjectId.isValid(trackingId)) {
-    return res.status(400).json({ status: "fail", message: "Invalid trackingId format" });
+
+  // ✅ FIX: Trim at tanggalin ang extra characters (::, spaces, quotes)
+  const cleanedTrackingId = String(trackingId)
+    .trim()
+    .replace(/[:"'\s]+/g, "");
+
+  console.log("🔍 Original trackingId:", JSON.stringify(trackingId));
+  console.log("🔍 Cleaned trackingId:", JSON.stringify(cleanedTrackingId));
+
+  if (!mongoose.Types.ObjectId.isValid(cleanedTrackingId)) {
+    return res.status(400).json({
+      status: "fail",
+      message: `Invalid trackingId format: "${cleanedTrackingId}"`,
+    });
   }
 
   const role = (req.user.role || "").toLowerCase().trim();
   const userId = req.user._id;
   const userObjectId = new mongoose.Types.ObjectId(userId);
   const userIdStr = String(userId);
-  const trackingObjectId = new mongoose.Types.ObjectId(trackingId);
+  const trackingObjectId = new mongoose.Types.ObjectId(cleanedTrackingId);
 
   // ⭐ ALWAYS match the tracking first
   const matchStage = { "titleUrlTracking._id": trackingObjectId };
@@ -1404,7 +1416,6 @@ exports.GetByTrackingID = AsyncErrorHandler(async (req, res) => {
   const hasAccess =
     isAdviser || isCoAdviser || isPanelist || isSubjectInstructor || isAdmin || isStudent;
 
-  // ✅ DEBUG log para makita agad
   if (!hasAccess) {
     console.warn(
       `[GetByTrackingID] ⚠️ 403 DENIED — role="${role}" userId="${userIdStr}"`,
@@ -1424,13 +1435,17 @@ exports.GetByTrackingID = AsyncErrorHandler(async (req, res) => {
       }
     );
 
+    return res.status(403).json({
+      status: "fail",
+      message: "You are not allowed to access this submission",
+    });
   }
 
   // ============================================================
   // FIND TRACKING ENTRY & RESOLVE URL
   // ============================================================
   const tracking = submission.titleUrlTracking?.find(
-    (t) => t._id.toString() === trackingId
+    (t) => String(t._id) === cleanedTrackingId
   );
   const remoteUrl = tracking?.url || tracking?.titleUrl || submission.fileUrl;
 
@@ -1439,18 +1454,23 @@ exports.GetByTrackingID = AsyncErrorHandler(async (req, res) => {
   }
 
   // ============================================================
-  // STREAM PDF
+  // STREAM PDF FROM CLOUDINARY
   // ============================================================
   try {
+    console.log("📄 Fetching PDF from Cloudinary:", remoteUrl);
+
     const remoteResponse = await axios.get(remoteUrl, {
       responseType: "stream",
-      timeout: 30000,
+      timeout: 60000,
       headers: { "User-Agent": "Mozilla/5.0 (compatible; PDFProxy/1.0)" },
       validateStatus: (s) => s >= 200 && s < 400,
     });
 
     const contentType =
-      remoteResponse.headers["content-type"] || submission.fileType || "application/pdf";
+      remoteResponse.headers["content-type"] ||
+      submission.fileType ||
+      "application/pdf";
+
     res.setHeader("Content-Type", contentType);
     res.setHeader(
       "Content-Disposition",
@@ -1460,6 +1480,7 @@ exports.GetByTrackingID = AsyncErrorHandler(async (req, res) => {
       res.setHeader("Content-Length", remoteResponse.headers["content-length"]);
     }
     res.setHeader("Cache-Control", "private, max-age=300");
+
     remoteResponse.data.pipe(res);
   } catch (err) {
     console.error("❌ PDF Proxy Error:", err.message);
@@ -1812,6 +1833,41 @@ exports.DisplayProposedTitles = AsyncErrorHandler(async (req, res) => {
   });
 });
 
+const cloudinary = require("cloudinary").v2;
+
+// ============================================================
+// ⭐ CLOUDINARY CONFIG
+// ============================================================
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+// ============================================================
+// ⭐ HELPER — Upload buffer to Cloudinary
+// ============================================================
+const uploadToCloudinary = (buffer, options = {}) => {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      {
+        resource_type: "auto",
+        folder: "mentorhub/thesis",
+        timeout: 120000,
+        ...options,
+      },
+      (err, result) => {
+        if (err) return reject(err);
+        resolve(result);
+      }
+    );
+    stream.end(buffer);
+  });
+};
+
+// ============================================================
+// ⭐ CREATE PROPOSED TITLE — CLOUDINARY VERSION
+// ============================================================
 exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
   try {
     const {
@@ -1836,73 +1892,49 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
     const isRevision = action === "revision";
 
     // ========================================================
-    // UPLOAD FILE TO HOSTINGER
+    // UPLOAD FILE TO CLOUDINARY
     // ========================================================
     let fileData = {};
     if (req.file) {
-      console.log("📸 Uploading file to Hostinger...");
+      console.log("📸 Uploading file to Cloudinary...");
       console.log("📁 File:", {
         originalname: req.file.originalname,
         size: `${(req.file.size / 1024).toFixed(2)} KB`,
         mimetype: req.file.mimetype,
       });
 
-      // ✅ NORMALIZE URL — tanggalin ang dobleng https://
-      let uploadUrl = process.env.UPLOADMENTOR_URL || "";
-      uploadUrl = uploadUrl.replace(/^(https?:\/\/)+/i, "");
-      if (uploadUrl && !/^https?:\/\//i.test(uploadUrl)) {
-        uploadUrl = "https://" + uploadUrl;
-      }
-
-      console.log("🔗 Raw env URL =", JSON.stringify(process.env.UPLOADMENTOR_URL));
-      console.log("🔗 Normalized URL =", JSON.stringify(uploadUrl));
-
-      if (!uploadUrl) {
+      // ✅ Check Cloudinary env vars
+      if (
+        !process.env.CLOUDINARY_CLOUD_NAME ||
+        !process.env.CLOUDINARY_API_KEY ||
+        !process.env.CLOUDINARY_API_SECRET
+      ) {
         throw new Error(
-          "UPLOADMENTOR_URL is not set on this environment (Render → Environment tab)"
+          "Cloudinary env vars not set (CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET)"
         );
       }
 
-      const form = new FormData();
-      form.append("file", req.file.buffer, {
-        filename: req.file.originalname,
-        contentType: req.file.mimetype,
+      // ✅ Upload to Cloudinary
+      const result = await uploadToCloudinary(req.file.buffer, {
+        folder: "mentorhub/thesis",
+        resource_type: "auto",
+        public_id: `mentorhub_${Date.now()}_${req.file.originalname.replace(
+          /\.[^/.]+$/,
+          ""
+        )}`,
       });
 
-      // ✅ MINIMAL headers lang — gaya ng createFood
-      const response = await axios.post(uploadUrl, form, {
-        maxBodyLength: Infinity,
-        headers: { ...form.getHeaders() },
+      console.log("📤 Cloudinary Response:", {
+        url: result.secure_url,
+        public_id: result.public_id,
+        format: result.format,
+        bytes: result.bytes,
       });
-
-      console.log("📤 Upload Response:", response.data);
-
-      // ✅ Flexible response parsing
-      let fileUrl = "";
-      let publicId = "";
-
-      if (response.data && response.data.url) {
-        fileUrl = response.data.url;
-        publicId =
-          response.data.public_id ||
-          response.data.filename ||
-          req.file.originalname;
-      } else if (response.data && response.data.success && response.data.data) {
-        fileUrl = response.data.data.url;
-        publicId = response.data.data.public_id || req.file.originalname;
-      } else if (response.data && response.data.file) {
-        fileUrl = response.data.file;
-        publicId = req.file.originalname;
-      } else {
-        console.log("⚠️ Unexpected response format:", response.data);
-        fileUrl = `/temp-uploads/${req.file.originalname}`;
-        publicId = req.file.originalname;
-      }
 
       fileData = {
-        fileUrl,
+        fileUrl: result.secure_url,
         fileName: req.file.originalname,
-        publicId,
+        publicId: result.public_id,
         fileType: req.file.mimetype,
         isPdf: req.file.mimetype === "application/pdf",
       };
@@ -1917,20 +1949,31 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
     // ========================================================
     if (isRevision) {
       if (!titleId) {
-        return res.status(400).json({ status: false, message: "titleId is required for revision" });
+        return res.status(400).json({
+          status: false,
+          message: "titleId is required for revision",
+        });
       }
       if (!fileData.fileUrl) {
-        return res.status(400).json({ status: false, message: "Revision file is required" });
+        return res.status(400).json({
+          status: false,
+          message: "Revision file is required",
+        });
       }
 
       const existing = await ProposedTitleModel.findById(titleId);
       if (!existing) {
-        return res.status(404).json({ status: false, message: "Proposed title not found" });
+        return res.status(404).json({
+          status: false,
+          message: "Proposed title not found",
+        });
       }
 
-      if (!Array.isArray(existing.titleUrlTracking)) existing.titleUrlTracking = [];
+      if (!Array.isArray(existing.titleUrlTracking))
+        existing.titleUrlTracking = [];
 
-      const lastEntry = existing.titleUrlTracking[existing.titleUrlTracking.length - 1];
+      const lastEntry =
+        existing.titleUrlTracking[existing.titleUrlTracking.length - 1];
       if (lastEntry?.publicId && lastEntry.publicId === fileData.publicId) {
         return res.status(400).json({
           status: false,
@@ -1960,8 +2003,10 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
       existing.isPdf = fileData.isPdf;
 
       if (remarks && remarks.trim()) existing.remarks = remarks.trim();
-      if (typeof description === "string") existing.description = description.trim();
-      if (title && title !== "undefined" && title.trim() !== "") existing.title = title.trim();
+      if (typeof description === "string")
+        existing.description = description.trim();
+      if (title && title !== "undefined" && title.trim() !== "")
+        existing.title = title.trim();
 
       if (track) existing.track = track;
       if (Array.isArray(objectives)) existing.objectives = objectives;
@@ -1989,17 +2034,26 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
 
       await existing.save();
 
+      // ========================================================
+      // ✅ NOTIFICATION — REVISION
+      // ========================================================
       try {
-        const revisionGroup = await Group.findById(existing.groupId).select("referralCode name");
+        const revisionGroup = await Group.findById(existing.groupId).select(
+          "referralCode name"
+        );
         const revisionReferralCode = revisionGroup?.referralCode || null;
 
         const revisionExtraIds = [
           existing.adviserId,
           existing.coAdviserId,
-          ...(Array.isArray(existing.assignedReviewers) ? existing.assignedReviewers : []),
+          ...(Array.isArray(existing.assignedReviewers)
+            ? existing.assignedReviewers
+            : []),
         ].filter(Boolean);
 
-        const revisionRecipientIds = new Set(revisionExtraIds.map((id) => id.toString()));
+        const revisionRecipientIds = new Set(
+          revisionExtraIds.map((id) => id.toString())
+        );
 
         if (revisionReferralCode) {
           const subjectInstructors = await UserLoginSchema.find({
@@ -2007,38 +2061,46 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
             role: "subject_instructor",
             status: "Active",
           }).select("_id username first_name last_name");
-          subjectInstructors.forEach((u) => revisionRecipientIds.add(u._id.toString()));
+          subjectInstructors.forEach((u) =>
+            revisionRecipientIds.add(u._id.toString())
+          );
         }
 
         if (revisionRecipientIds.size > 0) {
           const notifTitle = "Revision Submitted";
-          const notifMessage = `Revision uploaded for "${existing.title || "Untitled"}" — ${chapter || "new chapter"}`;
+          const notifMessage = `Revision uploaded for "${
+            existing.title || "Untitled"
+          }" — ${chapter || "new chapter"}`;
           const notifType = "Reminder";
           const notifPriority = "Normal";
           const notifActionUrl = `/proposed-titles/${existing._id}`;
 
-          const revisionNotifications = [...revisionRecipientIds].map((userId) => ({
-            groupId: existing.groupId,
-            recipient: [userId],
-            uploadedBy: [req.user.linkId],
-            type: notifType,
-            title: notifTitle,
-            message: notifMessage,
-            referenceId: existing._id,
-            referenceModel: "ProposedTitle",
-            actionUrl: notifActionUrl,
-            priority: notifPriority,
-            metadata: {
-              titleId: existing._id,
+          const revisionNotifications = [...revisionRecipientIds].map(
+            (userId) => ({
               groupId: existing.groupId,
-              chapter,
-              action: "revision",
-              createdBy: req.user.linkId,
-            },
-            isRead: false,
-          }));
+              recipient: [userId],
+              uploadedBy: [req.user.linkId],
+              type: notifType,
+              title: notifTitle,
+              message: notifMessage,
+              referenceId: existing._id,
+              referenceModel: "ProposedTitle",
+              actionUrl: notifActionUrl,
+              priority: notifPriority,
+              metadata: {
+                titleId: existing._id,
+                groupId: existing.groupId,
+                chapter,
+                action: "revision",
+                createdBy: req.user.linkId,
+              },
+              isRead: false,
+            })
+          );
 
-          const saved = await NotificationSchema.insertMany(revisionNotifications);
+          const saved = await NotificationSchema.insertMany(
+            revisionNotifications
+          );
 
           try {
             if (io) {
@@ -2067,7 +2129,10 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
               });
             }
           } catch (socketErr) {
-            console.error("[SOCKET] revision emit error:", socketErr.message);
+            console.error(
+              "[SOCKET] revision emit error:",
+              socketErr.message
+            );
           }
         }
       } catch (notifyErr) {
@@ -2088,15 +2153,21 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
       "adviserId coadviserId referralCode groupStatus name"
     );
     if (!group) {
-      return res.status(404).json({ status: false, message: "Group not found." });
+      return res
+        .status(404)
+        .json({ status: false, message: "Group not found." });
     }
 
     const cleanTitle = title && title !== "undefined" ? title.trim() : "";
     if (!cleanTitle) {
-      return res.status(400).json({ status: false, message: "Title is required" });
+      return res
+        .status(400)
+        .json({ status: false, message: "Title is required" });
     }
     if (!fileData.fileUrl) {
-      return res.status(400).json({ status: false, message: "File is required" });
+      return res
+        .status(400)
+        .json({ status: false, message: "File is required" });
     }
 
     await ProposedTitleModel.deleteMany({ groupId });
@@ -2146,16 +2217,23 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
       rubric: rubric && typeof rubric === "object" ? rubric : undefined,
     });
 
+    // ========================================================
+    // ✅ NOTIFICATION — CREATE
+    // ========================================================
     try {
       const createReferralCode = group?.referralCode || null;
 
       const createExtraIds = [
         proposedTitle.adviserId,
         proposedTitle.coAdviserId,
-        ...(Array.isArray(proposedTitle.assignedReviewers) ? proposedTitle.assignedReviewers : []),
+        ...(Array.isArray(proposedTitle.assignedReviewers)
+          ? proposedTitle.assignedReviewers
+          : []),
       ].filter(Boolean);
 
-      const createRecipientIds = new Set(createExtraIds.map((id) => id.toString()));
+      const createRecipientIds = new Set(
+        createExtraIds.map((id) => id.toString())
+      );
 
       if (createReferralCode) {
         const subjectInstructors = await UserLoginSchema.find({
@@ -2163,12 +2241,16 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
           role: "subject_instructor",
           status: "Active",
         }).select("_id username first_name last_name");
-        subjectInstructors.forEach((u) => createRecipientIds.add(u._id.toString()));
+        subjectInstructors.forEach((u) =>
+          createRecipientIds.add(u._id.toString())
+        );
       }
 
       if (createRecipientIds.size > 0) {
         const notifTitle = "New Proposed Title";
-        const notifMessage = `"${proposedTitle.title || "Untitled"}" submitted — ${chapter || "new chapter"}`;
+        const notifMessage = `"${
+          proposedTitle.title || "Untitled"
+        }" submitted — ${chapter || "new chapter"}`;
         const notifType = "ProposedTitleCreated";
         const notifPriority = "Normal";
         const notifActionUrl = `/proposed-titles/${proposedTitle._id}`;
@@ -2194,7 +2276,9 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
           isRead: false,
         }));
 
-        const saved = await NotificationSchema.insertMany(createNotifications);
+        const saved = await NotificationSchema.insertMany(
+          createNotifications
+        );
 
         try {
           if (io) {
@@ -2241,12 +2325,11 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
     console.error("❌ Create Error Full Details:");
     console.error("  Message:       ", JSON.stringify(error.message));
     console.error("  Code:          ", error.code);
-    console.error("  HTTP Status:   ", error.response?.status);
-    console.error("  Status Text:   ", error.response?.statusText);
-    console.error("  Server:        ", error.response?.headers?.server);
-    console.error("  CF-Ray:        ", error.response?.headers?.["cf-ray"]);
+    console.error(
+      "  HTTP Status:   ",
+      error.http_code || error.response?.status
+    );
     console.error("  Request URL:   ", error.config?.url);
-    console.error("  Request Method:", error.config?.method);
     if (error.response?.data) {
       const bodyStr =
         typeof error.response.data === "string"
@@ -2255,7 +2338,10 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
       console.error("  Response Body: ", bodyStr);
     }
     if (error.stack) {
-      console.error("  Stack:         ", error.stack.split("\n").slice(0, 5).join("\n"));
+      console.error(
+        "  Stack:         ",
+        error.stack.split("\n").slice(0, 5).join("\n")
+      );
     }
     console.error("════════════════════════════════════════");
 
@@ -2263,7 +2349,7 @@ exports.createProposedTitle = AsyncErrorHandler(async (req, res) => {
       status: "error",
       message: "Failed to create",
       error: error.message || error.code || "Unknown error",
-      httpStatus: error.response?.status || null,
+      httpStatus: error.http_code || error.response?.status || null,
       responseBody: error.response?.data || null,
     });
   }
