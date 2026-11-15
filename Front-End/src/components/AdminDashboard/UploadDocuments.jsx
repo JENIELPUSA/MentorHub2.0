@@ -48,39 +48,72 @@ export default function UploadDocuments({ isLoading = false, onUploaded }) {
     };
 
     /* ============================
-       VALIDATION CONSTANTS
+       VALIDATION CONSTANTS — PDF ONLY
        ============================ */
     const MAX_SIZE = 50 * 1024 * 1024; // 50MB
-    const ALLOWED_TYPES = [
-        'application/pdf',
-        'application/msword',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    ];
-    const ALLOWED_EXTENSIONS = ['.pdf', '.doc', '.docx'];
+    const ALLOWED_TYPES = ['application/pdf'];          // ⭐ PDF lang
+    const ALLOWED_EXTENSIONS = ['.pdf'];                 // ⭐ PDF lang
 
     /* ============================
-       FILE PICKER HANDLER
+       FILE PICKER HANDLER — PDF ONLY
        ============================ */
     const handleUpload = (e) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
+        // ⭐ Size check
         if (file.size > MAX_SIZE) {
             showNotification('❌ File too large. Max 50MB.', true);
             e.target.value = '';
             return;
         }
 
+        // ⭐ Extension check — PDF lang
         const fileExt = '.' + file.name.split('.').pop().toLowerCase();
-        if (!ALLOWED_TYPES.includes(file.type) && !ALLOWED_EXTENSIONS.includes(fileExt)) {
-            showNotification('❌ Invalid file type. PDF, DOC, or DOCX only.', true);
+        if (fileExt !== '.pdf') {
+            showNotification('❌ PDF file only. Please select a .pdf file.', true);
             e.target.value = '';
             return;
         }
 
-        setSelectedFile(file);
-        setIsSubmitted(false);
-        setUploadProgress(0);
+        // ⭐ MIME type check — PDF lang
+        if (!ALLOWED_TYPES.includes(file.type) && file.type !== '') {
+            showNotification('❌ Invalid file type. PDF only.', true);
+            e.target.value = '';
+            return;
+        }
+
+        // ⭐ Double-check: basahin ang first bytes para siguraduhing PDF talaga
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+            try {
+                const arr = new Uint8Array(evt.target.result);
+                // PDF magic number: %PDF- (0x25 0x50 0x44 0x46 0x2D)
+                const isPdfMagic =
+                    arr[0] === 0x25 &&
+                    arr[1] === 0x50 &&
+                    arr[2] === 0x44 &&
+                    arr[3] === 0x46;
+
+                if (!isPdfMagic) {
+                    showNotification('❌ File is not a valid PDF.', true);
+                    setSelectedFile(null);
+                    return;
+                }
+
+                setSelectedFile(file);
+                setIsSubmitted(false);
+                setUploadProgress(0);
+            } catch {
+                showNotification('❌ Could not read file. Try again.', true);
+                setSelectedFile(null);
+            }
+        };
+        reader.onerror = () => {
+            showNotification('❌ Could not read file. Try again.', true);
+        };
+        reader.readAsArrayBuffer(file.slice(0, 4)); // first 4 bytes lang
+
         e.target.value = '';
     };
 
@@ -93,7 +126,14 @@ export default function UploadDocuments({ isLoading = false, onUploaded }) {
             return;
         }
         if (!selectedFile) {
-            showNotification('❌ Please select a file', true);
+            showNotification('❌ Please select a PDF file', true);
+            return;
+        }
+
+        // ⭐ Final safety check
+        const fileExt = '.' + selectedFile.name.split('.').pop().toLowerCase();
+        if (fileExt !== '.pdf') {
+            showNotification('❌ PDF file only.', true);
             return;
         }
 
@@ -120,14 +160,10 @@ export default function UploadDocuments({ isLoading = false, onUploaded }) {
                 setIsSubmitted(true);
                 showNotification('✅ Sample format uploaded successfully!');
 
-                // Reset form fields
                 setTitleFormat('');
                 setDescription('');
                 setType('Capstone');
                 setSelectedFile(null);
-
-                // The new item will appear automatically via `formats` from context
-                // (assuming CreateFormat refreshes the list)
 
                 onUploaded?.(result.data || result);
             } else {
@@ -164,7 +200,6 @@ export default function UploadDocuments({ isLoading = false, onUploaded }) {
         });
     };
 
-    // Extract filename from URL
     const getFileNameFromUrl = (url) => {
         if (!url) return 'Unknown file';
         try {
@@ -203,7 +238,7 @@ export default function UploadDocuments({ isLoading = false, onUploaded }) {
                     </p>
                 </div>
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-blue-900 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-full">
-                    Single Upload
+                    PDF Only
                 </span>
             </div>
 
@@ -212,9 +247,7 @@ export default function UploadDocuments({ isLoading = false, onUploaded }) {
             ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
-                    {/* ============================
-                        LEFT: UPLOAD SAMPLE FORMAT
-                       ============================ */}
+                    {/* LEFT: UPLOAD SAMPLE FORMAT */}
                     <div className="border border-slate-200 rounded-xl p-4 flex flex-col gap-3 hover:border-blue-300 hover:bg-blue-50/30 transition-all duration-200">
                         <div className="flex items-center gap-2 mb-1">
                             <div className="p-1.5 bg-blue-50 border border-blue-100 rounded-lg">
@@ -271,7 +304,7 @@ export default function UploadDocuments({ isLoading = false, onUploaded }) {
                             />
                         </div>
 
-                        {/* File Picker */}
+                        {/* File Picker — PDF only */}
                         <div className="flex items-center gap-3 pt-1">
                             <div
                                 className={`p-2.5 rounded-lg border shrink-0 ${selectedFile
@@ -291,8 +324,8 @@ export default function UploadDocuments({ isLoading = false, onUploaded }) {
                                 </p>
                                 <p className="text-[10px] text-slate-400 font-normal truncate">
                                     {selectedFile
-                                        ? `${formatBytes(selectedFile.size)} • ${selectedFile.type || 'Unknown type'}`
-                                        : 'PDF • DOC • DOCX • Max 50MB'}
+                                        ? `${formatBytes(selectedFile.size)} • ${selectedFile.type || 'application/pdf'}`
+                                        : 'PDF only • Max 50MB'}
                                 </p>
                             </div>
                             <span className="text-[8px] font-bold uppercase tracking-wider text-rose-600 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded shrink-0">
@@ -331,10 +364,10 @@ export default function UploadDocuments({ isLoading = false, onUploaded }) {
                                     className={`cursor-pointer text-[10px] font-semibold text-blue-900 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-1.5 rounded-lg transition-colors duration-200 ${isUploading ? 'opacity-50 pointer-events-none' : ''
                                         }`}
                                 >
-                                    {selectedFile ? 'Replace File' : 'Choose File'}
+                                    {selectedFile ? 'Replace File' : 'Choose PDF'}
                                     <input
                                         type="file"
-                                        accept=".pdf,.doc,.docx"
+                                        accept=".pdf,application/pdf"
                                         className="hidden"
                                         onChange={handleUpload}
                                         disabled={isUploading}
@@ -361,9 +394,7 @@ export default function UploadDocuments({ isLoading = false, onUploaded }) {
                         </div>
                     </div>
 
-                    {/* ============================
-                        RIGHT: DISPLAY SAMPLE FORMATS
-                       ============================ */}
+                    {/* RIGHT: DISPLAY SAMPLE FORMATS */}
                     <div className="border border-slate-200 rounded-xl p-4 flex flex-col gap-3 hover:border-blue-300 transition-all duration-200 bg-slate-50/40">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">

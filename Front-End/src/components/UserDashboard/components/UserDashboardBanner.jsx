@@ -9,7 +9,7 @@ const UserDashboardBanner = ({
     first_name,
     last_name,
 }) => {
-    // ✅ Personalized greeting base sa oras
+
     const getGreeting = () => {
         const hour = new Date().getHours();
         if (hour < 12) return 'Good morning';

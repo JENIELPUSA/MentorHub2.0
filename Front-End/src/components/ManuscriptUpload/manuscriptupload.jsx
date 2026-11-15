@@ -35,6 +35,47 @@ const initials = (name = "") =>
     .join("");
 
 // ------------------------------------------------------------------
+// PDF VALIDATION HELPERS
+// ------------------------------------------------------------------
+const MAX_PDF_SIZE = 50 * 1024 * 1024; // 50MB
+
+const isPdfByExtension = (fileName = "") => {
+  const ext = "." + (fileName.split(".").pop() || "").toLowerCase();
+  return ext === ".pdf";
+};
+
+const isPdfByMimeType = (mimeType = "") => {
+  return mimeType === "application/pdf" || mimeType === "";
+};
+
+// ⭐ Basahin ang first 4 bytes para siguraduhing totoong PDF
+const isPdfByMagicNumber = (file) => {
+  return new Promise((resolve) => {
+    try {
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        try {
+          const arr = new Uint8Array(evt.target.result);
+          // PDF magic number: %PDF- (0x25 0x50 0x44 0x46)
+          const isPdf =
+            arr[0] === 0x25 &&
+            arr[1] === 0x50 &&
+            arr[2] === 0x44 &&
+            arr[3] === 0x46;
+          resolve(isPdf);
+        } catch {
+          resolve(false);
+        }
+      };
+      reader.onerror = () => resolve(false);
+      reader.readAsArrayBuffer(file.slice(0, 4));
+    } catch {
+      resolve(false);
+    }
+  });
+};
+
+// ------------------------------------------------------------------
 // COMPONENT
 // ------------------------------------------------------------------
 export default function App() {
@@ -169,13 +210,43 @@ export default function App() {
   // ============================================================
 
   // ============================================================
-  // ✅ CREATE / REVISION — with NEW optional fields
-  //    Existing flow intact, new fields appended safely.
+  // ✅ CREATE / REVISION — PDF ONLY validation
   // ============================================================
   const handleCreateProposedTitle = async (payload) => {
     if (!groupId) {
       triggerToast("Group not loaded yet. Please wait.", "error");
       return { success: false, error: "No groupId" };
+    }
+
+    // ⭐ PDF validation — extension
+    const file = payload.file;
+    if (!file) {
+      triggerToast("❌ Please select a PDF file", "error");
+      return { success: false, error: "No file" };
+    }
+
+    if (!isPdfByExtension(file.name)) {
+      triggerToast("❌ PDF file only. Please select a .pdf file.", "error");
+      return { success: false, error: "Not a PDF" };
+    }
+
+    // ⭐ PDF validation — MIME type
+    if (!isPdfByMimeType(file.type)) {
+      triggerToast("❌ Invalid file type. PDF only.", "error");
+      return { success: false, error: "Invalid MIME" };
+    }
+
+    // ⭐ PDF validation — magic number
+    const isRealPdf = await isPdfByMagicNumber(file);
+    if (!isRealPdf) {
+      triggerToast("❌ File is not a valid PDF.", "error");
+      return { success: false, error: "Invalid PDF magic" };
+    }
+
+    // ⭐ Size check
+    if (file.size > MAX_PDF_SIZE) {
+      triggerToast("❌ File too large. Max 50MB.", "error");
+      return { success: false, error: "File too large" };
     }
 
     try {
@@ -184,12 +255,10 @@ export default function App() {
       const formData = new FormData();
       formData.append("title", payload.title?.trim() || "");
       formData.append("description", payload.description?.trim() || "");
-      formData.append(
-        "remarks",
-        payload.remarks?.trim() || "Awaiting review."
-      );
+      // ⭐ Remarks — default value lang, walang textbox
+      formData.append("remarks", "Awaiting review.");
       formData.append("groupId", groupId);
-      formData.append("file", payload.file);
+      formData.append("file", file);
       formData.append("action", payload.action || "create");
 
       // ✅ If revision, pass titleId
@@ -198,7 +267,7 @@ export default function App() {
       }
 
       // ============================================================
-      // ⭐ NEW — Optional fields (safe, only if provided)
+      // ⭐ Optional fields (safe, only if provided)
       // ============================================================
       if (payload.track) {
         formData.append("track", payload.track);
@@ -212,17 +281,14 @@ export default function App() {
         formData.append("reviewDeadline", payload.reviewDeadline);
       }
 
-      // objectives — array of { text, isCompleted?, notes? }
       if (Array.isArray(payload.objectives) && payload.objectives.length > 0) {
         formData.append("objectives", JSON.stringify(payload.objectives));
       }
 
-      // sdgGoals — array of strings
       if (Array.isArray(payload.sdgGoals) && payload.sdgGoals.length > 0) {
         formData.append("sdgGoals", JSON.stringify(payload.sdgGoals));
       }
 
-      // assignedReviewers — array of ObjectId strings
       if (
         Array.isArray(payload.assignedReviewers) &&
         payload.assignedReviewers.length > 0
@@ -233,14 +299,11 @@ export default function App() {
         );
       }
 
-      // rubric — object { scientificSignificance, technicalNovelty, ... }
       if (payload.rubric && typeof payload.rubric === "object") {
         formData.append("rubric", JSON.stringify(payload.rubric));
       }
 
-      // ============================================================
       // Debug — check FormData contents
-      // ============================================================
       console.log("=== CreateProposedTitle FormData ===");
       for (const [key, value] of formData.entries()) {
         console.log(`${key}:`, value);
@@ -452,9 +515,7 @@ export default function App() {
 
           {/* Main Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* ==========================================================
-                LEFT COLUMN — ProposedTitleSection ONLY
-               ========================================================== */}
+            {/* LEFT COLUMN — ProposedTitleSection ONLY */}
             <div className="lg:col-span-8 flex flex-col space-y-6">
               <ProposedTitleSection
                 proposedTitles={proposedTitles}
@@ -476,9 +537,7 @@ export default function App() {
               />
             </div>
 
-            {/* ==========================================================
-                RIGHT SIDEBAR
-               ========================================================== */}
+            {/* RIGHT SIDEBAR */}
             <div className="lg:col-span-4 flex flex-col space-y-6">
               {/* Stats */}
               <div className="rounded-xl bg-white p-4 shadow-sm space-y-4">

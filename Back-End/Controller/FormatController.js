@@ -20,11 +20,13 @@ const ALLOWED_EXTS = [".pdf", ".doc", ".docx", ".png", ".jpg", ".jpeg"];
 
 const PREVIEW_CACHE_DIR = path.join(process.cwd(), "cache", "previews");
 
+// ⭐ FORCE image resource_type para maging /image/upload/ ang URL
+// at hindi /raw/upload/ para sa PDFs
 const uploadToCloudinary = (buffer, options = {}) => {
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
       {
-        resource_type: "auto",
+        resource_type: "image",     // ⭐ FIX: image, hindi auto/raw
         folder: "mentorhub/formats",
         timeout: 120000,
         ...options,
@@ -54,12 +56,31 @@ const safeObjectId = (val, label) => {
 
 const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+// ⭐ Isama ang extension sa public_id para lumabas sa URL
 const buildSafePublicId = (originalname, prefix = "format") => {
+  const ext = path.extname(originalname || "").toLowerCase();
   const safe = (originalname || "file")
     .replace(/\.[^/.]+$/, "")
     .replace(/[^a-zA-Z0-9_-]/g, "_")
     .slice(0, 80);
-  return `${prefix}_${Date.now()}_${safe}`;
+  // ⭐ Ibalik ang extension sa dulo
+  return `${prefix}_${Date.now()}_${safe}${ext}`;
+};
+
+// ⭐ Siguraduhing may .pdf sa dulo ng URL
+const ensurePdfExtension = (url) => {
+  if (!url) return url;
+
+  const [base, ...queryParts] = url.split("?");
+  const queryString = queryParts.length ? `?${queryParts.join("?")}` : "";
+
+  // Kung may .pdf na, iwanan
+  if (/\.pdf$/i.test(base)) return url;
+
+  // Kung may ibang extension na, huwag galawin (doc, docx, png, etc.)
+  if (/\.(docx?|png|jpe?g)$/i.test(base)) return url;
+
+  return `${base}.pdf${queryString}`;
 };
 
 const validateFileExt = (file) => {
@@ -74,7 +95,6 @@ const isPdfUrl = (url) => {
   if (!url) return false;
   const lower = String(url).toLowerCase();
   if (lower.includes(".pdf")) return true;
-  if (lower.includes("/raw/upload/")) return true;
   return false;
 };
 
@@ -91,10 +111,18 @@ const getLatestTracking = (item) => {
   };
 };
 
+// ⭐ Fetch buffer — kung walang .pdf sa dulo, idagdag
 const resolvePdfBuffer = async (url) => {
   let fetchUrl = url;
-  if (fetchUrl.includes("/raw/upload/") && !/\.pdf$/i.test(fetchUrl)) {
-    fetchUrl = `${fetchUrl}.pdf`;
+
+  // Kung hindi .pdf ang dulo, idagdag (para sa mga lumang records)
+  if (!/\.pdf$/i.test(fetchUrl.split("?")[0])) {
+    const [base, ...queryParts] = fetchUrl.split("?");
+    const queryString = queryParts.length ? `?${queryParts.join("?")}` : "";
+    // Kung /raw/upload/ at walang .pdf, idagdag
+    if (base.includes("/raw/upload/")) {
+      fetchUrl = `${base}.pdf${queryString}`;
+    }
   }
 
   const response = await axios.get(fetchUrl, {
@@ -449,12 +477,13 @@ exports.createFormat = AsyncErrorHandler(async (req, res) => {
 
     const result = await uploadToCloudinary(req.file.buffer, {
       folder: "mentorhub/formats",
-      resource_type: "auto",
+      resource_type: "image",   // ⭐ FIX
       public_id: buildSafePublicId(req.file.originalname, "format"),
     });
 
+    // ⭐ FIX: siguraduhing may .pdf sa dulo
     const fileData = {
-      fileUrl: result.secure_url,
+      fileUrl: ensurePdfExtension(result.secure_url),
     };
 
     let format;
@@ -581,14 +610,15 @@ exports.updateFormat = AsyncErrorHandler(async (req, res) => {
 
       const result = await uploadToCloudinary(req.file.buffer, {
         folder: "mentorhub/formats",
-        resource_type: "auto",
+        resource_type: "image",   // ⭐ FIX
         public_id: buildSafePublicId(req.file.originalname, "format"),
       });
 
       uploadedPublicId = result.public_id;
       uploadedResourceType = result.resource_type;
 
-      updatePayload.fileUrl = result.secure_url;
+      // ⭐ FIX: siguraduhing may .pdf sa dulo
+      updatePayload.fileUrl = ensurePdfExtension(result.secure_url);
     }
 
     let format;

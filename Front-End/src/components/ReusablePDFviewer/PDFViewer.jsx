@@ -364,6 +364,7 @@ const PdfAnnotationOverlay = ({
 
   // ⭐ Actual deletion logic (called from custom modal confirm)
   const performErase = async () => {
+    if (readOnly) return;
     const target = deleteConfirm.target;
     if (!target) return;
     const isBackend = target.__fromBackend === true || !!target.backendId;
@@ -481,6 +482,7 @@ const PdfAnnotationOverlay = ({
   };
 
   const submitComment = async () => {
+    if (readOnly) return;
     if (!commentPin?.value?.trim()) { setCommentPin(null); return; }
     const text = commentPin.value.trim();
     const type = commentPin.type || 'comment';
@@ -496,6 +498,7 @@ const PdfAnnotationOverlay = ({
   };
 
   const submitHighlightWithComment = async (text) => {
+    if (readOnly) return;
     if (!pendingHighlight || !text?.trim()) return;
     await createBackendComment({
       text: text.trim(), pageNumber: pageNum,
@@ -946,6 +949,7 @@ const SidebarProceedingsPanel = ({
   proposedTitleId,
   proceedings = [],
   canAnnotate = false,
+  readOnly = false,
   onSaved,
   onDeleted,
   showNotification,
@@ -963,9 +967,12 @@ const SidebarProceedingsPanel = ({
 
   const { CreateComment, DeleteComment } = useContext(CommentContext);
 
-  const canWriteProceedings = canAnnotate && userRole === 'panelist';
+  // ⭐ FIX: Proceedings write access must also respect readOnly (Status === 'Done')
+  const canWriteProceedings = canAnnotate && userRole === 'panelist' && !readOnly;
 
   const handleSubmit = async () => {
+    // ⭐ Defensive guard — block submission when read-only / Done
+    if (readOnly || !canWriteProceedings) return;
     if (!text.trim() || isSaving) return;
     setIsSaving(true);
     try {
@@ -994,12 +1001,14 @@ const SidebarProceedingsPanel = ({
 
   // ⭐ Open custom confirm modal
   const handleDelete = (comment) => {
-    if (!comment) return;
+    if (readOnly || !canWriteProceedings || !comment) return;
     setDeleteConfirm({ isOpen: true, target: comment });
   };
 
   // ⭐ Actual delete (called from custom modal confirm)
   const performDelete = async () => {
+    // ⭐ Defensive guard — block delete when read-only / Done
+    if (readOnly || !canWriteProceedings) return;
     const comment = deleteConfirm.target;
     if (!comment) return;
     const id = comment.backendId || comment._id || comment.id;
@@ -1059,7 +1068,9 @@ const SidebarProceedingsPanel = ({
       ) : (
         <div className="px-3 py-2 border-b border-blue-200 bg-blue-50/40 flex-shrink-0 text-[10px] text-blue-600 flex items-center gap-1.5">
           <Lock className="w-3 h-3" />
-          Only panelists can add proceedings notes.
+          {readOnly
+            ? 'Read-only — proceedings notes are locked because this submission is marked as Done.'
+            : 'Only panelists can add proceedings notes.'}
         </div>
       )}
 
@@ -1156,7 +1167,7 @@ const SidebarPanel = ({
   pdfAnnotations, annotationNumbers, pageNum, pdfNumPages,
   setAnnotationPageNum, onHoverCard, hoveredId, canAnnotate, activeTool, onErase, cardRefs,
   proposedTitleId, proceedings, onProceedingsSaved, onProceedingsDeleted, showNotification,
-  userRole,
+  userRole, readOnly,
 }) => {
   const isPanelist = userRole === 'panelist';
 
@@ -1190,6 +1201,7 @@ const SidebarPanel = ({
           proposedTitleId={proposedTitleId}
           proceedings={proceedings}
           canAnnotate={canAnnotate}
+          readOnly={readOnly}
           onSaved={onProceedingsSaved}
           onDeleted={onProceedingsDeleted}
           showNotification={showNotification}
@@ -1335,6 +1347,19 @@ export default function PdfViewer({
 
   const isPanelist = role === 'panelist';
 
+  // ⭐ Derive submission status → status-based lock
+  const submissionStatus = viewSubmission?.status || viewSubmission?.Status || '';
+  const isStatusDone =
+    String(submissionStatus).toLowerCase() === 'done' ||
+    String(submissionStatus).toLowerCase() === 'completed' ||
+    String(submissionStatus).toLowerCase() === 'approved';
+
+  // ⭐ Hard read-only: either parent said so OR status === 'Done'
+  const hardReadOnly = effectiveReadOnly || isStatusDone;
+
+  // ⭐ canAnnotate must be false when status is Done
+  const effectiveCanAnnotate = canAnnotate && !isStatusDone;
+
   const [sidebarTab, setSidebarTab] = useState(isPanelist ? 'proceedings' : 'feedback');
 
   useEffect(() => {
@@ -1385,8 +1410,10 @@ export default function PdfViewer({
     console.log('💬 Feedback count:', feedbackCount);
     console.log('👤 User role:', role, '| isPanelist:', isPanelist);
     console.log('📄 Current page:', annotationPageNum, '/', pdfNumPages);
+    console.log('🔒 Status:', submissionStatus, '| isStatusDone:', isStatusDone);
+    console.log('🔒 hardReadOnly:', hardReadOnly, '| effectiveCanAnnotate:', effectiveCanAnnotate);
     console.log('═══════════════════════════════════════════');
-  }, [pdfAnnotations, proceedings, feedbackCount, role, isPanelist, annotationPageNum, pdfNumPages]);
+  }, [pdfAnnotations, proceedings, feedbackCount, role, isPanelist, annotationPageNum, pdfNumPages, submissionStatus, isStatusDone, hardReadOnly, effectiveCanAnnotate]);
 
   const handleProceedingsSaved = useCallback(async () => {
     if (refreshComments) { try { await refreshComments(); } catch (e) { console.warn(e); } }
@@ -1397,20 +1424,20 @@ export default function PdfViewer({
   }, [refreshComments]);
 
   const addAnnotation = useCallback((pageNum, data) => {
-    if (!canAnnotate) return;
+    if (!effectiveCanAnnotate) return;
     setPdfAnnotations(prev => {
       const key = pageNum === 'global' ? GLOBAL_KEY : `page_${pageNum}`;
       return { ...prev, [key]: [...(prev[key] || []), { ...data, id: `a_${Date.now()}_${Math.random().toString(36).slice(2, 7)}` }] };
     });
-  }, [canAnnotate, setPdfAnnotations]);
+  }, [effectiveCanAnnotate, setPdfAnnotations]);
 
   const removeAnnotation = useCallback((pageNum, id) => {
-    if (!canAnnotate) return;
+    if (!effectiveCanAnnotate) return;
     setPdfAnnotations(prev => {
       const key = pageNum === 'global' ? 'global' : `page_${pageNum}`;
       return { ...prev, [key]: (prev[key] || []).filter(a => a.id !== id) };
     });
-  }, [canAnnotate, setPdfAnnotations]);
+  }, [effectiveCanAnnotate, setPdfAnnotations]);
 
   const annotationNumbers = useMemo(() => computeAnnotationNumbers(pdfAnnotations), [pdfAnnotations]);
 
@@ -1419,8 +1446,8 @@ export default function PdfViewer({
     ...(pdfAnnotations[`page_${annotationPageNum}`] || []),
   ].filter(a => !isProceedings(a));
 
-  const showAnnotationToolbar = canAnnotate && !isPanelist;
-  const overlayReadOnly = effectiveReadOnly || isPanelist;
+  const showAnnotationToolbar = effectiveCanAnnotate && !isPanelist;
+  const overlayReadOnly = hardReadOnly || isPanelist;
 
   return (
     <div className="h-screen bg-gradient-to-b from-blue-100 via-blue-50 to-sky-50 flex flex-col overflow-hidden font-sans">
@@ -1469,7 +1496,9 @@ export default function PdfViewer({
           <Lock className="w-3.5 h-3.5" />
           {isPanelist
             ? 'Panelist mode — You can read mentor feedback and add proceedings notes, but you cannot add or delete annotations.'
-            : 'View-only mode — You can read mentor feedback and download the annotated PDF, but you cannot add or delete annotations.'}
+            : isStatusDone
+              ? 'Read-only mode — This submission is marked as Done. Annotations and proceedings are locked.'
+              : 'View-only mode — You can read mentor feedback and download the annotated PDF, but you cannot add or delete annotations.'}
         </div>
       )}
 
@@ -1566,7 +1595,7 @@ export default function PdfViewer({
           setAnnotationPageNum={setAnnotationPageNum}
           hoveredId={hoveredAnnotationId}
           onHoverCard={setHoveredAnnotationId}
-          canAnnotate={canAnnotate}
+          canAnnotate={effectiveCanAnnotate}
           activeTool={annotationTool}
           onErase={onEraseFromSidebar}
           cardRefs={cardRefs}
@@ -1576,6 +1605,7 @@ export default function PdfViewer({
           onProceedingsDeleted={handleProceedingsDeleted}
           showNotification={showNotification}
           userRole={role}
+          readOnly={hardReadOnly}
         />
       </div>
 

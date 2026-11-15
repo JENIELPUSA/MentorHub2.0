@@ -176,7 +176,7 @@ const deleteFromCloudinary = async (publicId) => {
 exports.updateAvatar = AsyncErrorHandler(async (req, res, next) => {
   const userId = req.user?._id || req.user?.id;
 
-   console.log("weee", req.body)
+  console.log("weee", req.body)
 
   if (!userId) {
     return res.status(401).json({
@@ -237,7 +237,7 @@ exports.updateAvatar = AsyncErrorHandler(async (req, res, next) => {
   let avatar = user.avatar || { url: "", public_id: "" };
 
   try {
-   
+
     const uploadResult = await uploadToCloudinary(req.file.buffer, {
       folder: "mentorhub/avatars",
       public_id: `user_${userId}_${Date.now()}`,
@@ -369,7 +369,8 @@ exports.signup = async (req, res) => {
       last_name,
       middle_name,
       suffix,
-      username,
+      username,       // "xxxx" — hindi ito ang gagamitin
+      email,          // "xxxx@gmail.com" — ✅ ito ang value ng username at recipient
       role,
       selectedrole,
       departmentId,
@@ -387,6 +388,19 @@ exports.signup = async (req, res) => {
     } = req.body;
 
     const defaultPassword = password || "default123";
+
+    console.log("Req.body", req.body);
+
+    // ✅ Validate email — ito ang magiging username at recipient
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({
+        success: false,
+        message: "A valid email address is required.",
+      });
+    }
+
+    // ✅ Ito ang value na ise-save sa `username` field
+    const usernameValue = String(email).trim().toLowerCase();
 
     if (confirmPassword !== undefined && confirmPassword !== "") {
       if (confirmPassword !== defaultPassword) {
@@ -407,7 +421,7 @@ exports.signup = async (req, res) => {
       ...new Set(
         rawSelected
           .map((r) => String(r).trim().toLowerCase())
-          .filter((r) => SWITCHABLE_ROLES.includes(r))
+          .filter((r) => SWITCHABLE_ROLES.includes(r)),
       ),
     ];
 
@@ -424,7 +438,6 @@ exports.signup = async (req, res) => {
     // ⭐ Default avatar
     let avatarData = { url: "", public_id: "" };
 
-    // ⭐ Kung may uploaded avatar, i-save agad
     if (req.file) {
       const validation = validateAvatarFile(req.file);
       if (!validation.valid) {
@@ -437,8 +450,8 @@ exports.signup = async (req, res) => {
       try {
         const saved = saveAvatarToDisk(
           req.file.buffer,
-          username || "new",
-          req.file.originalname
+          usernameValue || "new",   // ✅ gamitin ang email-based username
+          req.file.originalname,
         );
         avatarData = {
           url: saved.url,
@@ -449,14 +462,14 @@ exports.signup = async (req, res) => {
       }
     }
 
-    // ⭐ CREATE USER
+    // ⭐ CREATE USER — username = email address
     const newUser = new UserLogin({
       avatar: avatarData,
       first_name: first_name || "",
       last_name: last_name || "",
       middle_name: middle_name || "",
       suffix: suffix || "",
-      username: username || "",
+      username: usernameValue,     // ✅ "xxxx@gmail.com"
       password: defaultPassword,
       confirmPassword: confirmPassword || defaultPassword,
       role: currentRole,
@@ -484,26 +497,22 @@ exports.signup = async (req, res) => {
     await newUser.save();
 
     // ============================================================
-    // ⭐ FIRE-AND-FORGET EMAIL — hindi na hinihintay
+    // ⭐ FIRE-AND-FORGET EMAIL
     // ============================================================
     const emailText = `
-Welcome, ${first_name || username}!
+Welcome, ${first_name || usernameValue}!
 
 Your account has been created successfully.
 
 🔐 Your Login Credentials:
-Username: ${username}
+Username: ${usernameValue}
 Your Default Password is: ${defaultPassword}
 
-⚠️ Please Change your preferred Password after logging in.
+⚠️ Please Change your preferred Password after logging in.`;
 
-Your Referral Code: ${newUser.referralCode}
-    `;
-
-    // ✅ Background email — walang await, walang block sa response
     setImmediate(() => {
       sendEmail({
-        email: username,
+        email: usernameValue,   // ✅ "xxxx@gmail.com" — same value, recipient
         subject: "Your Account Credentials",
         text: emailText,
       }).catch((emailErr) => {
@@ -511,7 +520,7 @@ Your Referral Code: ${newUser.referralCode}
       });
     });
 
-    // ⭐ RESPONSE AGAD — ~200-500ms lang (imbes na 3-10s)
+    // ⭐ RESPONSE AGAD
     const userResponse = newUser.toObject();
     delete userResponse.password;
     delete userResponse.confirmPassword;
@@ -522,7 +531,8 @@ Your Referral Code: ${newUser.referralCode}
     return res.status(201).json({
       success: true,
       status: "Success",
-      message: "Account created successfully. Credentials will be sent to your email shortly.",
+      message:
+        "Account created successfully. Credentials will be sent to your email shortly.",
       data: {
         user: userResponse,
         role: currentRole,
@@ -534,10 +544,13 @@ Your Referral Code: ${newUser.referralCode}
     console.error("❌ Signup failed:", error);
 
     if (error.code === 11000) {
-      const field = Object.keys(error.keyPattern)[0];
-      return res.status(400).json({
+      const field = Object.keys(error.keyPattern || {})[0] || "field";
+      return res.status(409).json({
         success: false,
-        message: `Duplicate ${field} error. Please use a different ${field}.`,
+        message:
+          field === "username"
+            ? "This email is already registered. Please use a different email."
+            : `This ${field} is already taken. Please choose another.`,
       });
     }
 
