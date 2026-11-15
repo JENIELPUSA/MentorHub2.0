@@ -1,7 +1,5 @@
 const multer = require("multer");
 const path = require("path");
-
-// ✅ MEMORY STORAGE — para may req.file.buffer
 const storage = multer.memoryStorage();
 
 const fileFilter = (req, file, cb) => {

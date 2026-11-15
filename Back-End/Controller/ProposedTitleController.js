@@ -1509,11 +1509,6 @@ exports.DisplayProposedTitles = AsyncErrorHandler(async (req, res) => {
   console.log("userId", userId);
 
   const matchStage = {};
-
-  // ⭐ STUDENT LOGIC
-  // Step 1: Get student's user doc to find referredBy
-  // Step 2: Match referredBy against Group.referralCode
-  // Step 3: Use matched group's _id to filter proposed titles
   if (role === "student") {
     const studentUser = await UserLoginSchema.findById(userObjectId)
       .select("referredBy")
@@ -1536,10 +1531,7 @@ exports.DisplayProposedTitles = AsyncErrorHandler(async (req, res) => {
     if (studentGroupId) {
       matchStage.groupId = studentGroupId;
     } else {
-      // No matched group -> return empty result
       matchStage.groupId = new mongoose.Types.ObjectId();
-      // If you prefer fallback to uploadedBy, uncomment below and remove above line:
-      // matchStage.uploadedBy = userObjectId;
     }
   }
 
