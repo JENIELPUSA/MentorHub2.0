@@ -1074,7 +1074,7 @@ exports.updatePassword = AsyncErrorHandler(async (req, res, next) => {
   try {
     const { currentPassword, password, confirmPassword } = req.body;
 
-    // 🔍 DEBUG — ipapakita sa server terminal at sa response
+    //  DEBUG
     const debugInfo = {
       hasCurrentPassword: !!currentPassword,
       hasPassword: !!password,
@@ -1088,20 +1088,34 @@ exports.updatePassword = AsyncErrorHandler(async (req, res, next) => {
     };
     console.log("📥 updatePassword DEBUG:", debugInfo);
 
-    // ── 1) Validate inputs ──
-    if (!currentPassword) {
-      console.log("❌ FAILED: !currentPassword");
-      return res.status(400).json({
-        status: "fail",
-        message: "❌ FAILED: currentPassword is empty",
+    // 🧹 Helper: treat "", null, undefined as "empty"
+    const isEmpty = (val) =>
+      val === undefined || val === null || (typeof val === "string" && val.trim() === "");
+
+    // ── 0) Kung WALANG laman ang critical fields → skip update, return success-no-op ──
+    if (isEmpty(currentPassword) && isEmpty(password) && isEmpty(confirmPassword)) {
+      console.log("⏭️ SKIP: all password fields empty — no update performed");
+      return res.status(200).json({
+        status: "skipped",
+        message: "No password fields provided. Nothing updated.",
         debug: debugInfo,
       });
     }
-    if (!password) {
-      console.log("❌ FAILED: !password");
+
+    // ── 1) Validate inputs (skip update kung kulang) ──
+    if (isEmpty(currentPassword)) {
+      console.log("❌ FAILED: currentPassword is empty/null");
       return res.status(400).json({
         status: "fail",
-        message: "❌ FAILED: password is empty",
+        message: "currentPassword is required and cannot be empty.",
+        debug: debugInfo,
+      });
+    }
+    if (isEmpty(password)) {
+      console.log("❌ FAILED: password is empty/null");
+      return res.status(400).json({
+        status: "fail",
+        message: "New password is required and cannot be empty.",
         debug: debugInfo,
       });
     }
@@ -1109,15 +1123,16 @@ exports.updatePassword = AsyncErrorHandler(async (req, res, next) => {
       console.log(`❌ FAILED: password.length < 8 (${password.length})`);
       return res.status(400).json({
         status: "fail",
-        message: `❌ FAILED: password too short (${password.length} < 8)`,
+        message: `Password too short (${password.length} < 8).`,
         debug: debugInfo,
       });
     }
-    if (confirmPassword !== undefined && confirmPassword !== password) {
+    // confirmPassword optional — pero kung meron at hindi match, fail
+    if (!isEmpty(confirmPassword) && confirmPassword !== password) {
       console.log("❌ FAILED: confirmPassword !== password");
       return res.status(400).json({
         status: "fail",
-        message: "❌ FAILED: confirmPassword !== password",
+        message: "confirmPassword does not match password.",
         debug: debugInfo,
       });
     }
@@ -1125,7 +1140,7 @@ exports.updatePassword = AsyncErrorHandler(async (req, res, next) => {
       console.log("❌ FAILED: currentPassword === password");
       return res.status(400).json({
         status: "fail",
-        message: "❌ FAILED: currentPassword === password (new must be different)",
+        message: "New password must be different from current password.",
         debug: debugInfo,
       });
     }
@@ -1138,7 +1153,7 @@ exports.updatePassword = AsyncErrorHandler(async (req, res, next) => {
       console.log("❌ FAILED: user not found");
       return res.status(404).json({
         status: "fail",
-        message: "❌ FAILED: user not found",
+        message: "User not found.",
         debug: debugInfo,
       });
     }
@@ -1152,17 +1167,16 @@ exports.updatePassword = AsyncErrorHandler(async (req, res, next) => {
       console.log("❌ FAILED: current password incorrect");
       return res.status(401).json({
         status: "fail",
-        message: "❌ FAILED: current password is incorrect",
+        message: "Current password is incorrect.",
         debug: debugInfo,
       });
     }
 
     console.log("✅ Current password verified");
 
-    // ── 4) Set new password ──
+    // ── 4) Set new password (WALANG actualpassword) ──
     user.password = password;
-    user.actualpassword = password;   // explicit backup
-    user.confirmPassword = confirmPassword || password;
+    user.confirmPassword = isEmpty(confirmPassword) ? password : confirmPassword;
     user.passwordChangedAt = Date.now();
 
     // ── 5) Save ──
