@@ -477,13 +477,7 @@ export default function Instructor_Dashboard() {
             <h1 className="text-2xl md:text-3xl font-extrabold text-blue-900 tracking-tight">
               BiPSU {formatRole(role)} Dashboard
             </h1>
-            <p className="text-slate-500 text-sm mt-1">Adviser / Co-Adviser Dashboard</p>
-          </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-900 text-yellow-400 rounded-xl text-sm font-bold shadow-sm">
-              <ShieldCheck className="w-4 h-4 text-yellow-400" /> Adviser
-            </span>
           </div>
         </header>
 

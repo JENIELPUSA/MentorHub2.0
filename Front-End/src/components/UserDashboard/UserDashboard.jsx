@@ -415,7 +415,7 @@ const CommentsListCard = ({ comments = [] }) => {
                     <div>
                         <h3 className="text-sm font-bold text-blue-950">Recent Comments</h3>
                         <p className="text-[10px] text-blue-600/80">
-                            Mga comments na naka-link sa iyong mga URL tracking
+                            Comments linked to your URL tracking
                         </p>
                     </div>
                 </div>
@@ -436,9 +436,9 @@ const CommentsListCard = ({ comments = [] }) => {
             {comments.length === 0 ? (
                 <div className="flex-1 flex flex-col items-center justify-center py-8 text-center min-h-[280px]">
                     <MessageSquare className="w-10 h-10 text-blue-200 mb-2" />
-                    <p className="text-xs font-semibold text-blue-800">Wala pang comments</p>
+                    <p className="text-xs font-semibold text-blue-800">No comments yet</p>
                     <p className="text-[10px] text-blue-400">
-                        Mag-appear dito kapag may nag-comment sa mga URL tracking.
+                        They will appear here when someone comments on the URL tracking.
                     </p>
                 </div>
             ) : (
@@ -600,7 +600,7 @@ const TopCommentedUrlsCard = ({ rows = [] }) => {
                         Top Commented URLs
                     </h3>
                     <p className="text-[10px] text-blue-600/80">
-                        Mga URL na may pinakamaraming comments
+                        URLs with the most comments
                     </p>
                 </div>
             </div>
@@ -655,7 +655,7 @@ const ActivityHeatmap = ({
     loading = false,
     error = '',
     title = 'Activity Graph',
-    subtitle = 'Bawat square = araw na may aktibidad',
+    subtitle = 'Each square = a day with activity',
     color = 'yellow',
     unit = 'comment',
 }) => {
@@ -881,7 +881,7 @@ const ActivityHeatmap = ({
 };
 
 // ============================
-// ⭐ FORMAT LINK — simpleng link na may Open Modal button
+//  FORMAT LINK — simpleng link na may Open Modal button
 // ============================
 const FormatLinkBar = ({ format, onOpen }) => {
     if (!format || !format.fileUrl) return null;
@@ -938,8 +938,6 @@ export default function UserDashboard() {
     const { advisers, advisersLoading } = useContext(UserDisplayContext);
     const { getGroupDetails, groupDetails, assignAdviserAndCoAdviser } = useContext(GroupContext);
     const { formats } = useContext(FormatContext);
-
-    console.log('[UserDashboard] formats:', formats);
 
     const [toastMessage, setToastMessage] = useState(null);
     const [showQrModal, setShowQrModal] = useState(false);
@@ -1013,7 +1011,7 @@ export default function UserDashboard() {
         };
     }, [groupDetails]);
 
-    // ⭐ FORMAT INFO — robust: section.formatID OR formats context fallback
+    //  FORMAT INFO — robust: section.formatID OR formats context fallback
     const sectionFormat = useMemo(() => {
         const section = displayData.group?.section;
         const formatRef = section?.formatID;
@@ -1125,7 +1123,7 @@ export default function UserDashboard() {
         }
     };
 
-    // ⭐ HANDLE OPEN FORMAT — bukas modal viewer
+    //  HANDLE OPEN FORMAT — bukas modal viewer
     const handleOpenFormat = useCallback((format) => {
         if (!format?.fileUrl) {
             triggerToast('No file URL available', 'error');
@@ -1260,17 +1258,17 @@ export default function UserDashboard() {
                 {statusDisplay.badge}
                 {statusDisplay.isPending && (
                     <p className="text-[10px] text-yellow-700">
-                        ⚠️ This request is waiting for approval from the approver
+                        This request is waiting for approval from the approver
                     </p>
                 )}
                 {statusDisplay.isApproved && (
                     <p className="text-[10px] text-blue-700">
-                        ✅ {type === 'adviser' ? 'Adviser' : 'Co-adviser'} has been approved and can now manage the group
+                         {type === 'adviser' ? 'Adviser' : 'Co-adviser'} has been approved and can now manage the group
                     </p>
                 )}
                 {statusDisplay.isRejected && (
                     <p className="text-[10px] text-rose-700">
-                        ❌ Request has been rejected. Please contact the approver.
+                        Request has been rejected. Please contact the approver.
                     </p>
                 )}
             </div>
@@ -1327,6 +1325,7 @@ export default function UserDashboard() {
                 >
                     <div className="bg-white rounded-2xl shadow-2xl shadow-blue-900/20 max-w-md w-full mx-4 p-6 border border-blue-200">
                         <div className="flex items-center justify-between mb-4">
+                          
                             <div className="flex items-center gap-2">
                                 <div className="p-2 bg-blue-100 rounded-lg">
                                     <UserCog className="w-5 h-5 text-blue-900" />
@@ -1556,14 +1555,14 @@ export default function UserDashboard() {
                             }
                             subtitle={
                                 heatmapMode === 'comments'
-                                    ? 'Bawat square = araw na may comment (hover para sa details)'
-                                    : 'Bawat square = araw na may proposal activity'
+                                    ? 'Each square = a day with a comment (hover for details)'
+                                    : 'Each square = a day with proposal activity'
                             }
                             color={heatmapMode === 'comments' ? 'yellow' : 'blue'}
                             unit={heatmapMode === 'comments' ? 'comment' : 'proposal'}
                         />
 
-                        {/* ⭐ FORMAT LINK — nasa ilalim ng heatmap */}
+                        {/*  FORMAT LINK — nasa ilalim ng heatmap */}
                         {sectionFormat && sectionFormat.fileUrl && (
                             <FormatLinkBar
                                 format={sectionFormat}
@@ -1584,7 +1583,7 @@ export default function UserDashboard() {
                                         size={200}
                                         thickness={44}
                                         title="Comments by Type"
-                                        subtitle="Distribution ng annotation types"
+                                        subtitle="Distribution of annotation types"
                                     />
                                 </div>
                             )}

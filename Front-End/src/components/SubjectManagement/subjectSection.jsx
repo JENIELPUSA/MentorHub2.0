@@ -649,19 +649,6 @@ const SubjectSections = ({
                                 Click "Create Class" to get started
                             </span>
                         </div>
-
-                        <button
-                            onClick={openAddModal}
-                            disabled={!subjectId || isSubmitting}
-                            className={`mt-6 inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-xl transition-all ${
-                                !subjectId || isSubmitting
-                                    ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                                    : 'bg-gradient-to-br from-blue-900 to-blue-950 hover:from-blue-950 hover:to-black text-white shadow-lg shadow-blue-900/25 active:scale-[0.98]'
-                            }`}
-                        >
-                            <Plus className="w-4 h-4 stroke-[3]" />
-                            Create Class
-                        </button>
                     </div>
                 </div>
             )}

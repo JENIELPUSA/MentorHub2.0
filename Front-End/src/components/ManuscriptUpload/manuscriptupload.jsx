@@ -464,11 +464,10 @@ export default function App() {
       {/* TOAST */}
       {toast && (
         <div
-          className={`fixed top-5 right-5 z-50 flex items-center gap-2 px-4 py-3 rounded-xl text-xs font-semibold shadow-2xl ${
-            toast.type === "error"
+          className={`fixed top-5 right-5 z-50 flex items-center gap-2 px-4 py-3 rounded-xl text-xs font-semibold shadow-2xl ${toast.type === "error"
               ? "bg-rose-600 text-white"
               : "bg-slate-900 text-white"
-          }`}
+            }`}
         >
           {toast.type === "error" ? (
             <AlertCircle className="w-4 h-4" />
@@ -478,7 +477,6 @@ export default function App() {
           <span>{toast.msg}</span>
         </div>
       )}
-
       <main className="pt-4 w-full min-h-screen bg-slate-50">
         <div className="max-w-7xl mx-auto px-6 flex flex-col w-full pb-16 space-y-6 pt-4">
           {/* Banner */}
@@ -492,10 +490,10 @@ export default function App() {
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="text-[11px] uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded-full font-semibold">
-                      Title Proposal Window
+                      Document Upload Window
                     </span>
                     <p className="text-base font-semibold">
-                      Submit your thesis title proposal for adviser review
+                      Upload your documents for adviser review
                     </p>
                   </div>
                 </div>
@@ -508,7 +506,7 @@ export default function App() {
             <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-700">
               <Loader2 className="w-4 h-4 animate-spin shrink-0" />
               <span>
-                Loading your group details... Please wait before submitting.
+                Loading your group details... Please wait before uploading.
               </span>
             </div>
           )}
@@ -543,7 +541,7 @@ export default function App() {
               <div className="rounded-xl bg-white p-4 shadow-sm space-y-4">
                 <div className="flex items-center justify-between pb-1">
                   <h3 className="text-base font-semibold text-slate-900">
-                    Proposal Overview
+                    Document Overview
                   </h3>
                   <span className="w-2 h-2 rounded-full bg-blue-600"></span>
                 </div>
@@ -637,11 +635,10 @@ export default function App() {
                         className="p-2 rounded-lg bg-slate-50 flex items-start gap-2"
                       >
                         <CheckCircle2
-                          className={`w-4 h-4 mt-0.5 ${
-                            t.action === "approve"
+                          className={`w-4 h-4 mt-0.5 ${t.action === "approve"
                               ? "text-emerald-600"
                               : "text-blue-600"
-                          }`}
+                            }`}
                         />
                         <div className="min-w-0 flex-1">
                           <p className="text-[12px] font-semibold text-slate-900 capitalize">

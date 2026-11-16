@@ -4,7 +4,6 @@ import { CheckCircle2, Sparkles, User, Calendar, BookOpen, Users } from 'lucide-
 import bipsulogo from '../../../assets/bipsulogo.png';
 
 const UserDashboardBanner = ({
-    displayData,
     role,
     first_name,
     last_name,

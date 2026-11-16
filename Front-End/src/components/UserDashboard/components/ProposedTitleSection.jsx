@@ -355,12 +355,12 @@ const ProposedTitleSection = ({
             </div>
             <div>
               <h3 className="font-bold text-lg text-slate-900 dark:text-white">
-                {isRevisionMode ? "Upload Revision Capstone" : "Upload Title"}
+                {isRevisionMode ? "Upload Revision Capstone" : "Upload Project Title"}
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 {isRevisionMode
-                  ? "Submit revised PDF for your title."
-                  : "Submit and manage proposed titles."}
+                  ? "Submit revised PDF for your project title."
+                  : "Submit and manage project titles."}
               </p>
             </div>
           </div>
@@ -427,7 +427,7 @@ const ProposedTitleSection = ({
               <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700/60 px-5 py-3">
                 <h4 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
                   <PenSquare className="w-4 h-4 text-blue-500" /> Submit
-                  Proposed Title
+                  Project Title
                 </h4>
                 <span className="text-[10px] font-semibold bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full">
                   New
@@ -442,7 +442,7 @@ const ProposedTitleSection = ({
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                      Proposed Title <span className="text-rose-500">*</span>
+                      Project Title <span className="text-rose-500">*</span>
                     </label>
                     <span
                       className={`text-[10px] ${formState.title.length > 120
@@ -536,26 +536,12 @@ const ProposedTitleSection = ({
                         description: e.target.value,
                       })
                     }
-                    placeholder="Describe the background, target audience, objectives, and main features of your proposed project..."
+                    placeholder="Describe the background, target audience, objectives, and main features of your project..."
                     className="w-full px-3 py-2.5 text-xs leading-relaxed bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-white shadow-sm resize-y min-h-[110px]"
                   />
                 </div>
 
-                {/* Remarks — Textarea */}
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                    Remarks
-                  </label>
-                  <textarea
-                    rows="3"
-                    value={formState.remarks}
-                    onChange={(e) =>
-                      setFormState({ ...formState, remarks: e.target.value })
-                    }
-                    placeholder="e.g. Initial submission, notes for adviser..."
-                    className="w-full px-3 py-2.5 text-xs leading-relaxed bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-white shadow-sm resize-y min-h-[70px]"
-                  />
-                </div>
+                {/* Remarks textbox REMOVED */}
 
                 {/* Actions */}
                 <div className="mt-auto pt-2 flex items-center justify-end gap-2">
@@ -987,8 +973,6 @@ const ProposedTitleSection = ({
           )}
         </div>
       </div>
-
-      {/* ============ REVISION MODAL ============ */}
       {revisionModal.open && (
         <div
           className="fixed inset-0 z-[1000] bg-black/50 flex items-center justify-center animate-fadeIn p-4"

@@ -6,7 +6,7 @@ import "react-toastify/dist/ReactToastify.css";
 import { AuthContext } from "../../contexts/AuthContext";
 
 const UpdatePasswordModal = ({ isOpen, onClose }) => {
-    const { UpdatePasswordData, customError, setCustomError } = useContext(AuthContext);
+    const { updatePassword, customError, setCustomError } = useContext(AuthContext);
 
     const [values, setValues] = useState({
         currentPassword: "",
@@ -53,8 +53,8 @@ const UpdatePasswordModal = ({ isOpen, onClose }) => {
         setLoading(true);
 
         try {
-            if (typeof UpdatePasswordData === "function") {
-                await UpdatePasswordData(values);
+            if (typeof updatePassword === "function") {
+                await updatePassword(values);
             }
             if (customError) {
                 toast.error(customError);

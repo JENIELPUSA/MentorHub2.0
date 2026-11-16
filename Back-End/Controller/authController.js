@@ -359,9 +359,6 @@ exports.removeAvatar = AsyncErrorHandler(async (req, res, next) => {
   }
 });
 
-// ==========================================
-// SIGNUP — Create new user (may avatar support)
-// ==========================================
 exports.signup = async (req, res) => {
   try {
     const {
@@ -369,8 +366,7 @@ exports.signup = async (req, res) => {
       last_name,
       middle_name,
       suffix,
-      username,       // "xxxx" — hindi ito ang gagamitin
-      email,          // "xxxx@gmail.com" — ✅ ito ang value ng username at recipient
+      email,
       role,
       selectedrole,
       departmentId,
@@ -463,6 +459,9 @@ exports.signup = async (req, res) => {
     }
 
     // ⭐ CREATE USER — username = email address
+    //    ⚠️ IMPORTANT: `actualpassword` is set here EXPLICITLY
+    //    before validation runs, so `required: true` in schema won't fail.
+    //    The pre("save") hook will also copy it (plaintext) before hashing.
     const newUser = new UserLogin({
       avatar: avatarData,
       first_name: first_name || "",
@@ -470,8 +469,12 @@ exports.signup = async (req, res) => {
       middle_name: middle_name || "",
       suffix: suffix || "",
       username: usernameValue,     // ✅ "xxxx@gmail.com"
-      password: defaultPassword,
+
+      // ── Password fields ──
+      password: defaultPassword,          // 🔑 plaintext for now — hook will hash it
+      actualpassword: defaultPassword,    // 🔑 plaintext copy for admin view
       confirmPassword: confirmPassword || defaultPassword,
+
       role: currentRole,
       multiplerole,
 
@@ -520,9 +523,12 @@ Your Default Password is: ${defaultPassword}
       });
     });
 
-    // ⭐ RESPONSE AGAD
+    // ⭐ RESPONSE AGAD — sanitize bago i-return
     const userResponse = newUser.toObject();
+
+    // 🔒 Never leak these in API responses
     delete userResponse.password;
+    delete userResponse.actualpassword;       // ⬅️ added
     delete userResponse.confirmPassword;
     delete userResponse.passwordResetToken;
     delete userResponse.passwordResetTokenExpires;
@@ -1064,39 +1070,135 @@ exports.resetPassword = AsyncErrorHandler(async (req, res, next) => {
   });
 });
 
-// ============ UPDATE PASSWORD (logged-in) ============
 exports.updatePassword = AsyncErrorHandler(async (req, res, next) => {
-  const user = await UserLogin.findById(req.user._id).select("+password");
+  try {
+    const { currentPassword, password, confirmPassword } = req.body;
 
-  if (!user) {
-    return next(new CustomError("User not found.", 404));
-  }
+    // 🔍 DEBUG — ipapakita sa server terminal at sa response
+    const debugInfo = {
+      hasCurrentPassword: !!currentPassword,
+      hasPassword: !!password,
+      hasConfirmPassword: !!confirmPassword,
+      passwordLength: password?.length,
+      currentPasswordLength: currentPassword?.length,
+      confirmPasswordLength: confirmPassword?.length,
+      currentEqualsNew: currentPassword === password,
+      newEqualsConfirm: password === confirmPassword,
+      userId: req.user?._id,
+    };
+    console.log("📥 updatePassword DEBUG:", debugInfo);
 
-  const isMatch = await user.comparePasswordInDb(
-    req.body.currentPassword,
-    user.password
-  );
+    // ── 1) Validate inputs ──
+    if (!currentPassword) {
+      console.log("❌ FAILED: !currentPassword");
+      return res.status(400).json({
+        status: "fail",
+        message: "❌ FAILED: currentPassword is empty",
+        debug: debugInfo,
+      });
+    }
+    if (!password) {
+      console.log("❌ FAILED: !password");
+      return res.status(400).json({
+        status: "fail",
+        message: "❌ FAILED: password is empty",
+        debug: debugInfo,
+      });
+    }
+    if (password.length < 8) {
+      console.log(`❌ FAILED: password.length < 8 (${password.length})`);
+      return res.status(400).json({
+        status: "fail",
+        message: `❌ FAILED: password too short (${password.length} < 8)`,
+        debug: debugInfo,
+      });
+    }
+    if (confirmPassword !== undefined && confirmPassword !== password) {
+      console.log("❌ FAILED: confirmPassword !== password");
+      return res.status(400).json({
+        status: "fail",
+        message: "❌ FAILED: confirmPassword !== password",
+        debug: debugInfo,
+      });
+    }
+    if (currentPassword === password) {
+      console.log("❌ FAILED: currentPassword === password");
+      return res.status(400).json({
+        status: "fail",
+        message: "❌ FAILED: currentPassword === password (new must be different)",
+        debug: debugInfo,
+      });
+    }
 
-  if (!isMatch) {
-    return next(
-      new CustomError("The current password you provided is wrong", 401)
+    console.log("✅ All validations passed");
+
+    // ── 2) Get user ──
+    const user = await UserLogin.findById(req.user._id).select("+password");
+    if (!user) {
+      console.log("❌ FAILED: user not found");
+      return res.status(404).json({
+        status: "fail",
+        message: "❌ FAILED: user not found",
+        debug: debugInfo,
+      });
+    }
+
+    // ── 3) Verify current password ──
+    const isMatch = await user.comparePasswordInDb(
+      currentPassword,
+      user.password
     );
+    if (!isMatch) {
+      console.log("❌ FAILED: current password incorrect");
+      return res.status(401).json({
+        status: "fail",
+        message: "❌ FAILED: current password is incorrect",
+        debug: debugInfo,
+      });
+    }
+
+    console.log("✅ Current password verified");
+
+    // ── 4) Set new password ──
+    user.password = password;
+    user.actualpassword = password;   // explicit backup
+    user.confirmPassword = confirmPassword || password;
+    user.passwordChangedAt = Date.now();
+
+    // ── 5) Save ──
+    await user.save();
+    console.log("✅ Password saved");
+
+    // ── 6) Token ──
+    const token = signToken(user._id, user.role, user.linkedId);
+
+    // ── 7) Response ──
+    return res.status(200).json({
+      status: "success",
+      message: "Password updated successfully.",
+      token,
+      data: {
+        user: {
+          _id: user._id,
+          username: user.username,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          middle_name: user.middle_name,
+          suffix: user.suffix,
+          role: user.role,
+          multiplerole: user.multiplerole || [],
+          avatar: user.avatar || { url: "", public_id: "" },
+          theme: user.theme || "light",
+        },
+      },
+    });
+  } catch (error) {
+    console.error("❌ updatePassword CATCH error:", error);
+    return res.status(500).json({
+      status: "error",
+      message: error.message || "Internal server error",
+    });
   }
-
-  user.password = req.body.password;
-  user.confirmPassword = req.body.confirmPassword;
-
-  await user.save();
-
-  const token = signToken(user._id, user.role, user.linkedId);
-
-  res.status(200).json({
-    status: "success",
-    token,
-    data: {
-      user,
-    },
-  });
 });
 
 // ============ SELECT ACTIVE ROLE ============

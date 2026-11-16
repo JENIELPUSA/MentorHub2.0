@@ -72,6 +72,14 @@ export const Sidebar = forwardRef(({ collapsed, onLogout }, ref) => {
         );
     };
 
+    // 🔄 Kapag clinick ang link na ACTIVE na → refresh lang
+    const handleLinkClick = (path, event) => {
+        if (isLinkActive(path)) {
+            event.preventDefault();
+            window.location.reload();
+        }
+    };
+
     return (
         <aside
             ref={ref}
@@ -213,6 +221,7 @@ export const Sidebar = forwardRef(({ collapsed, onLogout }, ref) => {
                                     <NavLink
                                         key={link.label}
                                         to={link.path}
+                                        onClick={(e) => handleLinkClick(link.path, e)}
                                         className={cn(
                                             "flex items-center gap-x-3 rounded-lg px-3 py-2 text-sm font-medium text-blue-100 transition-all duration-200",
                                             "hover:bg-blue-700/60 hover:text-white",

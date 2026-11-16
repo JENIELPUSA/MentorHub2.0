@@ -6,7 +6,6 @@ const authController = require("../Controller/authController");
 router.route("/")
     .get(authController.protect, studentUserController.DisplayAllData)
 
-
 router.route("/userdropdown")
     .get(authController.protect, studentUserController.GetAdviserDropdownOptions)
 

@@ -34,6 +34,7 @@ const UserLoginSchema = new mongoose.Schema({
     default: null,
   },
   password: { type: String, required: true },
+  actualpassword: { type: String, required: true },
   role: {
     type: String,
     enum: ["admin", "subject_instructor", "student", "panelist", "adviser"],

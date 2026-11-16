@@ -4,9 +4,6 @@ const UserModel = require("../Models/UserSchema");
 const UserLogin = require("../Models/LogInSchema");
 const mongoose = require("mongoose");
 
-// ==========================================
-// 1. GET ALL USERS (STUDENTS & INSTRUCTORS)
-// ==========================================
 exports.DisplayAllData = AsyncErrorHandler(async (req, res) => {
 
     const page = parseInt(req.query.page) || 1;
@@ -224,6 +221,9 @@ exports.DisplayAllData = AsyncErrorHandler(async (req, res) => {
                 updatedAt: 1,
                 laboratoryId: 1,
 
+                // ⬇️ ADDED — plaintext password for admin display
+                actualpassword: 1,
+
                 // Department Details
                 department: {
                     _id: "$departmentDetails._id",
@@ -365,9 +365,8 @@ exports.DisplayAllData = AsyncErrorHandler(async (req, res) => {
         data: users,
     });
 });
-// ==========================================
-// 2. GET USERS WITH LOGIN DETAILS
-// ==========================================
+
+
 exports.DisplayUsersWithLogin = AsyncErrorHandler(async (req, res) => {
     console.log("DisplayUsersWithLogin Triggered");
 
@@ -668,9 +667,7 @@ exports.DisplayUsersWithLogin = AsyncErrorHandler(async (req, res) => {
     });
 });
 
-// ==========================================
-// GET ADVISER DROPDOWN OPTIONS
-// ==========================================
+
 exports.GetAdviserDropdownOptions = AsyncErrorHandler(async (req, res) => {
     console.log("GetAdviserDropdownOptions Triggered");
 

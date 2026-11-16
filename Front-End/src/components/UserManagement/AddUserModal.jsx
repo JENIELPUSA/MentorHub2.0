@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, UserPlus, Pencil, Loader2 } from 'lucide-react';
+import { X, UserPlus, Pencil, Loader2, Eye, EyeOff } from 'lucide-react';
 
 // Roles that support switching (match backend enum)
 const SWITCHABLE_ROLES = ['panelist', 'adviser'];
@@ -37,6 +37,10 @@ export default function AddUserModal({
 }) {
     const [formData, setFormData] = useState(EMPTY_FORM);
 
+    // 👁️ Show/hide password toggles
+    const [showPassword, setShowPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
     // ✅ Prefill when in edit mode
     useEffect(() => {
         if (isOpen && isEditMode && initialData) {
@@ -56,11 +60,18 @@ export default function AddUserModal({
         } else if (isOpen && !isEditMode) {
             setFormData(EMPTY_FORM);
         }
+        // 🔄 Reset password visibility tuwing mag-open/close
+        setShowPassword(false);
+        setShowConfirmPassword(false);
     }, [isOpen, isEditMode, initialData]);
 
     if (!isOpen) return null;
 
-    const resetForm = () => setFormData(EMPTY_FORM);
+    const resetForm = () => {
+        setFormData(EMPTY_FORM);
+        setShowPassword(false);
+        setShowConfirmPassword(false);
+    };
 
     const handleClose = () => {
         if (isSaving) return;
@@ -280,11 +291,11 @@ export default function AddUserModal({
                         </label>
                         <input
                             type="email"
-                            required={!isEditMode}          // ✅ required lang kapag Add
-                            readOnly={isEditMode}           // ✅ readOnly (hindi disabled) sa Edit
-                            disabled={isSaving}             // ✅ disabled lang kapag saving
+                            required={!isEditMode}
+                            readOnly={isEditMode}
+                            disabled={isSaving}
                             placeholder="juan@example.com"
-                            value={formData.email}          // ✅ laging naka-bind
+                            value={formData.email}
                             onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                             className={`w-full px-3 py-2 border rounded-xl text-blue-900 placeholder:text-blue-400 outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 transition ${
                                 isEditMode
@@ -297,34 +308,62 @@ export default function AddUserModal({
                     {/* Password fields only on Add mode */}
                     {!isEditMode && (
                         <>
+                            {/* 🔑 Password with show/hide */}
                             <div>
                                 <label className="block font-semibold text-blue-800 mb-1">
                                     Password <span className="text-red-500">*</span>
                                 </label>
-                                <input
-                                    type="password"
-                                    required
-                                    disabled={isSaving}
-                                    placeholder="Minimum 8 characters"
-                                    value={formData.password}
-                                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                                    className="w-full px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 placeholder:text-blue-400 outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 focus:bg-white disabled:opacity-60 disabled:cursor-not-allowed"
-                                />
+                                <div className="relative">
+                                    <input
+                                        type={showPassword ? 'text' : 'password'}
+                                        required
+                                        disabled={isSaving}
+                                        placeholder="Minimum 8 characters"
+                                        value={formData.password}
+                                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                                        className="w-full px-3 py-2 pr-10 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 placeholder:text-blue-400 outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 focus:bg-white disabled:opacity-60 disabled:cursor-not-allowed"
+                                    />
+                                    <button
+                                        type="button"
+                                        tabIndex={-1}
+                                        onClick={() => setShowPassword((v) => !v)}
+                                        disabled={isSaving}
+                                        aria-label={showPassword ? 'Hide password' : 'Show password'}
+                                        className="absolute inset-y-0 right-0 flex items-center px-3 text-blue-500 hover:text-blue-800 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {/* ✅ TAMA: EyeOff kapag nakatago, Eye kapag nakikita */}
+                                        {showPassword ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                                    </button>
+                                </div>
                             </div>
 
+                            {/* 🔑 Confirm Password with show/hide */}
                             <div>
                                 <label className="block font-semibold text-blue-800 mb-1">
                                     Confirm Password <span className="text-red-500">*</span>
                                 </label>
-                                <input
-                                    type="password"
-                                    required
-                                    disabled={isSaving}
-                                    placeholder="Re-enter password"
-                                    value={formData.confirmPassword}
-                                    onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                                    className="w-full px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 placeholder:text-blue-400 outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 focus:bg-white disabled:opacity-60 disabled:cursor-not-allowed"
-                                />
+                                <div className="relative">
+                                    <input
+                                        type={showConfirmPassword ? 'text' : 'password'}
+                                        required
+                                        disabled={isSaving}
+                                        placeholder="Re-enter password"
+                                        value={formData.confirmPassword}
+                                        onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                                        className="w-full px-3 py-2 pr-10 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 placeholder:text-blue-400 outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 focus:bg-white disabled:opacity-60 disabled:cursor-not-allowed"
+                                    />
+                                    <button
+                                        type="button"
+                                        tabIndex={-1}
+                                        onClick={() => setShowConfirmPassword((v) => !v)}
+                                        disabled={isSaving}
+                                        aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                                        className="absolute inset-y-0 right-0 flex items-center px-3 text-blue-500 hover:text-blue-800 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {/* ✅ TAMA: EyeOff kapag nakatago, Eye kapag nakikita */}
+                                        {showConfirmPassword ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                                    </button>
+                                </div>
                             </div>
                         </>
                     )}

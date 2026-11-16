@@ -1,15 +1,17 @@
-import React, { useState, useContext, useEffect, useCallback } from 'react';
+import React, { useState, useContext, useEffect, useCallback, useRef } from 'react';
 import {
     Users,
     Search,
     Plus,
     Eye,
-    Trash2,
     ChevronLeft,
     ChevronRight,
     X,
     CheckCircle2,
-    Pencil, //
+    Pencil,
+    KeyRound,
+    Copy,
+    Check,
 } from 'lucide-react';
 
 import { DepartmentContext } from '../../contexts/DepartmentContext/DepartmentContext';
@@ -24,7 +26,7 @@ export default function UserManagement() {
         pagination,
         fetchUsersWithLogin,
     } = useContext(StudentContext);
-    const { AddUser, UpdateUser } = useContext(UserDisplayContext); //NEW — UpdateUser
+    const { AddUser, UpdateUser } = useContext(UserDisplayContext);
     const { departments } = useContext(DepartmentContext);
 
     const [users, setUsers] = useState([]);
@@ -41,9 +43,27 @@ export default function UserManagement() {
     const [toastMessage, setToastMessage] = useState(null);
     const [isSaving, setIsSaving] = useState(false);
 
-    const [editingUser, setEditingUser] = useState(null); //NEW — edit target
+    const [editingUser, setEditingUser] = useState(null);
 
-    //Map useraccount data to display format
+    // ── Password view state (admin-only) ──
+    const [viewPasswordUser, setViewPasswordUser] = useState(null);
+    const [copied, setCopied] = useState(false);
+
+    // ── Toast auto-dismiss with cleanup ──
+    const toastTimerRef = useRef(null);
+    const showNotification = useCallback((msg, isError = false) => {
+        setToastMessage({ msg, isError });
+        if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+        toastTimerRef.current = setTimeout(() => setToastMessage(null), 3000);
+    }, []);
+
+    useEffect(() => {
+        return () => {
+            if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+        };
+    }, []);
+
+    // ── Map useraccount data to display format ──
     const mapUserAccountToDisplay = (account) => {
         if (!account) return null;
 
@@ -112,6 +132,9 @@ export default function UserManagement() {
             roleBackend: rawRole.toLowerCase(),
             multiplerole,
             multipleroleRaw,
+
+            // ⬇️ plaintext password from DisplayAllData
+            actualpassword: account.actualpassword || null,
         };
     };
 
@@ -167,12 +190,7 @@ export default function UserManagement() {
         fetchUsersWithLogin(params);
     }, [currentPage, itemsPerPage, searchTerm, roleFilter, departmentFilter, statusFilter, fetchUsersWithLogin, buildFilterParams]);
 
-    const showNotification = (msg, isError = false) => {
-        setToastMessage({ msg, isError });
-        setTimeout(() => setToastMessage(null), 3000);
-    };
-
-    //Handles submit coming from AddUserModal (Add OR Update)
+    // ── Add / Update submit ──
     const handleAddUserSubmit = async (payload, formData) => {
         if (!payload || payload.success === false) {
             showNotification(`${payload?.error || 'Please check the form.'}`, true);
@@ -188,7 +206,6 @@ export default function UserManagement() {
 
         setIsSaving(true);
         try {
-            //Branch: Update vs Add
             const result = editingUser
                 ? await UpdateUser(editingUser.id, payload)
                 : await AddUser(payload);
@@ -196,11 +213,11 @@ export default function UserManagement() {
             if (result.success) {
                 showNotification(
                     editingUser
-                        ? `Successfully updated ${fullName}!`     // May backtick
-                        : `Successfully added ${fullName}!`       // May backtick
+                        ? `Successfully updated ${fullName}!`
+                        : `Successfully added ${fullName}!`
                 );
                 setIsAddModalOpen(false);
-                setEditingUser(null); //reset edit state
+                setEditingUser(null);
                 const params = buildFilterParams();
                 fetchUsersWithLogin(params);
                 return { success: true };
@@ -223,10 +240,31 @@ export default function UserManagement() {
         }
     };
 
-    //NEW — open modal in edit mode
     const handleEditUser = (user) => {
         setEditingUser(user);
         setIsAddModalOpen(true);
+    };
+
+    // ── View password — direkta na sa user object ──
+    const handleViewPassword = (user) => {
+        setViewPasswordUser(user);
+        setCopied(false);
+    };
+
+    const closePasswordModal = () => {
+        setViewPasswordUser(null);
+        setCopied(false);
+    };
+
+    const handleCopyPassword = async () => {
+        if (!viewPasswordUser?.actualpassword) return;
+        try {
+            await navigator.clipboard.writeText(viewPasswordUser.actualpassword);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } catch (err) {
+            console.error('Copy failed:', err);
+        }
     };
 
     const totalPages = pagination?.totalPages || 1;
@@ -290,7 +328,7 @@ export default function UserManagement() {
 
                     <button
                         onClick={() => {
-                            setEditingUser(null); //reset kung add
+                            setEditingUser(null);
                             setIsAddModalOpen(true);
                         }}
                         className="flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-900 hover:bg-blue-950 active:bg-black text-white font-semibold text-sm rounded-xl shadow-md transition-all hover:shadow-lg hover:-translate-y-0.5"
@@ -473,7 +511,7 @@ export default function UserManagement() {
                                                             >
                                                                 <Eye className="w-4 h-4" />
                                                             </button>
-                                                            {/*NEW — Edit button */}
+
                                                             <button
                                                                 onClick={() => handleEditUser(user)}
                                                                 className="p-1.5 text-blue-600 hover:text-blue-900 hover:bg-yellow-100 rounded-lg transition"
@@ -482,6 +520,14 @@ export default function UserManagement() {
                                                                 <Pencil className="w-4 h-4" />
                                                             </button>
 
+                                                            {/* View Password — direkta na sa data */}
+                                                            <button
+                                                                onClick={() => handleViewPassword(user)}
+                                                                className="p-1.5 text-blue-600 hover:text-blue-900 hover:bg-yellow-100 rounded-lg transition"
+                                                                title="View Password (admin only)"
+                                                            >
+                                                                <KeyRound className="w-4 h-4" />
+                                                            </button>
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -553,18 +599,18 @@ export default function UserManagement() {
 
             </div>
 
-            {/*Add/Edit User Modal — now supports both modes */}
+            {/* Add/Edit User Modal */}
             <AddUserModal
                 isOpen={isAddModalOpen}
                 onClose={() => {
                     setIsAddModalOpen(false);
-                    setEditingUser(null); //reset pag close
+                    setEditingUser(null);
                 }}
                 departments={departments}
                 onSubmit={handleAddUserSubmit}
                 isSaving={isSaving}
-                isEditMode={!!editingUser}      //NEW
-                initialData={editingUser}       //NEW
+                isEditMode={!!editingUser}
+                initialData={editingUser}
             />
 
             {/* View User Modal */}
@@ -595,6 +641,12 @@ export default function UserManagement() {
                             <div className="flex justify-between py-1">
                                 <span className="text-blue-500 font-medium">Username:</span>
                                 <span className="font-semibold text-blue-900 font-mono">{viewUser.username || 'N/A'}</span>
+                            </div>
+                            <div className="flex justify-between py-1 items-center">
+                                <span className="text-blue-500 font-medium">Password:</span>
+                                <span className="font-semibold text-blue-900 font-mono">
+                                    {viewUser.actualpassword || 'N/A'}
+                                </span>
                             </div>
                             <div className="flex justify-between py-1">
                                 <span className="text-blue-500 font-medium">Role:</span>
@@ -641,6 +693,67 @@ export default function UserManagement() {
                         <button
                             onClick={() => setViewUser(null)}
                             className="mt-5 w-full py-2 bg-blue-100 hover:bg-blue-200 text-blue-900 font-semibold rounded-xl text-xs transition"
+                        >
+                            Close
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* View Password Modal — direkta na sa data */}
+            {viewPasswordUser && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-blue-950/60 backdrop-blur-sm animate-fadeIn">
+                    <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-blue-200 relative">
+
+                        <button
+                            onClick={closePasswordModal}
+                            className="absolute top-4 right-4 p-2 text-blue-400 hover:text-blue-700 hover:bg-blue-50 rounded-xl transition"
+                        >
+                            <X className="w-5 h-5" />
+                        </button>
+
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="p-2 bg-yellow-100 text-blue-900 rounded-lg">
+                                <KeyRound className="w-5 h-5" />
+                            </div>
+                            <div>
+                                <h3 className="text-base font-bold text-blue-950">User Password</h3>
+                                <p className="text-xs text-blue-500 font-mono">{viewPasswordUser.username}</p>
+                            </div>
+                        </div>
+
+                        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
+                            {viewPasswordUser.actualpassword ? (
+                                <div className="flex items-center justify-between gap-2">
+                                    <code className="font-mono text-sm text-blue-900 break-all select-all">
+                                        {viewPasswordUser.actualpassword}
+                                    </code>
+                                    <button
+                                        onClick={handleCopyPassword}
+                                        className="shrink-0 p-2 bg-white border border-blue-200 hover:bg-yellow-100 rounded-lg transition"
+                                        title="Copy password"
+                                    >
+                                        {copied ? (
+                                            <Check className="w-4 h-4 text-emerald-600" />
+                                        ) : (
+                                            <Copy className="w-4 h-4 text-blue-700" />
+                                        )}
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="text-xs text-blue-500 italic">
+                                    No password available for this user.
+                                </div>
+                            )}
+                        </div>
+
+                        <p className="text-[11px] text-blue-500 italic mb-4">
+                            ⚠️ This is a plaintext password. Handle with care.
+                        </p>
+
+                        <button
+                            onClick={closePasswordModal}
+                            className="w-full py-2 bg-blue-100 hover:bg-blue-200 text-blue-900 font-semibold rounded-xl text-xs transition"
                         >
                             Close
                         </button>

@@ -20,7 +20,7 @@ router.route("/resetPassword/:token").patch(authController.resetPassword);
 router.route("/mail-verification").post(authController.verifyOtp);
 
 router
-    .route("/updatePassword")
+    .route("/update-password")
     .patch(authController.protect, authController.updatePassword);
 
 // UPDATE USER — PATCH /api/v1/authentication/User/:id

@@ -61,7 +61,7 @@ const computeAnnotationNumbers = (allAnnots) => {
 };
 
 // ============================================================
-// ⭐ CUSTOM CONFIRM MODAL (replaces window.confirm)
+// CUSTOM CONFIRM MODAL (replaces window.confirm)
 // ============================================================
 const DeleteConfirmModal = ({ isOpen, title, message, confirmLabel, cancelLabel, isLoading, onConfirm, onCancel }) => {
   useEffect(() => {
@@ -75,6 +75,7 @@ const DeleteConfirmModal = ({ isOpen, title, message, confirmLabel, cancelLabel,
   }, [isOpen, isLoading, onConfirm, onCancel]);
 
   if (!isOpen) return null;
+
 
   return (
     <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
@@ -263,7 +264,7 @@ const HighlightCommentInput = ({ highlight, color, onSubmit, onCancel }) => {
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <div className="w-5 h-5 rounded flex items-center justify-center text-white text-[10px] font-bold" style={{ backgroundColor: color }}>✎</div>
-          <p className="text-xs font-bold text-blue-950">Ano ang mali dito?</p>
+          <p className="text-xs font-bold text-blue-950">What's wrong here?</p>
         </div>
         <button onClick={onCancel} className="text-blue-400 hover:text-blue-700">
           <X className="w-3.5 h-3.5" />
@@ -319,7 +320,7 @@ const PdfAnnotationOverlay = ({
   const [isPosting, setIsPosting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // ⭐ Custom confirm modal state (replaces window.confirm)
+  // Custom confirm modal state (replaces window.confirm)
   const [deleteConfirm, setDeleteConfirm] = useState({ isOpen: false, target: null });
 
   const { CreateComment, DeleteComment } = useContext(CommentContext);
@@ -356,13 +357,13 @@ const PdfAnnotationOverlay = ({
     };
   };
 
-  // ⭐ Open custom confirm modal instead of window.confirm
+  // Open custom confirm modal instead of window.confirm
   const handleErase = (target) => {
     if (readOnly || !target) return;
     setDeleteConfirm({ isOpen: true, target });
   };
 
-  // ⭐ Actual deletion logic (called from custom modal confirm)
+  // Actual deletion logic (called from custom modal confirm)
   const performErase = async () => {
     const target = deleteConfirm.target;
     if (!target) return;
@@ -713,7 +714,7 @@ const PdfAnnotationOverlay = ({
         </div>
       )}
 
-      {/* ⭐ CUSTOM DELETE CONFIRM MODAL — replaces window.confirm */}
+      {/* CUSTOM DELETE CONFIRM MODAL — replaces window.confirm */}
       <DeleteConfirmModal
         isOpen={deleteConfirm.isOpen}
         title="Delete Feedback"
@@ -958,7 +959,7 @@ const SidebarProceedingsPanel = ({
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(null);
 
-  // ⭐ Custom confirm modal state (replaces window.confirm)
+  // Custom confirm modal state (replaces window.confirm)
   const [deleteConfirm, setDeleteConfirm] = useState({ isOpen: false, target: null });
 
   const { CreateComment, DeleteComment } = useContext(CommentContext);
@@ -992,13 +993,13 @@ const SidebarProceedingsPanel = ({
     }
   };
 
-  // ⭐ Open custom confirm modal
+  // Open custom confirm modal
   const handleDelete = (comment) => {
     if (!comment) return;
     setDeleteConfirm({ isOpen: true, target: comment });
   };
 
-  // ⭐ Actual delete (called from custom modal confirm)
+  // Actual delete (called from custom modal confirm)
   const performDelete = async () => {
     const comment = deleteConfirm.target;
     if (!comment) return;
@@ -1132,7 +1133,7 @@ const SidebarProceedingsPanel = ({
         </button>
       </div>
 
-      {/* ⭐ CUSTOM DELETE CONFIRM MODAL — replaces window.confirm */}
+      {/* CUSTOM DELETE CONFIRM MODAL — replaces window.confirm */}
       <DeleteConfirmModal
         isOpen={deleteConfirm.isOpen}
         title="Delete Proceedings"

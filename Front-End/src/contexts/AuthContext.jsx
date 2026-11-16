@@ -4,7 +4,7 @@ import axiosInstance from "../components/ReusableFolder/axiosinstance";
 export const AuthContext = createContext();
 
 // ============================================================
-// ⭐ HELPER — Avatar URL builder
+//  HELPER — Avatar URL builder
 // ============================================================
 const API_BASE_URL =
     import.meta.env.VITE_API_URL || "http://localhost:5000";
@@ -26,7 +26,7 @@ const readMultiRoleFromStorage = () => {
     }
 };
 
-// ⭐ Helper: safely read avatar from localStorage
+//  Helper: safely read avatar from localStorage
 const readAvatarFromStorage = () => {
     try {
         const raw = localStorage.getItem("avatar");
@@ -76,7 +76,7 @@ export const AuthProvider = ({ children }) => {
     const [referredBy, setReferredBy] = useState(localStorage.getItem("referredBy") || null);
     const [avatar, setAvatar] = useState(readAvatarFromStorage());
 
-    // ⭐ Sync axios header
+    //  Sync axios header
     useEffect(() => {
         if (authToken) {
             axiosInstance.defaults.headers.common["Authorization"] = `Bearer ${authToken}`;
@@ -89,7 +89,7 @@ export const AuthProvider = ({ children }) => {
         document.documentElement.classList.toggle("dark", theme === "dark");
     }, [theme]);
 
-    // ⭐ Cross-tab sync
+    //  Cross-tab sync
     useEffect(() => {
         const handleStorage = (e) => {
             if (e.key === "role" && e.newValue) setRole(e.newValue);
@@ -255,7 +255,7 @@ export const AuthProvider = ({ children }) => {
     };
 
     // =========================================================
-    // ⭐ UPDATE AVATAR — same pattern sa foodUpdateItem
+    //  UPDATE AVATAR — same pattern sa foodUpdateItem
     // =========================================================
     const updateAvatar = async (file) => {
         if (!file) {
@@ -265,10 +265,10 @@ export const AuthProvider = ({ children }) => {
         try {
             const formData = new FormData();
 
-            // ⭐ I-append ang file — field name "avatar"
+            //  I-append ang file — field name "avatar"
             formData.append("avatar", file);
 
-            // ⭐ Optional: iba pang fields kung kailangan
+            //  Optional: iba pang fields kung kailangan
             // formData.append("userId", userId);
 
             console.log("[updateAvatar] FormData entries:");
@@ -381,24 +381,28 @@ export const AuthProvider = ({ children }) => {
         window.location.href = "/login";
     };
 
-    // =========================================================
-    // UPDATE PASSWORD
-    // =========================================================
-    const updatePassword = async (currentPassword, newPassword, confirmPassword) => {
+    // Sa AuthContext.jsx
+    const updatePassword = async (payload) => {
+        // payload = { currentPassword, newPassword, confirmNewPassword }
         try {
-            const res = await axiosInstance.put(
+            const res = await axiosInstance.patch(
                 "/api/v1/authentication/update-password",
-                { currentPassword, password: newPassword, confirmPassword }
+                {
+                    currentPassword: payload.currentPassword,
+                    password: payload.newPassword,                  // ← rename dito
+                    confirmPassword: payload.confirmNewPassword,    // ← rename dito
+                }
             );
 
-            if (res.data.status === "success") {
+            if (res.data?.status === "success") {
                 const { token } = res.data;
+
                 localStorage.setItem("token", token);
                 localStorage.setItem("authToken", token);
                 setAuthToken(token);
                 axiosInstance.defaults.headers.common["Authorization"] = `Bearer ${token}`;
 
-                return { success: true, message: "Password updated successfully." };
+                return { success: true, message: res.data?.message || "Password updated successfully." };
             }
 
             return {
@@ -406,10 +410,16 @@ export const AuthProvider = ({ children }) => {
                 message: res.data?.message || "Failed to update password",
             };
         } catch (error) {
-            return {
-                success: false,
-                message: error.response?.data?.message || "Failed to update password",
-            };
+            const status = error.response?.status;
+            const serverMsg = error.response?.data?.message;
+
+            let message = serverMsg || "Failed to update password";
+            if (status === 401) message = serverMsg || "Current password is incorrect.";
+            else if (status === 400) message = serverMsg || "Invalid password input.";
+            else if (status === 403) message = serverMsg || "Forbidden.";
+            else if (!error.response) message = "Network error. Please check your connection.";
+
+            return { success: false, message };
         }
     };
 
